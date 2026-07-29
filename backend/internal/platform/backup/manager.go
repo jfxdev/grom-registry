@@ -104,7 +104,8 @@ func (manager *Manager) Start() (Operation, error) {
 		return Operation{}, fmt.Errorf("backup agent is unavailable")
 	}
 	operation := Operation{ID: uuid.NewString(), Status: "starting", StartedAt: time.Now().UTC()}
-	manager.lastOperation = &operation
+	storedOperation := operation
+	manager.lastOperation = &storedOperation
 	manager.mu.Unlock()
 	go manager.run(operation.ID)
 	return operation, nil

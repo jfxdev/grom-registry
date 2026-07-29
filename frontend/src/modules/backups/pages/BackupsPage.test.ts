@@ -3,6 +3,7 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { APIError } from '@/shared/api/client'
 import BackupsPage from './BackupsPage.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -158,5 +159,86 @@ describe('BackupsPage', () => {
 
     expect(wrapper.text()).toContain('Integrated backup agent unavailable')
     expect(wrapper.get('header button').attributes('disabled')).toBeDefined()
+  })
+
+  it('shows API failures and closes confirmations without mutating', async () => {
+    mocks.createBackup.mockRejectedValue(new APIError(503, 'backup_unavailable', 'Agent unavailable'))
+    mocks.deleteBackup.mockRejectedValue(new Error('network failure'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('header button').trigger('click')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Agent unavailable')
+
+    const cancelCreate = wrapper.findAll('button').find(button => button.text().includes('Cancel'))
+    expect(cancelCreate).toBeDefined()
+    await cancelCreate!.trigger('click')
+    expect(wrapper.text()).not.toContain('Create recovery point?')
+
+    await wrapper.get('[aria-label^="Delete backup"]').trigger('click')
+    const deletionBackdrop = wrapper.find('.modal-backdrop')
+    await deletionBackdrop.trigger('click')
+    expect(wrapper.text()).not.toContain('Delete this recovery point?')
+
+    await wrapper.get('[aria-label^="Delete backup"]').trigger('click')
+    await wrapper.get('[aria-label="Type DELETE to confirm"]').setValue('DELETE')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Could not delete the recovery point')
+  })
+
+  it('navigates backward and returns to the previous page after deleting its last item', async () => {
+    const firstPage = {
+      available: true,
+      activeOperation: null,
+      totalBackups: 6,
+      pageSize: 5,
+      nextCursor: 'next-page',
+      backups: [{
+        backupId: '9bb21d94-87a7-4c6c-a677-1832d7ba56c7',
+        createdAt: '2026-07-29T16:00:00Z',
+        gromVersion: '0.1.0',
+        totalBytes: 5 * 1024 ** 4,
+      }],
+    }
+    const secondPage = {
+      available: true,
+      activeOperation: null,
+      totalBackups: 6,
+      pageSize: 5,
+      nextCursor: null,
+      backups: [{
+        backupId: '1bb21d94-87a7-4c6c-a677-1832d7ba56c7',
+        createdAt: '2026-07-29T15:00:00Z',
+        gromVersion: '0.1.0',
+        totalBytes: 1024,
+      }],
+    }
+    mocks.getBackupOverview.mockImplementation((cursor = '') => Promise.resolve(cursor ? secondPage : firstPage))
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.text()).toContain('5.00 TiB')
+
+    const next = wrapper.findAll('button').find(button => button.text().includes('Next'))
+    await next!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Page 2')
+
+    const previous = wrapper.findAll('button').find(button => button.text().includes('Previous'))
+    await previous!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Page 1')
+
+    await next!.trigger('click')
+    await flushPromises()
+    await wrapper.get('[aria-label^="Delete backup"]').trigger('click')
+    await wrapper.get('[aria-label="Type DELETE to confirm"]').setValue('DELETE')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(mocks.deleteBackup.mock.calls.at(-1)?.[0]).toBe('1bb21d94-87a7-4c6c-a677-1832d7ba56c7')
+    expect(wrapper.text()).toContain('Page 1')
   })
 })

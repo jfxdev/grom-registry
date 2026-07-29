@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,13 +16,13 @@ import (
 var version = "dev"
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	if err := run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "grom-backup:", err)
 		os.Exit(1)
 	}
 }
 
-func run(arguments []string) error {
+func run(arguments []string, output io.Writer) error {
 	if len(arguments) == 0 {
 		return fmt.Errorf("usage: grom-backup create|inspect|restore")
 	}
@@ -91,10 +92,10 @@ func run(arguments []string) error {
 		}
 		var total int64
 		for _, result := range results {
-			fmt.Printf("%s_bytes=%d\n", result.Name, result.Bytes)
+			fmt.Fprintf(output, "%s_bytes=%d\n", result.Name, result.Bytes)
 			total += result.Bytes
 		}
-		fmt.Printf("estimated_total_bytes=%d\n", total)
+		fmt.Fprintf(output, "estimated_total_bytes=%d\n", total)
 		return nil
 	case "create":
 		flags := flag.NewFlagSet("create", flag.ContinueOnError)
@@ -119,7 +120,7 @@ func run(arguments []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("backup_path=%s\nbackup_id=%s\ncreated_at=%s\ntotal_bytes=%d\nduration=%s\n",
+		fmt.Fprintf(output, "backup_path=%s\nbackup_id=%s\ncreated_at=%s\ntotal_bytes=%d\nduration=%s\n",
 			path, inspection.Manifest.BackupID, inspection.Manifest.CreatedAt.Format(time.RFC3339),
 			inspection.TotalBytes, time.Since(started).Round(time.Millisecond))
 		return nil
@@ -136,7 +137,7 @@ func run(arguments []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("backup_id=%s\ncreated_at=%s\ngrom_version=%s\ntotal_bytes=%d\nstatus=complete\n",
+		fmt.Fprintf(output, "backup_id=%s\ncreated_at=%s\ngrom_version=%s\ntotal_bytes=%d\nstatus=complete\n",
 			inspection.Manifest.BackupID, inspection.Manifest.CreatedAt.Format(time.RFC3339),
 			inspection.Manifest.GromVersion, inspection.TotalBytes)
 		return nil
@@ -162,7 +163,7 @@ func run(arguments []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("backup_id=%s\nsource_version=%s\ntotal_bytes=%d\nduration=%s\nstatus=restored\n",
+		fmt.Fprintf(output, "backup_id=%s\nsource_version=%s\ntotal_bytes=%d\nduration=%s\nstatus=restored\n",
 			inspection.Manifest.BackupID, inspection.Manifest.GromVersion,
 			inspection.TotalBytes, time.Since(started).Round(time.Millisecond))
 		return nil

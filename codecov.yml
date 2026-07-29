@@ -1,0 +1,11 @@
+coverage:
+  status:
+    patch:
+      default:
+        target: 70%
+        threshold: 1%
+
+ignore:
+  - "backend/internal/generated/openapi/**"
+  - "frontend/src/shared/api/generated/**"
+  - "frontend/src/assets/**"

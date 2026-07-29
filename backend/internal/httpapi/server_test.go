@@ -3,19 +3,27 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	auditapp "github.com/jfxdev/grom/backend/internal/audit/application"
+	auditdomain "github.com/jfxdev/grom/backend/internal/audit/domain"
 	"github.com/jfxdev/grom/backend/internal/constants"
 	"github.com/jfxdev/grom/backend/internal/foundation"
 	identitydomain "github.com/jfxdev/grom/backend/internal/identity/domain"
+	platformbackup "github.com/jfxdev/grom/backend/internal/platform/backup"
+	"github.com/jfxdev/grom/backend/internal/platform/maintenance"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
 	projectdomain "github.com/jfxdev/grom/backend/internal/projects/domain"
 )
@@ -23,6 +31,70 @@ import (
 type serverTestProjectRepository struct {
 	projectdomain.Repository
 	project *projectdomain.Project
+}
+
+type serverTestAuditStore struct {
+	mu     sync.Mutex
+	events []*auditdomain.Event
+	err    error
+}
+
+func (store *serverTestAuditStore) Record(_ context.Context, event *auditdomain.Event) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.events = append(store.events, event)
+	return store.err
+}
+
+func (store *serverTestAuditStore) RecordOnce(ctx context.Context, event *auditdomain.Event) error {
+	return store.Record(ctx, event)
+}
+
+type serverTestBackupAgent struct {
+	mu               sync.Mutex
+	available        bool
+	summaries        []platformbackup.Summary
+	listErr          error
+	createErr        error
+	deleteErr        error
+	downloadErr      error
+	downloadResponse *http.Response
+	createStarted    chan struct{}
+	createRelease    chan struct{}
+}
+
+func (agent *serverTestBackupAgent) List(context.Context) ([]platformbackup.Summary, error) {
+	agent.mu.Lock()
+	defer agent.mu.Unlock()
+	return append([]platformbackup.Summary(nil), agent.summaries...), agent.listErr
+}
+
+func (agent *serverTestBackupAgent) Create(context.Context, platformbackup.AgentCreateRequest) (platformbackup.Summary, error) {
+	if agent.createStarted != nil {
+		select {
+		case agent.createStarted <- struct{}{}:
+		default:
+		}
+	}
+	if agent.createRelease != nil {
+		<-agent.createRelease
+	}
+	return platformbackup.Summary{BackupID: foundation.NewID().String(), GromVersion: "test"}, agent.createErr
+}
+
+func (agent *serverTestBackupAgent) Download(context.Context, string) (*http.Response, error) {
+	if agent.downloadErr != nil {
+		return nil, agent.downloadErr
+	}
+	return agent.downloadResponse, nil
+}
+
+func (agent *serverTestBackupAgent) Delete(context.Context, string) error {
+	return agent.deleteErr
+}
+
+func (agent *serverTestBackupAgent) Available(context.Context) bool {
+	return agent.available
 }
 
 func (r *serverTestProjectRepository) FindProjectBySlug(
@@ -306,6 +378,220 @@ func TestListServiceAccountsRequiresInstallationAdministrator(t *testing.T) {
 	}
 }
 
+func TestBackupHandlersRequireInstallationAdministrator(t *testing.T) {
+	server := &Server{}
+	for _, test := range []struct {
+		name    string
+		method  string
+		handler func(http.ResponseWriter, *http.Request)
+	}{
+		{name: "list", method: http.MethodGet, handler: server.listBackups},
+		{name: "create", method: http.MethodPost, handler: server.createBackup},
+		{name: "delete", method: http.MethodDelete, handler: server.deleteBackup},
+		{name: "download", method: http.MethodGet, handler: server.downloadBackup},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := backupAdminRequest(test.method, "http://backend/api/v1/backups", false)
+			response := httptest.NewRecorder()
+			test.handler(response, request)
+			if response.Code != http.StatusForbidden {
+				t.Fatalf("expected status %d, got %d", http.StatusForbidden, response.Code)
+			}
+		})
+	}
+}
+
+func TestListBackupsReportsAvailabilityPaginationAndInvalidCursors(t *testing.T) {
+	unavailable := httptest.NewRecorder()
+	(&Server{}).listBackups(
+		unavailable,
+		backupAdminRequest(http.MethodGet, "http://backend/api/v1/backups", true),
+	)
+	if unavailable.Code != http.StatusOK ||
+		!strings.Contains(unavailable.Body.String(), `"available":false`) ||
+		!strings.Contains(unavailable.Body.String(), `"pageSize":5`) {
+		t.Fatalf("unexpected unavailable response %d: %s", unavailable.Code, unavailable.Body.String())
+	}
+
+	agent := &serverTestBackupAgent{
+		available: true,
+		summaries: []platformbackup.Summary{{
+			BackupID: foundation.NewID().String(), CreatedAt: time.Now().UTC().Format(time.RFC3339),
+			GromVersion: "test", TotalBytes: 42,
+		}},
+	}
+	server := backupTestServer(agent, nil)
+	listed := httptest.NewRecorder()
+	server.listBackups(listed, backupAdminRequest(http.MethodGet, "http://backend/api/v1/backups", true))
+	if listed.Code != http.StatusOK ||
+		!strings.Contains(listed.Body.String(), `"available":true`) ||
+		!strings.Contains(listed.Body.String(), `"totalBackups":1`) {
+		t.Fatalf("unexpected list response %d: %s", listed.Code, listed.Body.String())
+	}
+
+	for _, rawURL := range []string{
+		"http://backend/api/v1/backups?cursor=invalid",
+		"http://backend/api/v1/backups?cursor=" + strings.Repeat("x", 513),
+	} {
+		response := httptest.NewRecorder()
+		server.listBackups(response, backupAdminRequest(http.MethodGet, rawURL, true))
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_cursor") {
+			t.Fatalf("expected invalid cursor response, got %d: %s", response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestCreateBackupMapsAvailabilityAndConcurrency(t *testing.T) {
+	unavailable := httptest.NewRecorder()
+	(&Server{}).createBackup(
+		unavailable,
+		backupAdminRequest(http.MethodPost, "http://backend/api/v1/backups", true),
+	)
+	if unavailable.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected missing manager status %d, got %d", http.StatusServiceUnavailable, unavailable.Code)
+	}
+
+	offline := backupTestServer(&serverTestBackupAgent{}, nil)
+	offlineResponse := httptest.NewRecorder()
+	offline.createBackup(
+		offlineResponse,
+		backupAdminRequest(http.MethodPost, "http://backend/api/v1/backups", true),
+	)
+	if offlineResponse.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected offline agent status %d, got %d", http.StatusServiceUnavailable, offlineResponse.Code)
+	}
+
+	release := make(chan struct{})
+	agent := &serverTestBackupAgent{
+		available: true, createStarted: make(chan struct{}, 1), createRelease: release,
+	}
+	server := backupTestServer(agent, nil)
+	accepted := httptest.NewRecorder()
+	server.createBackup(accepted, backupAdminRequest(http.MethodPost, "http://backend/api/v1/backups", true))
+	if accepted.Code != http.StatusAccepted || !strings.Contains(accepted.Body.String(), `"status":"starting"`) {
+		t.Fatalf("unexpected accepted response %d: %s", accepted.Code, accepted.Body.String())
+	}
+
+	conflict := httptest.NewRecorder()
+	server.createBackup(conflict, backupAdminRequest(http.MethodPost, "http://backend/api/v1/backups", true))
+	if conflict.Code != http.StatusConflict || !strings.Contains(conflict.Body.String(), "backup_active") {
+		t.Fatalf("unexpected conflict response %d: %s", conflict.Code, conflict.Body.String())
+	}
+	close(release)
+}
+
+func TestDeleteBackupMapsErrorsAndRecordsAudit(t *testing.T) {
+	backupID := foundation.NewID().String()
+	missingManager := httptest.NewRecorder()
+	(&Server{}).deleteBackup(
+		missingManager,
+		backupRequestWithID(http.MethodDelete, backupID),
+	)
+	if missingManager.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected missing manager status %d, got %d", http.StatusServiceUnavailable, missingManager.Code)
+	}
+
+	invalid := httptest.NewRecorder()
+	backupTestServer(&serverTestBackupAgent{available: true}, nil).deleteBackup(
+		invalid,
+		backupRequestWithID(http.MethodDelete, "not-a-uuid"),
+	)
+	if invalid.Code != http.StatusNotFound {
+		t.Fatalf("expected invalid ID status %d, got %d", http.StatusNotFound, invalid.Code)
+	}
+
+	auditStore := &serverTestAuditStore{}
+	server := backupTestServer(&serverTestBackupAgent{available: true}, auditStore)
+	deleted := httptest.NewRecorder()
+	server.deleteBackup(deleted, backupRequestWithID(http.MethodDelete, backupID))
+	if deleted.Code != http.StatusNoContent {
+		t.Fatalf("expected delete status %d, got %d: %s", http.StatusNoContent, deleted.Code, deleted.Body.String())
+	}
+	if len(auditStore.events) != 2 ||
+		auditStore.events[0].Action != constants.AuditBackupDeleteRequested ||
+		auditStore.events[1].Action != constants.AuditBackupDeleted {
+		t.Fatalf("unexpected delete audit events: %#v", auditStore.events)
+	}
+
+	for _, test := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{name: "not found", err: os.ErrNotExist, status: http.StatusNotFound, code: "backup_not_found"},
+		{name: "agent failure", err: errors.New("agent failed"), status: http.StatusServiceUnavailable, code: "backup_unavailable"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			backupTestServer(&serverTestBackupAgent{available: true, deleteErr: test.err}, nil).
+				deleteBackup(response, backupRequestWithID(http.MethodDelete, backupID))
+			if response.Code != test.status || !strings.Contains(response.Body.String(), test.code) {
+				t.Fatalf("expected %d/%s, got %d: %s", test.status, test.code, response.Code, response.Body.String())
+			}
+		})
+	}
+
+	release := make(chan struct{})
+	activeServer := backupTestServer(&serverTestBackupAgent{
+		available: true, createStarted: make(chan struct{}, 1), createRelease: release,
+	}, nil)
+	if _, err := activeServer.backups.Start(); err != nil {
+		t.Fatal(err)
+	}
+	conflict := httptest.NewRecorder()
+	activeServer.deleteBackup(conflict, backupRequestWithID(http.MethodDelete, backupID))
+	if conflict.Code != http.StatusConflict || !strings.Contains(conflict.Body.String(), "backup_active") {
+		t.Fatalf("unexpected active delete response %d: %s", conflict.Code, conflict.Body.String())
+	}
+	close(release)
+}
+
+func TestDownloadBackupStreamsOnlySuccessfulAgentResponse(t *testing.T) {
+	backupID := foundation.NewID().String()
+	for _, test := range []struct {
+		name   string
+		server *Server
+		status int
+	}{
+		{name: "missing manager", server: &Server{}, status: http.StatusNotFound},
+		{
+			name: "agent failure",
+			server: backupTestServer(&serverTestBackupAgent{
+				available: true, downloadErr: errors.New("missing"),
+			}, nil),
+			status: http.StatusNotFound,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			test.server.downloadBackup(response, backupRequestWithID(http.MethodGet, backupID))
+			if response.Code != test.status {
+				t.Fatalf("expected status %d, got %d", test.status, response.Code)
+			}
+		})
+	}
+
+	server := backupTestServer(&serverTestBackupAgent{
+		available: true,
+		downloadResponse: &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Content-Disposition": []string{`attachment; filename="backup.tar"`},
+			},
+			Body: io.NopCloser(strings.NewReader("portable bundle")),
+		},
+	}, nil)
+	response := httptest.NewRecorder()
+	server.downloadBackup(response, backupRequestWithID(http.MethodGet, backupID))
+	if response.Code != http.StatusOK ||
+		response.Header().Get("Content-Type") != "application/x-tar" ||
+		response.Header().Get("Content-Disposition") != `attachment; filename="backup.tar"` ||
+		response.Body.String() != "portable bundle" {
+		t.Fatalf("unexpected download response %d %#v: %q", response.Code, response.Header(), response.Body.String())
+	}
+}
+
 func TestLifecycleMutationsRejectMissingRequiredIdentifiers(t *testing.T) {
 	project := &projectdomain.Project{ID: foundation.NewID(), Slug: "payments"}
 	server := &Server{
@@ -335,4 +621,36 @@ func TestLifecycleMutationsRejectMissingRequiredIdentifiers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func backupTestServer(agent platformbackup.Agent, auditStore *serverTestAuditStore) *Server {
+	if auditStore == nil {
+		auditStore = &serverTestAuditStore{}
+	}
+	return &Server{
+		backups: platformbackup.NewManager(
+			agent,
+			maintenance.New(),
+			func(context.Context) error { return nil },
+			"test-version",
+			"development",
+			nil,
+		),
+		audit:  auditapp.New(auditStore),
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+}
+
+func backupAdminRequest(method, target string, systemAdmin bool) *http.Request {
+	request := httptest.NewRequest(method, target, nil)
+	return request.WithContext(context.WithValue(request.Context(), currentUserKey{}, &identitydomain.User{
+		ID: foundation.NewID(), SystemAdmin: systemAdmin,
+	}))
+}
+
+func backupRequestWithID(method, backupID string) *http.Request {
+	request := backupAdminRequest(method, "http://backend/api/v1/backups/"+backupID, true)
+	routeContext := chi.NewRouteContext()
+	routeContext.URLParams.Add("backupId", backupID)
+	return request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeContext))
 }

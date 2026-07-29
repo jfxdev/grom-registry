@@ -113,7 +113,7 @@ func Paginate(summaries []Summary, cursor string) (Page, error) {
 		}
 	}
 	end := min(start+PageSize, len(summaries))
-	items := append([]Summary(nil), summaries[start:end]...)
+	items := append([]Summary{}, summaries[start:end]...)
 	page := Page{Items: items, Total: len(summaries)}
 	if end < len(summaries) && len(items) > 0 {
 		last := items[len(items)-1]

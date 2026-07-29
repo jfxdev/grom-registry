@@ -295,7 +295,9 @@ Current evidence:
   frontend checks use `npm ci` and run lint, Vitest with LCOV coverage,
   TypeScript checking, and the production Vite build. Both jobs upload their
   reports to Codecov with separate `backend` and `frontend` flags through the
-  repository's `CODECOV_TOKEN` Actions secret.
+  repository's `CODECOV_TOKEN` Actions secret. `codecov.yml` requires 70%
+  patch coverage with 1% tolerance and excludes only generated OpenAPI code
+  and static frontend assets.
 - The same workflow runs stable `Go Lint` and `Go Vulnerability Check` jobs.
   golangci-lint 2.11.4 performs static analysis, while the official Go
   govulncheck action uses text output so reachable known vulnerabilities fail
@@ -1401,7 +1403,8 @@ Grom instances are supported.
 - **Implemented:** CI enforces Go formatting and tests, SQLite integration,
   frontend lint/tests/typechecking/build, golangci-lint, govulncheck, and the
   isolated real-Docker registry journey. Backend and frontend unit coverage
-  reports are uploaded separately to Codecov.
+  reports are uploaded separately to Codecov, with an explicit 70% patch
+  coverage target.
 - **Pending:** production image build and scanning, broader dependency/container
   scanning, and PostgreSQL CI before PostgreSQL is advertised as fully
   supported.

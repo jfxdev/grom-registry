@@ -150,7 +150,9 @@ interface and are not required in an installed deployment.
 
 Unit coverage includes deterministic manifests, checksum validation, safe tar
 handling, atomic publication, maintenance draining, backup-agent communication,
-portable bundle import, empty-target enforcement, and restore markers.
+portable bundle import, recovery HTTP authorization and validation, CLI command
+parsing, empty-target enforcement, restore markers, failure-state reporting,
+and administrative backup endpoint behavior.
 
 The mandatory real-Docker recovery journey:
 

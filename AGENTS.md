@@ -57,7 +57,9 @@ SARIF modes do not fail the job when vulnerabilities are found.
 The `Backend Tests` and `Frontend Tests` jobs upload separate `backend` and
 `frontend` coverage and JUnit test-result reports to Codecov. They require the
 repository Actions secret `CODECOV_TOKEN`; never commit or log its plaintext
-value.
+value. `codecov.yml` requires at least 70% patch coverage with 1% tolerance and
+excludes only generated OpenAPI code and static frontend assets; do not lower
+the target or broaden exclusions to hide untested production code.
 
 Do not edit generated files under `backend/internal/generated/openapi` or `frontend/src/shared/api/generated`.
 

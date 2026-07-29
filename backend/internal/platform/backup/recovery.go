@@ -33,8 +33,28 @@ func ServeRecovery(ctx context.Context, options RecoveryOptions) error {
 		return fmt.Errorf("create recovery request token: %w", err)
 	}
 	requestToken := hex.EncodeToString(tokenBytes)
-	var restoring atomic.Bool
+	handler := newRecoveryHandler(options, requestToken)
+	server := &http.Server{
+		Addr: options.ListenAddress, Handler: handler,
+		ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second,
+	}
+	errorsCh := make(chan error, 1)
+	go func() { errorsCh <- server.ListenAndServe() }()
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		return server.Shutdown(shutdownCtx)
+	case err := <-errorsCh:
+		if err == http.ErrServerClosed {
+			return nil
+		}
+		return err
+	}
+}
 
+func newRecoveryHandler(options RecoveryOptions, requestToken string) http.Handler {
+	var restoring atomic.Bool
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -107,24 +127,7 @@ func ServeRecovery(ctx context.Context, options RecoveryOptions) error {
 			"status":   "restored",
 		})
 	})
-
-	server := &http.Server{
-		Addr: options.ListenAddress, Handler: mux,
-		ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second,
-	}
-	errorsCh := make(chan error, 1)
-	go func() { errorsCh <- server.ListenAndServe() }()
-	select {
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		return server.Shutdown(shutdownCtx)
-	case err := <-errorsCh:
-		if err == http.ErrServerClosed {
-			return nil
-		}
-		return err
-	}
+	return mux
 }
 
 func recoveryHTML(requestToken, version string) string {

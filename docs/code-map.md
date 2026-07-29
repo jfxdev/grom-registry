@@ -19,6 +19,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `deploy/docker/` | Multi-mode image entrypoint for normal, backup-agent, and recovery execution |
 | `deploy/distribution/` | CNCF Distribution configuration |
 | `.github/workflows/ci.yml` | Mandatory Go formatting/tests, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and separate backend/frontend Codecov coverage and JUnit test-result uploads |
+| `codecov.yml` | Explicit 70% patch-coverage gate and narrow generated-code/static-asset exclusions |
 | `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/backup-restore-e2e.yml` | Real-Docker volume-loss and recovery acceptance check |
 | `docs/` | Architecture, domain inventory, operations, decisions, and visual identity |

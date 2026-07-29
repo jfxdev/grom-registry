@@ -55,6 +55,24 @@ func ServeAgent(ctx context.Context, options AgentOptions) error {
 		return fmt.Errorf("set agent socket permissions: %w", err)
 	}
 
+	handler := newAgentHandler(options)
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
+	errorsCh := make(chan error, 1)
+	go func() { errorsCh <- server.Serve(listener) }()
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return server.Shutdown(shutdownCtx)
+	case err := <-errorsCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
+}
+
+func newAgentHandler(options AgentOptions) http.Handler {
 	var storageMu sync.RWMutex
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/backups", func(w http.ResponseWriter, _ *http.Request) {
@@ -130,21 +148,7 @@ func ServeAgent(ctx context.Context, options AgentOptions) error {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-
-	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
-	errorsCh := make(chan error, 1)
-	go func() { errorsCh <- server.Serve(listener) }()
-	select {
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return server.Shutdown(shutdownCtx)
-	case err := <-errorsCh:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
-		return err
-	}
+	return mux
 }
 
 func writeAgentJSON(w http.ResponseWriter, status int, value any) {
