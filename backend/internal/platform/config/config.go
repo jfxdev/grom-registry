@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jfxdev/grom/backend/internal/constants"
 )
 
 type DeploymentProfile string
@@ -95,8 +97,8 @@ func Load() (Config, error) {
 		BootstrapEmail:    strings.ToLower(strings.TrimSpace(env("GROM_BOOTSTRAP_ADMIN_EMAIL", "admin@grom.local"))),
 		BootstrapUsername: strings.TrimSpace(env("GROM_BOOTSTRAP_ADMIN_USERNAME", "admin")),
 		BootstrapPassword: env("GROM_BOOTSTRAP_ADMIN_PASSWORD", ""),
-		SessionTTL:        durationEnv("GROM_SESSION_TTL", 24*time.Hour),
-		RegistryTokenTTL:  durationEnv("GROM_REGISTRY_TOKEN_TTL", 5*time.Minute),
+		SessionTTL:        durationEnv("GROM_SESSION_TTL", constants.DefaultSessionHours*time.Hour),
+		RegistryTokenTTL:  durationEnv("GROM_REGISTRY_TOKEN_TTL", constants.DefaultRegistryTokenTTL*time.Minute),
 		SecureCookies:     secureCookies,
 		EnableAPIDocs:     enableAPIDocs,
 		MigrationLockWait: durationEnv("GROM_MIGRATION_LOCK_TIMEOUT", 30*time.Second),

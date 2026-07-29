@@ -40,22 +40,9 @@ func init() {
 			}
 		}
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
-		if _, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS artifact_deletions"); err != nil {
-			return err
-		}
-		if _, err := db.ExecContext(ctx, "DROP INDEX IF EXISTS idx_lifecycle_runs_preview"); err != nil {
-			return err
-		}
-		if _, err := db.ExecContext(ctx, "ALTER TABLE lifecycle_previews DROP COLUMN evaluator_version"); err != nil {
-			return err
-		}
-		if _, err := db.ExecContext(ctx, "ALTER TABLE lifecycle_previews DROP COLUMN policy_version"); err != nil {
-			return err
-		}
-		if _, err := db.ExecContext(ctx, "ALTER TABLE registry_repositories DROP COLUMN policy_version"); err != nil {
-			return err
-		}
+	}, func(context.Context, *bun.DB) error {
+		// SQLite cannot portably drop columns on every supported version.
+		// Forward migrations are authoritative, so this rollback is intentionally a no-op.
 		return nil
 	})
 }

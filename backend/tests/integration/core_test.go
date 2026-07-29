@@ -12,6 +12,7 @@ import (
 	"github.com/jfxdev/grom/backend/internal/constants"
 	"github.com/jfxdev/grom/backend/internal/foundation"
 	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
+	identitydomain "github.com/jfxdev/grom/backend/internal/identity/domain"
 	identitystore "github.com/jfxdev/grom/backend/internal/identity/infrastructure/persistence/bun"
 	"github.com/jfxdev/grom/backend/internal/platform/database"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
@@ -20,6 +21,7 @@ import (
 	registrydomain "github.com/jfxdev/grom/backend/internal/registry/domain"
 	registrystore "github.com/jfxdev/grom/backend/internal/registry/infrastructure/persistence/bun"
 	"github.com/jfxdev/grom/backend/internal/registry/infrastructure/signing"
+	"github.com/uptrace/bun"
 )
 
 func TestSQLiteCoreFlow(t *testing.T) {
@@ -38,10 +40,6 @@ func TestSQLiteCoreFlow(t *testing.T) {
 	}
 
 	identityService := identityapp.New(identitystore.New(db), time.Hour)
-	projectService := projectapp.New(projectstore.New(db))
-	registryStore := registrystore.New(db)
-	repositoryService := registryapp.NewRepositoryService(registryStore)
-	projectService.SetDeletionGuard(repositoryService)
 	if err := identityService.BootstrapAdmin(ctx, "admin@example.com", "admin", "secret-password"); err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +47,23 @@ func TestSQLiteCoreFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	runRepositoryPersistenceFlow(t, ctx, db, identityService, admin)
+}
+
+func runRepositoryPersistenceFlow(
+	t *testing.T,
+	ctx context.Context,
+	db *bun.DB,
+	identityService *identityapp.Service,
+	admin *identitydomain.User,
+) {
+	t.Helper()
+
+	projectService := projectapp.New(projectstore.New(db))
+	registryStore := registrystore.New(db)
+	repositoryService := registryapp.NewRepositoryService(registryStore)
+	projectService.SetDeletionGuard(repositoryService)
+
 	developer, err := identityService.CreateUser(ctx, "developer@example.com", "developer", "developer-password", false)
 	if err != nil {
 		t.Fatal(err)
@@ -370,6 +385,58 @@ func TestSQLiteCoreFlow(t *testing.T) {
 	if _, err := identityService.AuthenticateRegistry(ctx, account.Username, created.Secret); err == nil {
 		t.Fatal("expected revoked service account token authentication to fail")
 	}
+
+	firstMovedAt := time.Now().UTC().Add(-2 * time.Minute)
+	if err := registryStore.UpsertManifestObservation(ctx, repository.ID, registrydomain.ManifestObservation{
+		Digest: "sha256:moved-from", Tag: "moving",
+		MediaType: "application/vnd.oci.image.manifest.v1+json",
+	}, firstMovedAt); err != nil {
+		t.Fatal(err)
+	}
+	lastPushedAt := firstMovedAt.Add(time.Minute)
+	if err := registryStore.UpsertManifestObservation(ctx, repository.ID, registrydomain.ManifestObservation{
+		Digest: "sha256:moved-to", Tag: "moving",
+		MediaType: "application/vnd.oci.image.manifest.v1+json", PushedAt: &lastPushedAt,
+	}, lastPushedAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := registryStore.UpsertManifestObservation(ctx, repository.ID, registrydomain.ManifestObservation{
+		Digest: "sha256:moved-to", Tag: "moving",
+		MediaType: "application/vnd.oci.image.manifest.v1+json",
+	}, lastPushedAt.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err = registryStore.ListManifestInventory(ctx, repository.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventoryByDigest := make(map[string]registrydomain.ManifestInventory, len(inventory))
+	for _, manifest := range inventory {
+		inventoryByDigest[manifest.Digest] = manifest
+	}
+	movedFrom := inventoryByDigest["sha256:moved-from"]
+	if movedFrom.State != constants.InventoryStateUntagged || movedFrom.UntaggedAt == nil {
+		t.Fatalf("expected the previous tag target to become untagged: %#v", movedFrom)
+	}
+	movedTo := inventoryByDigest["sha256:moved-to"]
+	if movedTo.State != constants.InventoryStateActive || len(movedTo.Tags) != 1 ||
+		movedTo.Tags[0] != "moving" || movedTo.LastPushedAt == nil ||
+		!movedTo.LastPushedAt.Equal(lastPushedAt) {
+		t.Fatalf("unexpected current tag target after upsert: %#v", movedTo)
+	}
+	if _, err := db.NewDelete().
+		Table("lifecycle_previews").
+		Where("id = ?", preview.ID.String()).
+		Exec(ctx); err != nil {
+		t.Fatalf("delete lifecycle preview with dependent run: %v", err)
+	}
+	runExists, err := db.NewSelect().
+		Table("lifecycle_runs").
+		Where("preview_id = ?", preview.ID.String()).
+		Exists(ctx)
+	if err != nil || runExists {
+		t.Fatalf("expected lifecycle runs to cascade with their preview: exists=%v, err=%v", runExists, err)
+	}
 }
 
 func intPointer(value int) *int {
@@ -401,7 +468,9 @@ func TestPostgresMigrationsAndBootstrap(t *testing.T) {
 	if err := service.BootstrapAdmin(ctx, "postgres-admin@example.com", "postgres-admin", "secret-password"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := service.Login(ctx, "postgres-admin@example.com", "secret-password"); err != nil {
+	_, admin, err := service.Login(ctx, "postgres-admin@example.com", "secret-password")
+	if err != nil {
 		t.Fatal(err)
 	}
+	runRepositoryPersistenceFlow(t, ctx, db, service, admin)
 }

@@ -34,81 +34,69 @@ func (s *Store) UpsertManifestObservation(
 		observation.ClassificationConfidence = constants.ClassificationConfidenceNone
 	}
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		model := new(manifestModel)
-		err := tx.NewSelect().Model(model).
-			Where("repository_id = ?", repositoryID.String()).
-			Where("digest = ?", observation.Digest).Scan(ctx)
-		switch err {
-		case nil:
-			model.MediaType = observation.MediaType
-			model.ArtifactType = observation.ArtifactType
-			model.SubjectDigest = observation.SubjectDigest
-			model.ObservedKind = observation.ObservedKind
-			model.ArtifactRelationship = observation.ArtifactRelationship
-			model.ClassificationSource = observation.ClassificationSource
-			model.ClassificationConfidence = observation.ClassificationConfidence
-			model.ManifestSize = observation.ManifestSize
-			model.LastSeenAt = observedAt
-			model.DeletedAt = nil
-			if observation.PushedAt != nil {
-				model.LastPushedAt = observation.PushedAt
-			}
-			if _, err = tx.NewUpdate().Model(model).WherePK().Exec(ctx); err != nil {
-				return err
-			}
-		case sql.ErrNoRows:
-			model = &manifestModel{
-				ID: foundation.NewID().String(), RepositoryID: repositoryID.String(),
-				Digest: observation.Digest, MediaType: observation.MediaType,
-				ArtifactType: observation.ArtifactType, SubjectDigest: observation.SubjectDigest,
-				ObservedKind: observation.ObservedKind, ArtifactRelationship: observation.ArtifactRelationship,
-				ClassificationSource:     observation.ClassificationSource,
-				ClassificationConfidence: observation.ClassificationConfidence,
-				ManifestSize:             observation.ManifestSize, State: constants.InventoryStateUntagged,
-				FirstSeenAt: observedAt, LastPushedAt: observation.PushedAt, LastSeenAt: observedAt,
-				UntaggedAt: &observedAt,
-			}
-			if _, err = tx.NewInsert().Model(model).Exec(ctx); err != nil {
-				return err
-			}
-		default:
+		model := &manifestModel{
+			ID: foundation.NewID().String(), RepositoryID: repositoryID.String(),
+			Digest: observation.Digest, MediaType: observation.MediaType,
+			ArtifactType: observation.ArtifactType, SubjectDigest: observation.SubjectDigest,
+			ObservedKind: observation.ObservedKind, ArtifactRelationship: observation.ArtifactRelationship,
+			ClassificationSource:     observation.ClassificationSource,
+			ClassificationConfidence: observation.ClassificationConfidence,
+			ManifestSize:             observation.ManifestSize, State: constants.InventoryStateUntagged,
+			FirstSeenAt: observedAt, LastPushedAt: observation.PushedAt, LastSeenAt: observedAt,
+			UntaggedAt: &observedAt,
+		}
+		manifestInsert := tx.NewInsert().Model(model).
+			On("CONFLICT (repository_id, digest) DO UPDATE").
+			Set("media_type = EXCLUDED.media_type").
+			Set("artifact_type = EXCLUDED.artifact_type").
+			Set("subject_digest = EXCLUDED.subject_digest").
+			Set("observed_kind = EXCLUDED.observed_kind").
+			Set("artifact_relationship = EXCLUDED.artifact_relationship").
+			Set("classification_source = EXCLUDED.classification_source").
+			Set("classification_confidence = EXCLUDED.classification_confidence").
+			Set("manifest_size = EXCLUDED.manifest_size").
+			Set("last_seen_at = EXCLUDED.last_seen_at").
+			Set("deleted_at = NULL")
+		if observation.PushedAt != nil {
+			manifestInsert = manifestInsert.Set("last_pushed_at = EXCLUDED.last_pushed_at")
+		}
+		if err := manifestInsert.Returning("id").Scan(ctx, &model.ID); err != nil {
 			return err
 		}
 
 		if observation.Tag != "" {
-			var previous tagModel
-			tagErr := tx.NewSelect().Model(&previous).
+			var oldManifestID string
+			tagErr := tx.NewSelect().Model((*tagModel)(nil)).
+				Column("manifest_id").
 				Where("repository_id = ?", repositoryID.String()).
-				Where("name = ?", observation.Tag).Scan(ctx)
-			switch tagErr {
-			case nil:
-				oldManifestID := previous.ManifestID
-				if previous.ManifestID != model.ID {
-					previous.ManifestID = model.ID
-					previous.LastMovedAt = observedAt
-				}
-				previous.LastSeenAt = observedAt
-				previous.DetachedAt = nil
-				if _, err = tx.NewUpdate().Model(&previous).WherePK().Exec(ctx); err != nil {
-					return err
-				}
-				if oldManifestID != model.ID {
-					if err := refreshManifestState(ctx, tx, oldManifestID, observedAt); err != nil {
-						return err
-					}
-				}
-			case sql.ErrNoRows:
-				tag := &tagModel{
-					RepositoryID: repositoryID.String(), Name: observation.Tag, ManifestID: model.ID,
-					FirstSeenAt: observedAt, LastMovedAt: observedAt, LastSeenAt: observedAt,
-				}
-				if _, err = tx.NewInsert().Model(tag).Exec(ctx); err != nil {
-					return err
-				}
-			default:
+				Where("name = ?", observation.Tag).
+				Scan(ctx, &oldManifestID)
+			if tagErr != nil && !errors.Is(tagErr, sql.ErrNoRows) {
 				return tagErr
 			}
-			if _, err = tx.NewUpdate().Model((*manifestModel)(nil)).
+			tag := &tagModel{
+				RepositoryID: repositoryID.String(), Name: observation.Tag, ManifestID: model.ID,
+				FirstSeenAt: observedAt, LastMovedAt: observedAt, LastSeenAt: observedAt,
+			}
+			if _, err := tx.NewInsert().Model(tag).
+				ModelTableExpr("registry_tags AS current_tag").
+				On("CONFLICT (repository_id, name) DO UPDATE").
+				Set("manifest_id = EXCLUDED.manifest_id").
+				Set(`last_moved_at = CASE
+					WHEN current_tag.manifest_id <> EXCLUDED.manifest_id THEN EXCLUDED.last_moved_at
+					ELSE current_tag.last_moved_at
+				END`).
+				Set("last_seen_at = EXCLUDED.last_seen_at").
+				Set("detached_at = NULL").
+				Exec(ctx); err != nil {
+				return err
+			}
+			if oldManifestID != "" && oldManifestID != model.ID {
+				if err := refreshManifestState(ctx, tx, oldManifestID, observedAt); err != nil {
+					return err
+				}
+			}
+			if _, err := tx.NewUpdate().Model((*manifestModel)(nil)).
 				Set("state = ?", constants.InventoryStateActive).
 				Set("untagged_at = NULL").
 				Where("id = ?", model.ID).Exec(ctx); err != nil {

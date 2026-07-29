@@ -8,7 +8,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -25,7 +27,8 @@ type Signer struct {
 const KeyID = "grom-default"
 
 func LoadOrCreate(keyPath, certPath string) (*Signer, error) {
-	if keyPEM, err := os.ReadFile(keyPath); err == nil {
+	keyPEM, err := os.ReadFile(keyPath)
+	if err == nil {
 		block, _ := pem.Decode(keyPEM)
 		if block == nil {
 			return nil, fmt.Errorf("decode signing key")
@@ -42,6 +45,9 @@ func LoadOrCreate(keyPath, certPath string) (*Signer, error) {
 			return nil, fmt.Errorf("signing certificate missing: %w", err)
 		}
 		return &Signer{privateKey: rsaKey, certPath: certPath}, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("read signing key: %w", err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(keyPath), 0o750); err != nil {

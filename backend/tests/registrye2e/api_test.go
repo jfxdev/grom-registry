@@ -11,9 +11,12 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	openapi "github.com/jfxdev/grom/backend/internal/generated/openapi"
 )
+
+const managementRequestTimeout = 15 * time.Second
 
 type managementClient struct {
 	baseURL string
@@ -33,7 +36,10 @@ func newManagementClient(t *testing.T, baseURL string) *managementClient {
 	if err != nil {
 		t.Fatalf("create management API cookie jar: %v", err)
 	}
-	return &managementClient{baseURL: baseURL, client: &http.Client{Jar: jar}}
+	return &managementClient{
+		baseURL: baseURL,
+		client:  &http.Client{Jar: jar, Timeout: managementRequestTimeout},
+	}
 }
 
 func (c *managementClient) login(t *testing.T) {
@@ -208,7 +214,9 @@ func (c *managementClient) doJSON(
 		}
 		body = bytes.NewReader(encoded)
 	}
-	request, err := http.NewRequest(method, c.baseURL+path, body)
+	ctx, cancel := context.WithTimeout(context.Background(), managementRequestTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		t.Fatalf("%s %s: create request: %v", method, path, err)
 	}

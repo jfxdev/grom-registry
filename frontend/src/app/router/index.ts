@@ -52,6 +52,10 @@ export const router = createRouter({
       name: 'integrations',
       component: () => import('@/modules/integrations/pages/IntegrationsPage.vue'),
     },
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: ROUTES.projects,
+    },
   ],
 })
 

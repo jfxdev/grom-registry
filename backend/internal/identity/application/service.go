@@ -21,6 +21,8 @@ var (
 	ErrInvalidPasswordReset   = errors.New("password reset link is invalid or expired")
 )
 
+const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
 type Service struct {
 	repository identity.Repository
 	sessionTTL time.Duration
@@ -60,8 +62,13 @@ func (s *Service) BootstrapAdmin(ctx context.Context, email, username, plaintext
 }
 
 func (s *Service) Login(ctx context.Context, email, plaintext string) (string, *identity.User, error) {
-	user, err := s.repository.FindUserByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
-	if err != nil || !password.Verify(user.PasswordHash, plaintext) {
+	user, lookupErr := s.repository.FindUserByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+	passwordHash := dummyPasswordHash
+	if lookupErr == nil && user != nil {
+		passwordHash = user.PasswordHash
+	}
+	passwordMatches := password.Verify(passwordHash, plaintext)
+	if lookupErr != nil || user == nil || !passwordMatches {
 		return "", nil, ErrUnauthenticated
 	}
 	publicID, err := randomString(12)
@@ -117,8 +124,8 @@ func (s *Service) ListUsers(ctx context.Context) ([]identity.User, error) {
 func (s *Service) CreateUser(ctx context.Context, email, username, plaintext string, systemAdmin bool) (*identity.User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	username = strings.TrimSpace(username)
-	if email == "" || username == "" || len(plaintext) < 8 {
-		return nil, fmt.Errorf("email, username, and a password with at least 8 characters are required")
+	if email == "" || username == "" || len(plaintext) < constants.MinimumPasswordLength {
+		return nil, fmt.Errorf("email, username, and a password with at least %d characters are required", constants.MinimumPasswordLength)
 	}
 	hash, err := password.Hash(plaintext)
 	if err != nil {
@@ -139,8 +146,8 @@ func (s *Service) FindUser(ctx context.Context, id foundation.ID) (*identity.Use
 }
 
 func (s *Service) ChangePassword(ctx context.Context, userID foundation.ID, currentPassword, newPassword string) error {
-	if len(newPassword) < 12 {
-		return fmt.Errorf("new password must contain at least 12 characters")
+	if len(newPassword) < constants.MinimumPasswordLength {
+		return fmt.Errorf("new password must contain at least %d characters", constants.MinimumPasswordLength)
 	}
 	user, err := s.repository.FindUserByID(ctx, userID)
 	if err != nil {
@@ -185,8 +192,8 @@ func (s *Service) CreatePasswordReset(ctx context.Context, userID foundation.ID)
 }
 
 func (s *Service) CompletePasswordReset(ctx context.Context, rawToken, newPassword string) (foundation.ID, error) {
-	if len(newPassword) < 12 {
-		return "", fmt.Errorf("new password must contain at least 12 characters")
+	if len(newPassword) < constants.MinimumPasswordLength {
+		return "", fmt.Errorf("new password must contain at least %d characters", constants.MinimumPasswordLength)
 	}
 	publicID, secret, ok := parseCredential(rawToken, "grmpr")
 	if !ok {

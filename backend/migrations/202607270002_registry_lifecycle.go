@@ -75,7 +75,7 @@ func init() {
 				status TEXT NOT NULL,
 				started_at TIMESTAMP NOT NULL,
 				completed_at TIMESTAMP NULL,
-				FOREIGN KEY (preview_id) REFERENCES lifecycle_previews(id),
+				FOREIGN KEY (preview_id) REFERENCES lifecycle_previews(id) ON DELETE CASCADE,
 				FOREIGN KEY (repository_id) REFERENCES registry_repositories(id) ON DELETE CASCADE
 			)`,
 			`CREATE INDEX idx_lifecycle_runs_repository ON lifecycle_runs(repository_id, started_at)`,

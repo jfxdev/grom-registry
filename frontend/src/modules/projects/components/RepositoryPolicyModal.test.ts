@@ -69,4 +69,33 @@ describe('RepositoryPolicyModal', () => {
     )
     expect(wrapper.emitted('saved')?.[0]?.[0]).toMatchObject({ version: 1 })
   })
+
+  it('clears non-positive and non-integer retention values before saving', async () => {
+    const wrapper = mount(RepositoryPolicyModal, {
+      props: { project: 'payments', repository },
+    })
+
+    await wrapper.findAll('button').find((button) => button.text().includes('Add policy'))!.trigger('click')
+    const inputs = wrapper.findAll('input[type="number"]')
+    expect(inputs).toHaveLength(3)
+    await inputs[0]!.setValue('1.5')
+    await inputs[1]!.setValue('0')
+    await inputs[2]!.setValue('-1')
+    await wrapper.findAll('button').find((button) => button.text().includes('Save policies'))!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.replaceRepositoryPolicies).toHaveBeenCalledWith(
+      'payments',
+      repository.id,
+      expect.objectContaining({
+        policies: [
+          expect.objectContaining({
+            expireAfterDays: undefined,
+            keepLast: undefined,
+            untaggedGraceDays: undefined,
+          }),
+        ],
+      }),
+    )
+  })
 })

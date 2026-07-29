@@ -67,19 +67,23 @@ func NewClient(rawURL string, tokens *registryapp.TokenService) (*Client, error)
 }
 
 func (c *Client) ListProjectRepositories(ctx context.Context, project string) ([]string, error) {
-	var response RepositoryList
-	token, err := c.tokens.IssueCatalog("grom-internal")
-	if err != nil {
-		return nil, err
-	}
-	if err := c.get(ctx, "/v2/_catalog?n=1000", token, &response); err != nil {
-		return nil, err
-	}
 	prefix := project + "/"
 	result := make([]string, 0)
-	for _, name := range response.Repositories {
-		if strings.HasPrefix(name, prefix) {
-			result = append(result, strings.TrimPrefix(name, prefix))
+	nextPath := "/v2/_catalog?n=1000"
+	for nextPath != "" {
+		token, err := c.tokens.IssueCatalog("grom-internal")
+		if err != nil {
+			return nil, err
+		}
+		var response RepositoryList
+		nextPath, err = c.getWithLink(ctx, nextPath, token, &response)
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range response.Repositories {
+			if strings.HasPrefix(name, prefix) {
+				result = append(result, strings.TrimPrefix(name, prefix))
+			}
 		}
 	}
 	return result, nil
@@ -306,23 +310,67 @@ func (c *Client) DeleteManifest(ctx context.Context, repository, digest string) 
 }
 
 func (c *Client) get(ctx context.Context, path, token string, target any) error {
+	_, err := c.getWithLink(ctx, path, token, target)
+	return err
+}
+
+func (c *Client) getWithLink(ctx context.Context, path, token string, target any) (string, error) {
 	reference, err := url.Parse(path)
 	if err != nil {
-		return err
+		return "", err
 	}
 	targetURL := c.baseURL.ResolveReference(reference)
+	if targetURL.Scheme != c.baseURL.Scheme || targetURL.Host != c.baseURL.Host {
+		return "", fmt.Errorf("distribution pagination link points to a different origin")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL.String(), nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	response, err := c.http.Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("distribution returned %s", response.Status)
+		return "", fmt.Errorf("distribution returned %s", response.Status)
 	}
-	return json.NewDecoder(response.Body).Decode(target)
+	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
+		return "", err
+	}
+	nextPath, err := nextLinkPath(response.Header.Get("Link"))
+	if err != nil {
+		return "", err
+	}
+	return nextPath, nil
+}
+
+func nextLinkPath(header string) (string, error) {
+	for _, rawLink := range strings.Split(header, ",") {
+		parts := strings.Split(rawLink, ";")
+		if len(parts) < 2 {
+			continue
+		}
+		isNext := false
+		for _, parameter := range parts[1:] {
+			if strings.TrimSpace(parameter) == `rel="next"` {
+				isNext = true
+				break
+			}
+		}
+		if !isNext {
+			continue
+		}
+		rawTarget := strings.TrimSpace(parts[0])
+		if len(rawTarget) < 2 || rawTarget[0] != '<' || rawTarget[len(rawTarget)-1] != '>' {
+			return "", fmt.Errorf("distribution returned an invalid pagination link")
+		}
+		target, err := url.Parse(rawTarget[1 : len(rawTarget)-1])
+		if err != nil {
+			return "", fmt.Errorf("parse distribution pagination link: %w", err)
+		}
+		return target.String(), nil
+	}
+	return "", nil
 }

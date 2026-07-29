@@ -20,6 +20,7 @@ const (
 	e2eAdminPassword = "registry-e2e-admin-password"
 	e2eTokenTTL      = 8 * time.Second
 	maxDiagnostic    = 16 << 10
+	cleanupTimeout   = 90 * time.Second
 )
 
 type testStack struct {
@@ -72,13 +73,16 @@ func startTestStack(t *testing.T) *testStack {
 	// Cleanup is registered before Compose starts so partial startup is covered.
 	t.Cleanup(func() {
 		if t.Failed() {
-			if output, logErr := stack.compose(context.Background(), "logs", "--no-color", "--tail", "160", "grom", "distribution"); logErr != nil {
+			logsCtx, logsCancel := context.WithTimeout(context.Background(), cleanupTimeout)
+			output, logErr := stack.compose(logsCtx, "logs", "--no-color", "--tail", "160", "grom", "distribution")
+			logsCancel()
+			if logErr != nil {
 				t.Logf("bounded Compose diagnostics unavailable: %v", logErr)
 			} else {
 				t.Logf("bounded Compose diagnostics:\n%s", bounded(output))
 			}
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 		if output, downErr := stack.compose(ctx, "down", "--volumes", "--remove-orphans"); downErr != nil {
 			t.Errorf("remove isolated Compose project: %v\n%s", downErr, bounded(output))

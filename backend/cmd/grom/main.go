@@ -115,7 +115,7 @@ func run(logger *slog.Logger) error {
 		identityService, auditService, projectService, repositoryService, inventoryService,
 		artifactDeletionService, lifecycleService,
 		registryTokens, distributionClient,
-		distribution.NewGateway(registryURL, registryTokens, distributionClient, inventoryService.ObservePush),
+		distribution.NewGateway(registryURL, registryTokens, distributionClient, inventoryService.ObservePush, logger),
 		logger, cfg.PublicURL, cfg.SecureCookies, cfg.EnableAPIDocs,
 		string(cfg.DeploymentProfile), cfg.InsecureHTTP,
 		httpapi.SecurityOptions{

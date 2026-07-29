@@ -115,7 +115,8 @@ func evaluateLifecycle(
 	for _, manifest := range inventory {
 		for _, policy := range policies {
 			if !policy.Enabled || (!policy.ExcludeFromLifecycle &&
-				(policy.Type != constants.RepositoryPolicyTagProtection || !policy.PreventDeletion)) {
+				(policy.Type != constants.RepositoryPolicyTagProtection || !policy.PreventDeletion)) ||
+				len(policy.TagPatterns) == 0 {
 				continue
 			}
 			for _, tag := range manifest.Tags {
@@ -319,26 +320,27 @@ func (s *LifecycleService) Execute(
 
 	deleted, failed, skipped := 0, 0, 0
 	fullRepository := projectSlug + "/" + target.Name
+	current, reconcileErr := s.inventory.Reconcile(ctx, projectID, projectSlug, target.Name)
+	currentByDigest := map[string]registrydomain.ManifestInventory{}
+	for _, manifest := range current {
+		currentByDigest[manifest.Digest] = manifest
+	}
+	freshTarget, repositoryErr := s.store.FindRepositoryByID(ctx, target.ID)
+	var currentDecisions []registrydomain.LifecyclePreviewItem
+	var decisionErr error
+	if repositoryErr == nil && reconcileErr == nil {
+		currentDecisions, decisionErr = evaluateLifecycle(freshTarget.Policies, current, s.now())
+	}
+	eligible := map[string]registrydomain.LifecyclePreviewItem{}
+	for _, decision := range currentDecisions {
+		if decision.Decision == constants.LifecycleDecisionEligible {
+			eligible[decision.Digest] = decision
+		}
+	}
+
 	for i := range run.Items {
 		item := &run.Items[i]
 		expected := previewItems[item.Digest]
-		current, reconcileErr := s.inventory.Reconcile(ctx, projectID, projectSlug, target.Name)
-		currentByDigest := map[string]registrydomain.ManifestInventory{}
-		for _, manifest := range current {
-			currentByDigest[manifest.Digest] = manifest
-		}
-		freshTarget, repositoryErr := s.store.FindRepositoryByID(ctx, target.ID)
-		var currentDecisions []registrydomain.LifecyclePreviewItem
-		var decisionErr error
-		if repositoryErr == nil && reconcileErr == nil {
-			currentDecisions, decisionErr = evaluateLifecycle(freshTarget.Policies, current, s.now())
-		}
-		eligible := map[string]registrydomain.LifecyclePreviewItem{}
-		for _, decision := range currentDecisions {
-			if decision.Decision == constants.LifecycleDecisionEligible {
-				eligible[decision.Digest] = decision
-			}
-		}
 		currentItem, stillEligible := eligible[item.Digest]
 		if reconcileErr != nil || repositoryErr != nil || decisionErr != nil || !stillEligible ||
 			!equalStrings(expected.Tags, currentItem.Tags) {
@@ -358,9 +360,12 @@ func (s *LifecycleService) Execute(
 			}
 			continue
 		}
-		if _, exists := currentByDigest[item.Digest]; !exists {
+		stillCurrent, revalidationErr := s.revalidateLifecycleCandidate(
+			ctx, fullRepository, item.Digest, currentItem.Tags,
+		)
+		if _, exists := currentByDigest[item.Digest]; !exists || !stillCurrent || revalidationErr != nil {
 			item.Status = constants.LifecycleItemSkipped
-			item.Message = "artifact is no longer present"
+			item.Message = "artifact changed or is no longer eligible; create a new preview"
 			skipped++
 		} else if err := s.distribution.DeleteManifest(ctx, fullRepository, item.Digest); err != nil {
 			item.Status = constants.LifecycleItemFailed
@@ -405,10 +410,10 @@ func (s *LifecycleService) Execute(
 	run.Status = status
 	run.CompletedAt = &completedAt
 	if err := s.store.CompleteLifecycleRun(ctx, run.ID, status, completedAt); err != nil {
-		return nil, err
+		return run, err
 	}
 	if err := s.store.SetLifecyclePreviewStatus(ctx, preview.ID, constants.LifecyclePreviewExecuted); err != nil {
-		return nil, err
+		return run, err
 	}
 	action := constants.AuditLifecycleRunCompleted
 	if status == constants.LifecycleRunFailed {
@@ -421,6 +426,28 @@ func (s *LifecycleService) Execute(
 		}
 	}
 	return run, nil
+}
+
+func (s *LifecycleService) revalidateLifecycleCandidate(
+	ctx context.Context,
+	repository, digest string,
+	tags []string,
+) (bool, error) {
+	resolved, exists, err := s.distribution.ResolveManifest(ctx, repository, digest)
+	if err != nil || !exists || resolved != digest {
+		return false, err
+	}
+	for _, tag := range tags {
+		resolved, exists, err = s.distribution.ResolveManifest(ctx, repository, tag)
+		if err != nil || !exists || resolved != digest {
+			return false, err
+		}
+	}
+	referrers, err := s.distribution.ListReferrers(ctx, repository, digest)
+	if err != nil {
+		return false, err
+	}
+	return len(referrers) == 0, nil
 }
 
 func (s *LifecycleService) failLifecycleRun(

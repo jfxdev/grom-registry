@@ -3,10 +3,11 @@ import { APIError } from '@/shared/api/client'
 import type { PolicyPreset, RepositoryPolicyInput } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import { Dialog } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { AlertTriangle, Check, ChevronDown, RotateCcw, ShieldCheck, X } from '@lucide/vue'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { createRepository, listPolicyPresets, projectKeys } from '../api/projects'
 
 const props = defineProps<{ project: string }>()
@@ -21,6 +22,14 @@ const expandedKeys = ref<string[]>([])
 const configurations = ref<Record<string, RepositoryPolicyInput>>({})
 
 const presets = useQuery({ queryKey: projectKeys.policyPresets, queryFn: listPolicyPresets })
+watch(() => presets.data.value, (availablePresets) => {
+  for (const preset of availablePresets ?? []) {
+    if (!configurations.value[preset.key]) {
+      configurations.value[preset.key] = clonePolicy(preset)
+    }
+  }
+}, { immediate: true })
+
 const selectedPolicies = computed(() =>
   selectedKeys.value
     .map((key) => configurations.value[key])
@@ -100,6 +109,14 @@ function updateNumber(
   ensureConfiguration(preset)[field] = Number.isFinite(parsed) ? parsed : undefined
 }
 
+function updateBoolean(
+  preset: PolicyPreset,
+  field: 'preventOverwrite' | 'preventDeletion' | 'excludeFromLifecycle' | 'requireReason',
+  event: unknown,
+) {
+  ensureConfiguration(preset)[field] = (event as { target: { checked: boolean } }).target.checked
+}
+
 function ensureConfiguration(preset: PolicyPreset): RepositoryPolicyInput {
   const existing = configurations.value[preset.key]
   if (existing) {
@@ -128,7 +145,7 @@ function summary(preset: PolicyPreset) {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <Dialog labelled-by="create-repository-title" @close="emit('close')">
     <form class="repository-modal" aria-labelledby="create-repository-title" @submit.prevent="create.mutate()">
       <header class="repository-modal-header">
         <div>
@@ -282,19 +299,35 @@ function summary(preset: PolicyPreset) {
                     v-if="configurationFor(preset).type === 'tag_protection' || configurationFor(preset).type === 'immutability'"
                     class="toggle-field"
                   >
-                    <input v-model="ensureConfiguration(preset).preventOverwrite" type="checkbox" />
+                    <input
+                      :checked="configurationFor(preset).preventOverwrite === true"
+                      type="checkbox"
+                      @change="updateBoolean(preset, 'preventOverwrite', $event)"
+                    />
                     Prevent overwrite
                   </label>
                   <label v-if="configurationFor(preset).type === 'tag_protection'" class="toggle-field">
-                    <input v-model="ensureConfiguration(preset).preventDeletion" type="checkbox" />
+                    <input
+                      :checked="configurationFor(preset).preventDeletion === true"
+                      type="checkbox"
+                      @change="updateBoolean(preset, 'preventDeletion', $event)"
+                    />
                     Prevent deletion
                   </label>
                   <label v-if="configurationFor(preset).type === 'tag_protection'" class="toggle-field">
-                    <input v-model="ensureConfiguration(preset).excludeFromLifecycle" type="checkbox" />
+                    <input
+                      :checked="configurationFor(preset).excludeFromLifecycle === true"
+                      type="checkbox"
+                      @change="updateBoolean(preset, 'excludeFromLifecycle', $event)"
+                    />
                     Exclude from lifecycle
                   </label>
                   <label v-if="configurationFor(preset).type === 'manual_deletion'" class="toggle-field">
-                    <input v-model="ensureConfiguration(preset).requireReason" type="checkbox" />
+                    <input
+                      :checked="configurationFor(preset).requireReason === true"
+                      type="checkbox"
+                      @change="updateBoolean(preset, 'requireReason', $event)"
+                    />
                     Require a reason
                   </label>
                 </div>
@@ -319,7 +352,7 @@ function summary(preset: PolicyPreset) {
         </div>
       </footer>
     </form>
-  </div>
+  </Dialog>
 </template>
 
 <style scoped>

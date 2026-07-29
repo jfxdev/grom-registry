@@ -4,6 +4,7 @@ import type { User } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
 import { ActionButton, Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
+import { writeClipboardText } from '@/shared/lib/clipboard'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Check, Copy, KeyRound, Plus, ShieldAlert, UserRound, X } from '@lucide/vue'
 import { ref } from 'vue'
@@ -21,6 +22,7 @@ const resetTarget = ref<User | null>(null)
 const resetLink = ref('')
 const resetExpiresAt = ref('')
 const copied = ref(false)
+const copyError = ref('')
 
 const create = useMutation({
   mutationFn: createUser,
@@ -53,6 +55,7 @@ function openReset(user: User) {
   resetLink.value = ''
   resetExpiresAt.value = ''
   copied.value = false
+  copyError.value = ''
   error.value = ''
 }
 
@@ -61,10 +64,21 @@ function closeReset() {
   resetLink.value = ''
   resetExpiresAt.value = ''
   copied.value = false
+  copyError.value = ''
 }
 
 async function copyResetLink() {
-  await navigator.clipboard.writeText(resetLink.value)
+  copyError.value = ''
+  const result = await writeClipboardText(resetLink.value)
+  if (result === 'unavailable') {
+    copyError.value = 'Copy is unavailable. Select the reset link and copy it manually.'
+    return
+  }
+  if (result === 'failed') {
+    copied.value = false
+    copyError.value = 'Copy failed. Select the reset link and copy it manually.'
+    return
+  }
   copied.value = true
 }
 </script>
@@ -135,6 +149,7 @@ async function copyResetLink() {
             </div>
           </div>
           <code>{{ resetLink }}</code>
+          <p v-if="copyError" class="error-text" role="alert">{{ copyError }}</p>
           <div class="flex justify-end gap-2">
             <Button variant="ghost" @click="closeReset">Done</Button>
             <Button @click="copyResetLink">

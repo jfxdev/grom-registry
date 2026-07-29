@@ -416,8 +416,8 @@ Work:
    fully supported.
 9. Run OCI Distribution conformance tests before making broad conformance
    claims.
-10. Add Docker smoke tests to the default release gate and ORAS smoke tests to
-    releases that advertise generic OCI support.
+10. Keep the mandatory Docker registry journey in the default release gate and
+    add ORAS smoke tests only to releases that advertise generic OCI support.
 11. Document operator-driven Distribution garbage collection separately from
     manifest deletion.
 
@@ -725,8 +725,8 @@ grom/
 
 Backend and frontend remain independently buildable.
 The frontend consumes the backend contract through generated OpenAPI types, not through a hand-maintained shared source folder.
-The `.github/workflows` CI structure is planned in completion step 4 and does
-not yet exist.
+The `.github/workflows` CI structure exists, with mandatory general CI and an
+isolated real-Docker registry acceptance workflow.
 
 ### Bounded contexts
 
@@ -1089,9 +1089,10 @@ Serve the rendered interactive documentation at `/api/docs` and the raw contract
 Neither endpoint includes secrets or environment-specific server URLs.
 Documentation endpoints may be disabled by configuration in hardened deployments without disabling the API itself.
 
-Current gap: CI does not yet validate the OpenAPI document, generated-code
-freshness, route coverage, or breaking changes. Completion steps 3 and 4 own
-those checks.
+CI validates the OpenAPI document by regenerating the Go transport output and
+fails on tracked drift. Dedicated OpenAPI linting, frontend generated-code
+freshness, bidirectional route coverage, and breaking-change detection remain
+open under completion steps 3 and 4.
 
 An intentional breaking change requires an API versioning decision and release note.
 
@@ -1250,7 +1251,8 @@ The following remains the required release baseline:
 
 Current gaps:
 
-- There is no CI enforcement.
+- CI enforces frontend lint, tests, typechecking, and the production frontend
+  build.
 - Tests use component and application mocks, but not a request-level frontend
   integration layer such as Mock Service Worker.
 - Playwright and the `e2e` suite are not present.
@@ -1388,23 +1390,28 @@ Grom instances are supported.
 - **Implemented:** Bun repositories, portable migrations for SQLite and
   PostgreSQL, and first-admin bootstrap.
 - **Partial:** OpenAPI contract, Go/TypeScript generation, and interactive docs
-  exist; deterministic linting and contract-drift checks do not.
-- **Pending:** CI for formatting, unit tests, frontend checks, SQLite
-  integration, image build, and dependency scanning. PostgreSQL CI becomes
-  mandatory before PostgreSQL is advertised as fully supported.
+  exist. CI validates and regenerates the Go contract output, while frontend
+  generated-code freshness and bidirectional route coverage remain open.
+- **Implemented:** CI enforces Go formatting and tests, SQLite integration,
+  frontend lint/tests/typechecking/build, golangci-lint, govulncheck, and the
+  isolated real-Docker registry journey.
+- **Pending:** production image build and scanning, broader dependency/container
+  scanning, and PostgreSQL CI before PostgreSQL is advertised as fully
+  supported.
 
 Exit criterion: one command starts Grom with SQLite, applies pending migrations
 automatically, and returns an authenticated `/v2/` challenge. The same boot
 migration lifecycle must complete against PostgreSQL in CI before PostgreSQL is
 included in the supported release matrix.
 
-Remaining default-path evidence is owned by completion steps 3 and 4. Contract
-validation, SQLite CI, image-build CI, and dependency scanning are not yet
-accepted. PostgreSQL CI remains a capability-specific gate.
+Remaining default-path evidence is owned by completion steps 3 and 4. Dedicated
+OpenAPI linting, frontend generated-code freshness, bidirectional route
+coverage, production image build/scanning, and broader dependency scanning are
+not yet accepted. PostgreSQL CI remains a capability-specific gate.
 
 ### Phase 1: authentication and project authorization
 
-**Progress: implemented; exit criterion not yet proven at the protocol level.**
+**Progress: Docker acceptance complete.**
 
 - **Implemented:** user sessions.
 - **Implemented:** projects and memberships.
@@ -1413,13 +1420,18 @@ accepted. PostgreSQL CI remains a capability-specific gate.
   rotate.
 - **Implemented:** `/auth/token` and asymmetric JWT signing.
 - **Implemented:** Reader/Writer/Admin scope mapping.
-- **Pending acceptance evidence:** real Docker authorization tests; ORAS is a
-  capability-specific gate for generic OCI support.
+- **Accepted:** the mandatory registry E2E workflow proves Docker push/pull,
+  Reader/Writer authorization, cross-project denial, key revocation, membership
+  removal, JWT expiry, first-push provisioning, and policy enforcement through
+  the public Grom endpoint.
+- **Deferred capability-specific work:** ORAS acceptance remains required only
+  before generic OCI support is advertised.
 
 Exit criterion: automated tests prove allowed and denied Docker push/pull operations across at least two projects.
 
-Application and database tests cover the authorization rules. Completion step 5
-must prove them through the public registry protocol with Docker.
+Application and database tests cover the authorization rules, and
+`.github/workflows/registry-e2e.yml` proves the exit criterion through the public
+registry protocol with Docker.
 
 ### Phase 2: registry browsing and core UI
 
@@ -1455,7 +1467,8 @@ browsing page is post-MVP unless promoted explicitly.
   timeout evidence, backup/restore documentation, key rotation, and upgrade
   tests remain.
 - **Pending:** default SQLite/local-storage recovery matrix.
-- **Pending:** Docker smoke tests.
+- **Implemented:** mandatory Docker protocol acceptance through the isolated
+  registry E2E workflow.
 - **Capability-specific:** PostgreSQL, S3, extended ORAS/referrer, and OCI
   conformance matrices.
 - **Pending:** release images, checksums, SBOM, and supported deployment
@@ -1527,15 +1540,15 @@ Status vocabulary:
 
 | # | Scenario | Gate | Status on July 29, 2026 | Evidence needed to close |
 |---:|---|---|---|---|
-| 1 | An administrator creates projects `alpha` and `beta` | Default MVP | Partial | Create both projects through the public management API in the registry E2E environment |
-| 2 | A service account is Writer in `alpha` and has no membership in `beta` | Default MVP | Partial | Persist both real projects and memberships in the E2E environment |
-| 3 | Its access key can push and pull `alpha/api:v1` | Default MVP | Partial | Successful Docker push and pull through Grom |
-| 4 | The same key cannot pull or push `beta/api:v1` | Default MVP | Partial | Docker denial against an existing private `beta` project without information leakage |
-| 5 | A Reader key can pull but cannot push | Default MVP | Partial | Docker pull success and push denial through Grom |
-| 6 | Revoking a key prevents the next registry-token exchange immediately | Default MVP | Partial | Retain the current lower-level test and repeat through `/auth/token` in the registry E2E suite |
-| 7 | Removing a membership prevents access while the key remains valid | Default MVP | Unverified | Remove membership and assert the next `/auth/token` response loses access |
-| 8 | A short-lived registry JWT expires without invalidating the long-lived key | Default MVP | Unverified | Time-bounded token expiry test followed by successful new exchange |
-| 9 | Docker Engine can push and pull supported image content | Default MVP | Missing | Docker smoke job through the public Grom endpoint |
+| 1 | An administrator creates projects `alpha` and `beta` | Default MVP | Passing | Registry E2E creates both projects through the public management API |
+| 2 | A service account is Writer in `alpha` and has no membership in `beta` | Default MVP | Passing | Registry E2E persists real projects, principals, and memberships |
+| 3 | Its access key can push and pull `alpha/api:v1` | Default MVP | Passing | Registry E2E performs Docker push and pull through Grom |
+| 4 | The same key cannot pull or push `beta/api:v1` | Default MVP | Passing | Registry E2E proves equivalent denial for existing and missing private repositories |
+| 5 | A Reader key can pull but cannot push | Default MVP | Passing | Registry E2E proves Reader pull success and push denial |
+| 6 | Revoking a key prevents the next registry-token exchange immediately | Default MVP | Passing | Registry E2E repeats the exchange after key revocation |
+| 7 | Removing a membership prevents access while the key remains valid | Default MVP | Passing | Registry E2E removes membership and verifies the next scoped token loses access |
+| 8 | A short-lived registry JWT expires without invalidating the long-lived key | Default MVP | Passing | Registry E2E bounds expiry rejection and performs a successful fresh exchange |
+| 9 | Docker Engine can push and pull supported image content | Default MVP | Passing | Mandatory registry E2E job exercises Docker through the public Grom endpoint |
 | 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Partial | Playwright flow after a real push |
 | 11 | Integrations shows backend-driven planned providers with no active configuration | Default MVP | Partial | Add focused API/UI regression coverage for the implemented read-only flow |
 | 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Unverified | Persistent-volume restart test |
@@ -1543,8 +1556,8 @@ Status vocabulary:
 | 14 | Empty or supported older databases migrate before readiness | Default MVP | Partial | Boot tests for empty and supported previous SQLite versions with readiness probing |
 | 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Unverified | Injected migration-failure boot test |
 | 16 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Partial | Bidirectional route/contract test and production docs smoke check |
-| 17 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Missing | Minimum CI implementation from completion steps 3 and 4 |
-| 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Missing | Profile implementation and configuration tests |
+| 17 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Partial | Add frontend generated-code freshness and bidirectional route/contract checks |
+| 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
 | 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Missing | Automated or recorded backup/restore acceptance run |
 | 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Partial | Complete step 2 and verify durable events |
 | 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Missing | User-disable API/UI implementation and session-revocation acceptance test |

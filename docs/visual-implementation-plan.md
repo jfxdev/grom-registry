@@ -404,8 +404,7 @@ checkpoint.
 
 ```text
 frontend/src/assets/logos/
-├── grom-crest.png
-└── grom-crest@2x.png
+└── grom-crest.png
 
 frontend/src/assets/icons/
 └── crystal-green.svg

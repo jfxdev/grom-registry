@@ -307,11 +307,13 @@ func (s *RepositoryService) EvaluateDeletion(
 	}
 	requiresReason := false
 	for _, policy := range target.Policies {
+		if policy.Enabled && policy.Type == constants.RepositoryPolicyManualDeletion && policy.RequireReason {
+			requiresReason = true
+		}
+	}
+	for _, policy := range target.Policies {
 		if !policy.Enabled {
 			continue
-		}
-		if policy.Type == constants.RepositoryPolicyManualDeletion && policy.RequireReason {
-			requiresReason = true
 		}
 		if policy.Type != constants.RepositoryPolicyTagProtection || !policy.PreventDeletion {
 			continue

@@ -21,7 +21,6 @@ func init() {
 			)`,
 			`CREATE INDEX idx_password_reset_tokens_user
 				ON password_reset_tokens(user_id)`,
-			`ALTER TABLE users DROP COLUMN must_change_password`,
 		}
 		for _, statement := range statements {
 			if _, err := db.ExecContext(ctx, statement); err != nil {
@@ -30,10 +29,7 @@ func init() {
 		}
 		return nil
 	}, func(ctx context.Context, db *bun.DB) error {
-		statements := []string{
-			"DROP TABLE IF EXISTS password_reset_tokens",
-			"ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT FALSE",
-		}
+		statements := []string{"DROP TABLE IF EXISTS password_reset_tokens"}
 		for _, statement := range statements {
 			if _, err := db.ExecContext(ctx, statement); err != nil {
 				return err

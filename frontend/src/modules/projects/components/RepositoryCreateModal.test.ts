@@ -51,6 +51,9 @@ describe('RepositoryCreateModal', () => {
     })
     await flushPromises()
 
+    const dialog = wrapper.get('dialog')
+    expect(dialog.attributes('aria-labelledby')).toBe('create-repository-title')
+    expect(dialog.attributes('aria-modal')).toBe('true')
     expect(wrapper.text()).toContain('Protect production tags')
     expect(wrapper.find('#policy-protect-production-tags').isVisible()).toBe(false)
 
@@ -62,5 +65,18 @@ describe('RepositoryCreateModal', () => {
     await wrapper.get('input[aria-label="Select Protect production tags"]').setValue(true)
     expect(wrapper.text()).toContain('1 selected')
     expect(wrapper.get('input[placeholder="stable, prod, v*"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('requests dismissal when the shared dialog handles Escape', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const wrapper = mount(RepositoryCreateModal, {
+      props: { project: 'payments' },
+      global: { plugins: [[VueQueryPlugin, { queryClient }]] },
+    })
+    await flushPromises()
+
+    await wrapper.get('dialog').trigger('cancel')
+
+    expect(wrapper.emitted('close')).toHaveLength(1)
   })
 })

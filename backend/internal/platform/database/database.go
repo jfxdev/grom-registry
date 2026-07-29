@@ -101,20 +101,31 @@ func migrationLock(ctx context.Context, db *bun.DB, kind Kind, wait time.Duratio
 
 	lockCtx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
+	conn, err := db.Conn(lockCtx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire postgres migration connection: %w", err)
+	}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		var acquired bool
-		if err := db.NewRaw("SELECT pg_try_advisory_lock(?)", int64(0x47524f4d)).Scan(lockCtx, &acquired); err != nil {
+		if err := conn.QueryRowContext(
+			lockCtx, "SELECT pg_try_advisory_lock(?)", int64(0x47524f4d),
+		).Scan(&acquired); err != nil {
+			_ = conn.Close()
 			return nil, fmt.Errorf("acquire postgres migration lock: %w", err)
 		}
 		if acquired {
 			return func() {
-				_, _ = db.Exec("SELECT pg_advisory_unlock(?)", int64(0x47524f4d))
+				defer func() { _ = conn.Close() }()
+				unlockCtx, unlockCancel := context.WithTimeout(context.WithoutCancel(ctx), wait)
+				defer unlockCancel()
+				_, _ = conn.ExecContext(unlockCtx, "SELECT pg_advisory_unlock(?)", int64(0x47524f4d))
 			}, nil
 		}
 		select {
 		case <-lockCtx.Done():
+			_ = conn.Close()
 			return nil, fmt.Errorf("migration lock timeout: %w", lockCtx.Err())
 		case <-ticker.C:
 		}

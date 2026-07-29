@@ -8,11 +8,12 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
   {
-    files: ['**/*.vue'],
+    files: ['**/*.{ts,tsx,vue}'],
     languageOptions: {
       globals: {
         console: 'readonly',
         document: 'readonly',
+        fetch: 'readonly',
         navigator: 'readonly',
         window: 'readonly',
       },

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -12,10 +13,12 @@ import (
 
 type deletionTestStore struct {
 	registrydomain.Store
-	repository *registrydomain.Repository
-	inventory  []registrydomain.ManifestInventory
-	deletion   *registrydomain.ArtifactDeletion
-	marked     string
+	repository  *registrydomain.Repository
+	inventory   []registrydomain.ManifestInventory
+	deletion    *registrydomain.ArtifactDeletion
+	marked      string
+	markErr     error
+	completeErr error
 }
 
 func (s *deletionTestStore) FindRepository(
@@ -104,7 +107,7 @@ func (s *deletionTestStore) CompleteArtifactDeletion(
 	s.deletion.Status = status
 	s.deletion.Message = message
 	s.deletion.CompletedAt = &completedAt
-	return nil
+	return s.completeErr
 }
 
 func (s *deletionTestStore) MarkManifestDeleted(
@@ -114,7 +117,7 @@ func (s *deletionTestStore) MarkManifestDeleted(
 	_ time.Time,
 ) error {
 	s.marked = digest
-	return nil
+	return s.markErr
 }
 
 type deletionTestDistribution struct {
@@ -168,7 +171,8 @@ func (d *deletionTestDistribution) DeleteManifest(
 }
 
 type deletionTestAudit struct {
-	actions []string
+	actions  []string
+	metadata []map[string]any
 }
 
 func (a *deletionTestAudit) Record(
@@ -176,9 +180,10 @@ func (a *deletionTestAudit) Record(
 	_ foundation.PrincipalRef,
 	action, _ string,
 	_ foundation.ID,
-	_ map[string]any,
+	metadata map[string]any,
 ) error {
 	a.actions = append(a.actions, action)
+	a.metadata = append(a.metadata, metadata)
 	return nil
 }
 
@@ -245,5 +250,54 @@ func TestArtifactDeletionPreviewBlocksOCIReferrers(t *testing.T) {
 		len(preview.RelatedArtifacts) != 1 ||
 		preview.RelatedArtifacts[0] != "sha256:signature" {
 		t.Fatalf("expected referrer protection, got %#v", preview)
+	}
+}
+
+func TestArtifactDeletionAuditsPostDeletePersistenceFailures(t *testing.T) {
+	testCases := []struct {
+		name        string
+		markErr     error
+		completeErr error
+	}{
+		{name: "inventory update", markErr: errors.New("inventory unavailable")},
+		{name: "deletion record", completeErr: errors.New("deletion record unavailable")},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			projectID := foundation.NewID()
+			repository := &registrydomain.Repository{
+				ID: foundation.NewID(), ProjectID: projectID, Name: "api",
+				Policies: []registrydomain.Policy{{
+					Type: constants.RepositoryPolicyManualDeletion, Enabled: true, RequireReason: true,
+				}},
+			}
+			store := &deletionTestStore{
+				repository: repository, markErr: testCase.markErr, completeErr: testCase.completeErr,
+			}
+			distribution := &deletionTestDistribution{digest: "sha256:artifact"}
+			inventory := NewInventoryService(store)
+			inventory.SetDistribution(distribution)
+			audit := &deletionTestAudit{}
+			service := NewArtifactDeletionService(
+				store, NewRepositoryService(store), inventory, distribution, audit,
+			)
+
+			deletion, err := service.Execute(
+				context.Background(), projectID, "payments", "api", "dev", "cleanup",
+				"sha256:artifact", []string{"dev"},
+				foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: foundation.NewID()},
+			)
+			if err == nil || deletion == nil || distribution.deleted != "sha256:artifact" {
+				t.Fatalf("expected a post-delete persistence failure: deletion=%#v, err=%v", deletion, err)
+			}
+			if len(audit.actions) != 2 || audit.actions[1] != constants.AuditArtifactDeletionFailed {
+				t.Fatalf("expected failed post-delete audit action: %#v", audit.actions)
+			}
+			failure := audit.metadata[1]
+			if failure["repository"] != "api" || failure["digest"] != "sha256:artifact" ||
+				failure["manifestDeleted"] != true || failure["error"] != err.Error() {
+				t.Fatalf("unexpected post-delete audit metadata: %#v", failure)
+			}
+		})
 	}
 }

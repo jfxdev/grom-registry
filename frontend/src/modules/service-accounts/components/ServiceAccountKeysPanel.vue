@@ -4,6 +4,7 @@ import type { ServiceAccount } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
+import { writeClipboardText } from '@/shared/lib/clipboard'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Check, Copy, KeyRound, Plus, ShieldAlert, Trash2, X } from '@lucide/vue'
 import { ref } from 'vue'
@@ -25,6 +26,7 @@ const name = ref('')
 const error = ref('')
 const revealedSecret = ref('')
 const copied = ref(false)
+const copyError = ref('')
 
 const create = useMutation({
   mutationFn: () => createServiceAccountToken(props.account.id, { name: name.value }),
@@ -46,7 +48,17 @@ const revoke = useMutation({
 })
 
 async function copySecret() {
-  await navigator.clipboard.writeText(revealedSecret.value)
+  copyError.value = ''
+  const result = await writeClipboardText(revealedSecret.value)
+  if (result === 'unavailable') {
+    copyError.value = 'Copy is unavailable. Select the key and copy it manually.'
+    return
+  }
+  if (result === 'failed') {
+    copied.value = false
+    copyError.value = 'Copy failed. Select the key and copy it manually.'
+    return
+  }
   copied.value = true
   window.setTimeout(() => {
     copied.value = false
@@ -56,6 +68,7 @@ async function copySecret() {
 function closeSecret() {
   revealedSecret.value = ''
   copied.value = false
+  copyError.value = ''
 }
 </script>
 
@@ -98,6 +111,7 @@ function closeSecret() {
           {{ copied ? 'Copied' : 'Copy' }}
         </Button>
       </div>
+      <p v-if="copyError" class="error-text" role="alert">{{ copyError }}</p>
     </div>
 
     <div v-if="keys.isLoading.value" class="keys-empty">Loading keys…</div>

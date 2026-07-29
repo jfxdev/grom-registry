@@ -20,11 +20,15 @@ const projects = useQuery({ queryKey: projectKeys.all, queryFn: listProjects })
 const projectCount = computed(() => projects.data.value?.length ?? 0)
 const create = useMutation({
   mutationFn: createProject,
+  onMutate: () => {
+    error.value = ''
+  },
   onSuccess: async () => {
     await queryClient.invalidateQueries({ queryKey: projectKeys.all })
     modalOpen.value = false
     name.value = ''
     slug.value = ''
+    error.value = ''
   },
   onError: (caught) => {
     error.value = caught instanceof APIError ? caught.message : 'Could not create project'
@@ -33,6 +37,16 @@ const create = useMutation({
 
 function syncSlug() {
   slug.value = name.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function openCreateModal() {
+  error.value = ''
+  modalOpen.value = true
+}
+
+function submitCreate() {
+  error.value = ''
+  create.mutate({ name: name.value, slug: slug.value })
 }
 </script>
 
@@ -43,7 +57,7 @@ function syncSlug() {
         <h1 class="page-title">Projects</h1>
         <p class="page-description">Manage registry namespaces, repositories and project access.</p>
       </div>
-      <ActionButton v-if="session.user?.systemAdmin" @click="modalOpen = true"><Plus :size="17" /> New project</ActionButton>
+      <ActionButton v-if="session.user?.systemAdmin" @click="openCreateModal"><Plus :size="17" /> New project</ActionButton>
     </header>
 
     <section class="overview-grid" aria-label="Registry overview">
@@ -117,7 +131,7 @@ function syncSlug() {
     </section>
 
     <div v-if="modalOpen && session.user?.systemAdmin" class="modal-backdrop" @click.self="modalOpen = false">
-      <form class="modal form-stack" @submit.prevent="create.mutate({ name, slug })">
+      <form class="modal form-stack" @submit.prevent="submitCreate">
         <div class="flex items-start justify-between">
           <div>
             <h2 class="text-lg font-semibold">Create project</h2>

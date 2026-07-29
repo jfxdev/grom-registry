@@ -14,8 +14,23 @@ import (
 	"time"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
+	"github.com/jfxdev/grom/backend/internal/foundation"
 	identitydomain "github.com/jfxdev/grom/backend/internal/identity/domain"
+	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
+	projectdomain "github.com/jfxdev/grom/backend/internal/projects/domain"
 )
+
+type serverTestProjectRepository struct {
+	projectdomain.Repository
+	project *projectdomain.Project
+}
+
+func (r *serverTestProjectRepository) FindProjectBySlug(
+	context.Context,
+	string,
+) (*projectdomain.Project, error) {
+	return r.project, nil
+}
 
 func TestOriginGuardAllowsPublicAndForwardedDevelopmentOrigins(t *testing.T) {
 	publicURL, err := url.Parse("http://localhost:8080")
@@ -273,5 +288,51 @@ func TestDeleteProjectRequiresInstallationAdministrator(t *testing.T) {
 
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("expected status %d, got %d", http.StatusForbidden, response.Code)
+	}
+}
+
+func TestListServiceAccountsRequiresInstallationAdministrator(t *testing.T) {
+	server := &Server{}
+	request := httptest.NewRequest(http.MethodGet, "http://backend/api/v1/service-accounts", nil)
+	request = request.WithContext(context.WithValue(request.Context(), currentUserKey{}, &identitydomain.User{
+		SystemAdmin: false,
+	}))
+	response := httptest.NewRecorder()
+
+	server.listServiceAccounts(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, response.Code)
+	}
+}
+
+func TestLifecycleMutationsRejectMissingRequiredIdentifiers(t *testing.T) {
+	project := &projectdomain.Project{ID: foundation.NewID(), Slug: "payments"}
+	server := &Server{
+		projects: projectapp.New(&serverTestProjectRepository{project: project}),
+	}
+	testCases := []struct {
+		name      string
+		handler   func(http.ResponseWriter, *http.Request)
+		errorCode string
+	}{
+		{name: "inventory reconciliation", handler: server.reconcileRepositoryInventory, errorCode: "invalid_repository"},
+		{name: "lifecycle preview", handler: server.createLifecyclePreview, errorCode: "invalid_repository"},
+		{name: "lifecycle run", handler: server.createLifecycleRun, errorCode: "invalid_preview"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "http://backend/api/v1/projects/payments", strings.NewReader("{}"))
+			request = request.WithContext(context.WithValue(request.Context(), currentUserKey{}, &identitydomain.User{
+				ID: foundation.NewID(), SystemAdmin: true,
+			}))
+			response := httptest.NewRecorder()
+
+			testCase.handler(response, request)
+
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), testCase.errorCode) {
+				t.Fatalf("expected validation error %q, got status %d: %s", testCase.errorCode, response.Code, response.Body.String())
+			}
+		})
 	}
 }

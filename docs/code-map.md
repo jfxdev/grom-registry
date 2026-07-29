@@ -144,7 +144,8 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 
 ## Navigation rules
 
-1. Start with `AGENTS.md`, this file, and `docs/domain-model.md`.
+1. Start with `AGENTS.md`, this file, `docs/domain-model.md`, and
+   `docs/architecture-and-mvp.md`.
 2. Find the owning bounded context before editing a struct or rule.
 3. Check `foundation` before creating a cross-context struct.
 4. Check the constants package before introducing a repeated protocol, role, status, route, or storage-key literal.

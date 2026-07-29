@@ -21,7 +21,9 @@ import type {
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card } from '@/shared/components/ui/card'
+import { Dialog } from '@/shared/components/ui/dialog'
 import { ROUTES } from '@/shared/constants'
+import { writeClipboardText } from '@/shared/lib/clipboard'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { AlertTriangle, Box, Check, ChevronLeft, Clipboard, PackageOpen, Plus, RefreshCw, Settings2, Trash2, Users, X } from '@lucide/vue'
 import { computed, ref } from 'vue'
@@ -55,7 +57,9 @@ const memberModal = ref(false)
 const memberId = ref('')
 const memberKind = ref<PrincipalKind>('service_account')
 const memberRole = ref<ProjectRole>('reader')
+const memberError = ref('')
 const copied = ref('')
+const copyError = ref('')
 const deletionPreview = ref<ArtifactDeletionPreview | null>(null)
 const deletionReference = ref('')
 const deletionReason = ref('')
@@ -111,7 +115,11 @@ const addMember = useMutation({
   mutationFn: () => setMember(slug.value, memberKind.value, memberId.value, memberRole.value),
   onSuccess: async () => {
     await queryClient.invalidateQueries({ queryKey: projectKeys.members(slug.value) })
+    memberError.value = ''
     memberModal.value = false
+  },
+  onError: (caught) => {
+    memberError.value = caught instanceof APIError ? caught.message : 'Could not add this project member'
   },
 })
 
@@ -140,11 +148,12 @@ const confirmDeletion = useMutation({
     expectedDigest: deletionPreview.value!.digest,
     expectedTags: deletionPreview.value!.affectedTags,
   }),
-  onSuccess: async () => {
-    await queryClient.invalidateQueries({ queryKey: projectKeys.tags(slug.value, selectedRepository.value!.name) })
+  onSuccess: async (deletion) => {
+    const repository = deletion.repository
+    await queryClient.invalidateQueries({ queryKey: projectKeys.tags(slug.value, repository) })
     await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
     await queryClient.invalidateQueries({
-      queryKey: projectKeys.artifactDeletions(slug.value, selectedRepository.value!.name),
+      queryKey: projectKeys.artifactDeletions(slug.value, repository),
     })
     deletionPreview.value = null
   },
@@ -169,12 +178,13 @@ const reviewLifecycle = useMutation({
 const runLifecycle = useMutation({
   mutationFn: () => executeLifecycle(slug.value, lifecyclePreview.value!.id, lifecycleReason.value),
   onSuccess: async (run) => {
+    const repository = run.repository
     lifecycleRun.value = run
     lifecycleError.value = ''
-    await queryClient.invalidateQueries({ queryKey: projectKeys.tags(slug.value, selectedRepository.value!.name) })
+    await queryClient.invalidateQueries({ queryKey: projectKeys.tags(slug.value, repository) })
     await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
-    await queryClient.invalidateQueries({ queryKey: registryKeys.inventory(slug.value, selectedRepository.value!.name) })
-    await queryClient.invalidateQueries({ queryKey: registryKeys.lifecycleRuns(slug.value, selectedRepository.value!.name) })
+    await queryClient.invalidateQueries({ queryKey: registryKeys.inventory(slug.value, repository) })
+    await queryClient.invalidateQueries({ queryKey: registryKeys.lifecycleRuns(slug.value, repository) })
   },
   onError: (caught) => {
     lifecycleError.value = caught instanceof APIError ? caught.message : 'Could not execute lifecycle'
@@ -204,15 +214,32 @@ async function policiesSaved(policySet: RepositoryPolicySet) {
 
 async function copyCommand(repository: string, tag = 'latest') {
   const command = `docker pull ${window.location.host}/${slug.value}/${repository}:${tag}`
-  await navigator.clipboard.writeText(command)
+  const result = await writeClipboardText(command)
+  if (result !== 'copied') {
+    copyError.value = 'Could not copy the pull command. Select and copy it manually.'
+    return
+  }
+  copyError.value = ''
   copied.value = repository + tag
   window.setTimeout(() => { copied.value = '' }, 1200)
 }
 
 function openMemberModal() {
+  if (!canManage.value) return
   memberKind.value = 'service_account'
   memberId.value = availableAccounts.value[0]?.id ?? ''
+  memberError.value = ''
   memberModal.value = true
+}
+
+function closeMemberModal() {
+  memberModal.value = false
+  memberError.value = ''
+}
+
+function submitMember() {
+  if (!canManage.value || !memberId.value) return
+  addMember.mutate()
 }
 
 function changeMemberKind() {
@@ -280,7 +307,7 @@ function profileLabel(profile: Repository['profile']) {
     </section>
 
     <section v-else>
-      <div class="mt-5 flex justify-end"><Button size="sm" @click="openMemberModal"><Plus :size="15" /> Add service account</Button></div>
+      <div v-if="canManage" class="mt-5 flex justify-end"><Button size="sm" @click="openMemberModal"><Plus :size="15" /> Add service account</Button></div>
       <div class="table-shell mt-3">
         <div v-for="member in members.data.value" :key="`${member.principalKind}:${member.principalId}`" class="data-row">
           <div><p class="text-sm font-semibold">{{ member.principalKind.replace('_', ' ') }}</p><p class="mt-1 font-mono text-xs text-muted-foreground">{{ member.principalId }}</p></div>
@@ -290,12 +317,16 @@ function profileLabel(profile: Repository['profile']) {
       </div>
     </section>
 
-    <div v-if="projectDeletionOpen && session.user?.systemAdmin" class="modal-backdrop" @click.self="projectDeletionOpen = false">
-      <form class="modal form-stack" @submit.prevent="removeProject.mutate()">
+    <Dialog
+      v-if="projectDeletionOpen && session.user?.systemAdmin"
+      labelled-by="delete-project-title"
+      @close="projectDeletionOpen = false"
+    >
+      <form class="modal form-stack" aria-labelledby="delete-project-title" @submit.prevent="removeProject.mutate()">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="eyebrow">Destructive action</p>
-            <h2 class="text-lg font-semibold">Delete project</h2>
+            <h2 id="delete-project-title" class="text-lg font-semibold">Delete project</h2>
           </div>
           <Button variant="ghost" size="icon" type="button" aria-label="Close project deletion" @click="projectDeletionOpen = false">
             <X :size="18" />
@@ -316,14 +347,14 @@ function profileLabel(profile: Repository['profile']) {
           </Button>
         </div>
       </form>
-    </div>
+    </Dialog>
 
-    <div v-if="selectedRepository" class="modal-backdrop" @click.self="selectedRepository = null">
-      <section class="modal form-stack">
+    <Dialog v-if="selectedRepository" labelled-by="repository-details-title" @close="selectedRepository = null">
+      <section class="modal form-stack" aria-labelledby="repository-details-title">
         <div class="flex items-start justify-between">
           <div>
             <p class="eyebrow">Repository</p>
-            <h2 class="text-xl font-semibold">{{ selectedRepository.name }}</h2>
+            <h2 id="repository-details-title" class="text-xl font-semibold">{{ selectedRepository.name }}</h2>
             <div class="mt-2 flex items-center gap-2">
               <Badge :tone="selectedRepository.profileNeedsReview ? 'danger' : selectedRepository.profile === 'unknown' ? 'neutral' : 'success'">
                 {{ profileLabel(selectedRepository.profile) }}
@@ -380,6 +411,7 @@ function profileLabel(profile: Repository['profile']) {
             </div>
           </Card>
         </div>
+        <p v-if="copyError" class="error-text" role="alert">{{ copyError }}</p>
         <p v-if="deletionError && !deletionPreview" class="error-text">{{ deletionError }}</p>
         <p v-if="lifecycleError && !lifecyclePreview" class="error-text">{{ lifecycleError }}</p>
         <div v-if="canManage && (artifactDeletionHistory.data.value?.length || lifecycleHistory.data.value?.length)" class="operation-history">
@@ -400,7 +432,7 @@ function profileLabel(profile: Repository['profile']) {
           </Card>
         </div>
       </section>
-    </div>
+    </Dialog>
 
     <RepositoryCreateModal
       v-if="repositoryModal"
@@ -409,12 +441,12 @@ function profileLabel(profile: Repository['profile']) {
       @created="repositoryModal = false"
     />
 
-    <div v-if="deletionPreview" class="modal-backdrop deletion-backdrop" @click.self="deletionPreview = null">
-      <form class="modal form-stack" @submit.prevent="confirmDeletion.mutate()">
+    <Dialog v-if="deletionPreview" labelled-by="delete-artifact-title" @close="deletionPreview = null">
+      <form class="modal form-stack" aria-labelledby="delete-artifact-title" @submit.prevent="confirmDeletion.mutate()">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="eyebrow">Destructive action</p>
-            <h2 class="text-lg font-semibold">Delete artifact</h2>
+            <h2 id="delete-artifact-title" class="text-lg font-semibold">Delete artifact</h2>
           </div>
           <Button variant="ghost" size="icon" type="button" aria-label="Close deletion" @click="deletionPreview = null">
             <X :size="18" />
@@ -458,7 +490,7 @@ function profileLabel(profile: Repository['profile']) {
           </Button>
         </div>
       </form>
-    </div>
+    </Dialog>
 
     <RepositoryPolicyModal
       v-if="policyModal && selectedRepository"
@@ -468,12 +500,12 @@ function profileLabel(profile: Repository['profile']) {
       @saved="policiesSaved"
     />
 
-    <div v-if="lifecyclePreview" class="modal-backdrop lifecycle-backdrop" @click.self="lifecyclePreview = null">
-      <section class="modal lifecycle-modal form-stack">
+    <Dialog v-if="lifecyclePreview" labelled-by="lifecycle-review-title" @close="lifecyclePreview = null">
+      <section class="modal lifecycle-modal form-stack" aria-labelledby="lifecycle-review-title">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="eyebrow">Lifecycle dry-run</p>
-            <h2 class="text-lg font-semibold">{{ lifecyclePreview.repository }}</h2>
+            <h2 id="lifecycle-review-title" class="text-lg font-semibold">{{ lifecyclePreview.repository }}</h2>
             <p class="mt-1 text-xs text-muted-foreground">
               Inventory reconciled {{ new Date(lifecyclePreview.inventoryAt).toLocaleString() }}
               · policy v{{ lifecyclePreview.policyVersion }}
@@ -538,17 +570,18 @@ function profileLabel(profile: Repository['profile']) {
           </div>
         </template>
       </section>
-    </div>
+    </Dialog>
 
-    <div v-if="memberModal" class="modal-backdrop" @click.self="memberModal = false">
-      <form class="modal form-stack" @submit.prevent="addMember.mutate()">
-        <div class="flex items-start justify-between"><div><h2 class="text-lg font-semibold">Add service account</h2><p class="mt-1 text-sm text-muted-foreground">Membership controls token access immediately.</p></div><Button variant="ghost" size="icon" @click="memberModal = false"><X :size="18" /></Button></div>
+    <Dialog v-if="memberModal && canManage" labelled-by="add-member-title" @close="closeMemberModal">
+      <form class="modal form-stack" aria-labelledby="add-member-title" @submit.prevent="submitMember">
+        <div class="flex items-start justify-between"><div><h2 id="add-member-title" class="text-lg font-semibold">Add service account</h2><p class="mt-1 text-sm text-muted-foreground">Membership controls token access immediately.</p></div><Button variant="ghost" size="icon" type="button" @click="closeMemberModal"><X :size="18" /></Button></div>
         <label v-if="session.user?.systemAdmin" class="field-label">Principal type<select v-model="memberKind" class="field-control text-sm" @change="changeMemberKind"><option value="service_account">Service account</option><option value="user">User</option></select></label>
         <label class="field-label">Principal<select v-model="memberId" class="field-control text-sm"><option v-for="principal in availablePrincipals" :key="principal.id" :value="principal.id">{{ 'name' in principal ? principal.name : principal.email }} · {{ principal.username }}</option></select></label>
         <label class="field-label">Role<select v-model="memberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">Writer · pull and push</option><option value="admin">Admin · manage project</option></select></label>
-        <div class="flex justify-end gap-2"><Button variant="ghost" @click="memberModal = false">Cancel</Button><Button type="submit" :disabled="!memberId">Add member</Button></div>
+        <p v-if="memberError" class="error-text" role="alert">{{ memberError }}</p>
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="closeMemberModal">Cancel</Button><Button type="submit" :disabled="!canManage || !memberId || addMember.isPending.value">Add member</Button></div>
       </form>
-    </div>
+    </Dialog>
   </div>
 </template>
 
@@ -581,14 +614,6 @@ function profileLabel(profile: Repository['profile']) {
 }
 code {
   color: #c8c1b6;
-}
-
-.deletion-backdrop {
-  z-index: 80;
-}
-
-.lifecycle-backdrop {
-  z-index: 90;
 }
 
 .lifecycle-modal {

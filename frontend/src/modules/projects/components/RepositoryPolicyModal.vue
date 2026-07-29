@@ -8,6 +8,7 @@ import type {
 } from '@/shared/api/models'
 import { Button } from '@/shared/components/ui/button'
 import { Card } from '@/shared/components/ui/card'
+import { Dialog } from '@/shared/components/ui/dialog'
 import { Plus, Trash2, X } from '@lucide/vue'
 import { ref } from 'vue'
 import { replaceRepositoryPolicies } from '../api/projects'
@@ -94,7 +95,7 @@ function setOptionalNumber(
   raw: string,
 ) {
   const parsed = Number(raw)
-  policy[field] = raw === '' || !Number.isFinite(parsed) ? undefined : parsed
+  policy[field] = Number.isFinite(parsed) && Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
 }
 
 async function save() {
@@ -115,12 +116,12 @@ async function save() {
 </script>
 
 <template>
-  <div class="modal-backdrop policy-backdrop" @click.self="emit('close')">
+  <Dialog labelled-by="repository-policies-title" @close="emit('close')">
     <section class="modal policy-modal form-stack">
       <div class="flex items-start justify-between gap-4">
         <div>
           <p class="eyebrow">Repository behavior</p>
-          <h2 class="text-lg font-semibold">Policies for {{ repository.name }}</h2>
+          <h2 id="repository-policies-title" class="text-lg font-semibold">Policies for {{ repository.name }}</h2>
           <p class="mt-1 text-xs text-muted-foreground">Version {{ repository.policyVersion }}</p>
         </div>
         <Button variant="ghost" size="icon" aria-label="Close policies" @click="emit('close')">
@@ -210,14 +211,10 @@ async function save() {
         <Button :disabled="saving" @click="save">{{ saving ? 'Saving…' : 'Save policies' }}</Button>
       </div>
     </section>
-  </div>
+  </Dialog>
 </template>
 
 <style scoped>
-.policy-backdrop {
-  z-index: 64;
-}
-
 .policy-modal {
   width: min(760px, calc(100vw - 2rem));
   max-height: min(88vh, 900px);

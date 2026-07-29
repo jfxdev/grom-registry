@@ -3,6 +3,7 @@ package distribution
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -20,9 +21,27 @@ type policyGateway struct {
 
 type ManifestObserver func(context.Context, string, string, string) error
 
-func NewGateway(target *url.URL, tokens *registryapp.TokenService, client *Client, observer ManifestObserver) http.Handler {
+func NewGateway(
+	target *url.URL,
+	tokens *registryapp.TokenService,
+	client *Client,
+	observer ManifestObserver,
+	logger *slog.Logger,
+) http.Handler {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	proxy := &httputil.ReverseProxy{Rewrite: rewriteProxyRequest(target)}
-	proxy.ModifyResponse = func(response *http.Response) error {
+	proxy.ModifyResponse = manifestObservationResponseModifier(observer, logger)
+	proxy.FlushInterval = -1
+	return &policyGateway{next: proxy, tokens: tokens, client: client}
+}
+
+func manifestObservationResponseModifier(
+	observer ManifestObserver,
+	logger *slog.Logger,
+) func(*http.Response) error {
+	return func(response *http.Response) error {
 		if observer == nil || response.StatusCode < 200 || response.StatusCode >= 300 {
 			return nil
 		}
@@ -30,11 +49,14 @@ func NewGateway(target *url.URL, tokens *registryapp.TokenService, client *Clien
 		if !isManifestPut {
 			return nil
 		}
-		_ = observer(response.Request.Context(), repository, reference, response.Header.Get("Docker-Content-Digest"))
+		if err := observer(
+			response.Request.Context(), repository, reference, response.Header.Get("Docker-Content-Digest"),
+		); err != nil {
+			logger.ErrorContext(response.Request.Context(), "observe pushed manifest",
+				"repository", repository, "reference", reference, "error", err)
+		}
 		return nil
 	}
-	proxy.FlushInterval = -1
-	return &policyGateway{next: proxy, tokens: tokens, client: client}
 }
 
 func rewriteProxyRequest(target *url.URL) func(*httputil.ProxyRequest) {

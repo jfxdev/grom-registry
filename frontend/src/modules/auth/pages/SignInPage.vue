@@ -56,30 +56,29 @@ async function submit() {
           />
         </label>
 
-        <label class="field-label">
-          Password
-          <Input
-            v-model="password"
-            :type="showPassword ? 'text' : 'password'"
-            autocomplete="current-password"
-            :aria-invalid="error ? 'true' : undefined"
-            required
+        <div class="password-field">
+          <label class="field-label">
+            Password
+            <Input
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              :aria-invalid="error ? 'true' : undefined"
+              required
+            />
+          </label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="password-toggle"
+            :aria-label="showPassword ? 'Hide password' : 'Show password'"
+            @click="showPassword = !showPassword"
           >
-            <template #trailing>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                class="password-toggle"
-                :aria-label="showPassword ? 'Hide password' : 'Show password'"
-                @click="showPassword = !showPassword"
-              >
-                <EyeOff v-if="showPassword" :size="18" />
-                <Eye v-else :size="18" />
-              </Button>
-            </template>
-          </Input>
-        </label>
+            <EyeOff v-if="showPassword" :size="18" />
+            <Eye v-else :size="18" />
+          </Button>
+        </div>
 
         <p v-if="error" class="error-text" role="alert">{{ error }}</p>
 
@@ -183,7 +182,18 @@ async function submit() {
   line-height: 1.5;
 }
 
+.password-field {
+  position: relative;
+}
+
+.password-field :deep(.grom-input) {
+  padding-right: 3.2rem;
+}
+
 .password-toggle {
+  position: absolute;
+  right: 0.35rem;
+  bottom: 0.28rem;
   width: 2.2rem;
   min-width: 2.2rem;
   height: 2.2rem;

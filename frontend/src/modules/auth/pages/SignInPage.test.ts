@@ -27,9 +27,11 @@ describe('SignInPage', () => {
   it('toggles password visibility with an accessible control', async () => {
     const wrapper = mount(SignInPage)
     const password = wrapper.get('input[autocomplete="current-password"]')
+    const toggle = wrapper.get('button[aria-label="Show password"]')
 
     expect(password.attributes('type')).toBe('password')
-    await wrapper.get('button[aria-label="Show password"]').trigger('click')
+    expect(password.element.closest('label')?.contains(toggle.element)).toBe(false)
+    await toggle.trigger('click')
     expect(password.attributes('type')).toBe('text')
     expect(wrapper.get('button[aria-label="Hide password"]').attributes('aria-label')).toBe('Hide password')
   })

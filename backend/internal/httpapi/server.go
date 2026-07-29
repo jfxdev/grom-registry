@@ -358,6 +358,9 @@ func (s *Server) completePasswordReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listServiceAccounts(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
 	accounts, err := s.identity.ListServiceAccounts(r.Context())
 	if err != nil {
 		s.internalError(w, r, err)
@@ -797,7 +800,11 @@ func (s *Server) reconcileRepositoryInventory(w http.ResponseWriter, r *http.Req
 	var input struct {
 		Repository string `json:"repository"`
 	}
-	if !decodeJSON(w, r, &input) || input.Repository == "" {
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Repository == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository is required")
 		return
 	}
 	items, err := s.inventory.Reconcile(r.Context(), project.ID, project.Slug, input.Repository)
@@ -816,7 +823,11 @@ func (s *Server) createLifecyclePreview(w http.ResponseWriter, r *http.Request) 
 	var input struct {
 		Repository string `json:"repository"`
 	}
-	if !decodeJSON(w, r, &input) || input.Repository == "" {
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Repository == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository is required")
 		return
 	}
 	preview, err := s.lifecycle.CreatePreview(r.Context(), project.ID, project.Slug, input.Repository, actor)
@@ -855,7 +866,11 @@ func (s *Server) createLifecycleRun(w http.ResponseWriter, r *http.Request) {
 		PreviewID string `json:"previewId"`
 		Reason    string `json:"reason"`
 	}
-	if !decodeJSON(w, r, &input) || input.PreviewID == "" {
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.PreviewID == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_preview", "Preview ID is required")
 		return
 	}
 	run, err := s.lifecycle.Execute(

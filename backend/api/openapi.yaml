@@ -11,6 +11,7 @@ tags:
   - name: Projects
   - name: Registry
   - name: Registry Policies
+  - name: Registry Lifecycle
   - name: Integrations
 paths:
   /healthz:
@@ -1008,7 +1009,7 @@ components:
         password:
           type: string
           format: password
-          minLength: 8
+          minLength: 12
         systemAdmin:
           type: boolean
           default: false

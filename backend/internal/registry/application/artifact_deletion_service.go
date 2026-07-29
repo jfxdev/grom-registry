@@ -193,6 +193,7 @@ func (s *ArtifactDeletionService) Execute(
 		deletion.Message = "manifest deleted but inventory update failed"
 		deletion.CompletedAt = &completedAt
 		_ = s.store.CompleteArtifactDeletion(ctx, deletion.ID, deletion.Status, deletion.Message, completedAt)
+		s.auditPostDeleteFailure(ctx, actor, deletion, err)
 		return deletion, err
 	}
 	deletion.Status = constants.ArtifactDeletionCompleted
@@ -201,6 +202,7 @@ func (s *ArtifactDeletionService) Execute(
 	if err := s.store.CompleteArtifactDeletion(
 		ctx, deletion.ID, deletion.Status, deletion.Message, completedAt,
 	); err != nil {
+		s.auditPostDeleteFailure(ctx, actor, deletion, err)
 		return deletion, err
 	}
 	if s.audit != nil {
@@ -211,6 +213,23 @@ func (s *ArtifactDeletionService) Execute(
 			})
 	}
 	return deletion, nil
+}
+
+func (s *ArtifactDeletionService) auditPostDeleteFailure(
+	ctx context.Context,
+	actor foundation.PrincipalRef,
+	deletion *registrydomain.ArtifactDeletion,
+	cause error,
+) {
+	if s.audit == nil {
+		return
+	}
+	_ = s.audit.Record(ctx, actor, constants.AuditArtifactDeletionFailed,
+		constants.AuditResourceArtifactDeletion, deletion.ID, map[string]any{
+			"repository": deletion.Repository, "digest": deletion.Digest,
+			"affectedTags": deletion.AffectedTags, "reason": deletion.Reason,
+			"message": deletion.Message, "error": cause.Error(), "manifestDeleted": true,
+		})
 }
 
 func (s *ArtifactDeletionService) List(
