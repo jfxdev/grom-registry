@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	identity "github.com/jfxdev/grom/backend/internal/identity/domain"
 	"github.com/jfxdev/grom/backend/internal/foundation"
+	identity "github.com/jfxdev/grom/backend/internal/identity/domain"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"

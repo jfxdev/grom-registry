@@ -80,7 +80,7 @@ func readChecksumFile(path string) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open checksum file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	result := make(map[string]string)
 	scanner := bufio.NewScanner(io.LimitReader(file, MaxManifestSize+1))
 	for scanner.Scan() {
@@ -108,7 +108,7 @@ func checksumFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
 		return "", err

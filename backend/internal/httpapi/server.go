@@ -306,7 +306,7 @@ func (s *Server) downloadBackup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "backup_not_found", "Backup not found")
 		return
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	w.Header().Set("Content-Type", "application/x-tar")
 	if disposition := response.Header.Get("Content-Disposition"); disposition != "" {
 		w.Header().Set("Content-Disposition", disposition)

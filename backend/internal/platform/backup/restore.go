@@ -170,7 +170,7 @@ func ReadRestoreMarker(dataDir string) (RestoreMarker, string, error) {
 	if err != nil {
 		return RestoreMarker{}, path, fmt.Errorf("read restore marker: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(file, 64<<10))
 	if err != nil {
 		return RestoreMarker{}, path, fmt.Errorf("read restore marker: %w", err)

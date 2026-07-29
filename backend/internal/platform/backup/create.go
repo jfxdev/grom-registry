@@ -149,7 +149,7 @@ func copyRegularFile(source, destination string) (Component, error) {
 	if err != nil {
 		return Component{}, fmt.Errorf("open distribution configuration: %w", err)
 	}
-	defer input.Close()
+	defer func() { _ = input.Close() }()
 	output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return Component{}, fmt.Errorf("create distribution configuration backup: %w", err)
@@ -200,9 +200,12 @@ func syncDirectory(path string) error {
 	if err != nil {
 		return fmt.Errorf("open directory for sync: %w", err)
 	}
-	defer directory.Close()
 	if err := directory.Sync(); err != nil {
+		_ = directory.Close()
 		return fmt.Errorf("sync directory: %w", err)
+	}
+	if err := directory.Close(); err != nil {
+		return fmt.Errorf("close synced directory: %w", err)
 	}
 	return nil
 }

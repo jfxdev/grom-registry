@@ -49,8 +49,8 @@ func ServeAgent(ctx context.Context, options AgentOptions) error {
 	if err != nil {
 		return fmt.Errorf("listen on agent socket: %w", err)
 	}
-	defer listener.Close()
-	defer os.Remove(options.SocketPath)
+	defer func() { _ = listener.Close() }()
+	defer func() { _ = os.Remove(options.SocketPath) }()
 	if err := os.Chmod(options.SocketPath, 0o666); err != nil {
 		return fmt.Errorf("set agent socket permissions: %w", err)
 	}

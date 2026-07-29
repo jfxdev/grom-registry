@@ -47,7 +47,7 @@ func Unbundle(root string, input io.Reader, maxBytes int64) (Summary, error) {
 		if err != nil {
 			return Summary{}, fmt.Errorf("read backup bundle: %w", err)
 		}
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+		if header.Typeflag != tar.TypeReg {
 			return Summary{}, fmt.Errorf("backup bundle contains an unsupported entry")
 		}
 		clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(header.Name)))

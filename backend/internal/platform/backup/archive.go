@@ -121,7 +121,7 @@ func extractArchive(archivePath, staging string, expected Component) error {
 	if err != nil {
 		return fmt.Errorf("open component archive: %w", err)
 	}
-	defer input.Close()
+	defer func() { _ = input.Close() }()
 	reader := tar.NewReader(input)
 	seen := make(map[string]struct{})
 	var entries, contentBytes int64
@@ -151,7 +151,7 @@ func extractArchive(archivePath, staging string, expected Component) error {
 			if err := os.MkdirAll(target, mode); err != nil {
 				return fmt.Errorf("create restored directory: %w", err)
 			}
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 			if header.Size < 0 {
 				return fmt.Errorf("component archive contains an invalid file size")
 			}

@@ -168,7 +168,7 @@ func TestBackupRestoreJourney(t *testing.T) {
 	if response, err := http.Get(corruptURL + "/api/backups"); err != nil {
 		t.Fatal(err)
 	} else {
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		var backups []any
 		_ = json.NewDecoder(response.Body).Decode(&backups)
 		if len(backups) != 0 {
@@ -245,7 +245,7 @@ func (client *apiClient) downloadBackup(t *testing.T, backupID string) []byte {
 	if err != nil {
 		t.Fatalf("download backup: %v", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "application/x-tar" {
 		t.Fatalf("download backup returned HTTP %d and type %q", response.StatusCode, response.Header.Get("Content-Type"))
 	}
@@ -271,7 +271,7 @@ func (client *apiClient) signingKeyID(t *testing.T, username, secret, repository
 	if err != nil {
 		t.Fatalf("exchange registry token: %v", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	var token openapi.RegistryToken
 	if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&token) != nil {
 		t.Fatalf("exchange registry token returned HTTP %d", response.StatusCode)
@@ -311,7 +311,7 @@ func (client *apiClient) doJSON(t *testing.T, method, path string, input, output
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(response.Body, 16<<10))
 	if response.StatusCode != expected {
 		t.Fatalf("%s %s: got %d, want %d", method, path, response.StatusCode, expected)
@@ -380,7 +380,7 @@ func recoveryUpload(t *testing.T, baseURL, token string, bundle []byte, expected
 	if err != nil {
 		t.Fatalf("upload recovery bundle: %v", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != expectedStatus {
 		raw, _ := io.ReadAll(io.LimitReader(response.Body, 16<<10))
 		t.Fatalf("upload recovery bundle returned HTTP %d, want %d: %s", response.StatusCode, expectedStatus, raw)
@@ -400,7 +400,7 @@ func recoveryRestore(t *testing.T, baseURL, token, backupID string) {
 	if err != nil {
 		t.Fatalf("restore through recovery UI: %v", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 16<<10))
 		t.Fatalf("restore through recovery UI returned HTTP %d: %s", response.StatusCode, body)
@@ -421,21 +421,6 @@ func waitReady(t *testing.T, baseURL string) {
 		time.Sleep(500 * time.Millisecond)
 	}
 	t.Fatal("restored installation did not become ready")
-}
-
-func onlyBackupSet(t *testing.T, root string) string {
-	t.Helper()
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), "grom-backup-") {
-			return entry.Name()
-		}
-	}
-	t.Fatal("completed backup set was not created")
-	return ""
 }
 
 func mustRun(t *testing.T, directory string, env []string, stdin io.Reader, name string, args ...string) {
@@ -465,31 +450,6 @@ func withEnv(environment []string, key, value string) []string {
 		}
 	}
 	return append(result, prefix+value)
-}
-
-func copyDirectory(t *testing.T, source, target string) {
-	t.Helper()
-	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		relative, err := filepath.Rel(source, path)
-		if err != nil {
-			return err
-		}
-		destination := filepath.Join(target, relative)
-		if entry.IsDir() {
-			return os.MkdirAll(destination, 0o700)
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(destination, raw, 0o600)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 }
 
 func repositoryRoot(t *testing.T) string {

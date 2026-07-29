@@ -173,7 +173,6 @@ func Bundle(root, backupID string, output io.Writer) (string, error) {
 		return "", err
 	}
 	writer := tar.NewWriter(output)
-	defer writer.Close()
 	entries, err := os.ReadDir(summary.Path)
 	if err != nil {
 		return "", fmt.Errorf("list backup set: %w", err)

@@ -71,7 +71,7 @@ func validateManifest(manifest Manifest) error {
 		return fmt.Errorf("unsupported consistency mode")
 	}
 	if strings.TrimSpace(manifest.GromVersion) == "" || len(manifest.GromVersion) > 128 {
-		return fmt.Errorf("Grom version is required")
+		return fmt.Errorf("grom version is required")
 	}
 	if manifest.Database != "sqlite" || manifest.RegistryStorage != "filesystem" {
 		return fmt.Errorf("unsupported database or registry storage profile")
@@ -108,7 +108,7 @@ func readManifest(path string) (Manifest, []byte, error) {
 	if err != nil {
 		return Manifest{}, nil, fmt.Errorf("open manifest: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(file, MaxManifestSize+1))
 	if err != nil {
 		return Manifest{}, nil, fmt.Errorf("read manifest: %w", err)
@@ -133,7 +133,7 @@ func readManifest(path string) (Manifest, []byte, error) {
 
 func isLowerHex(value string) bool {
 	for _, character := range value {
-		if !((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')) {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
 			return false
 		}
 	}
