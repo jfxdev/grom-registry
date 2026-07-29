@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,6 +98,25 @@ func TestRunEstimateCreateInspectAndRestore(t *testing.T) {
 	}
 	assertCommandFile(t, filepath.Join(gromTarget, "grom.db"), "sqlite")
 	assertCommandFile(t, configTarget, "version: 0.1\n")
+}
+
+func TestRunPropagatesOutputFailures(t *testing.T) {
+	fixture := createCommandFixture(t)
+	err := run([]string{
+		"estimate",
+		"--grom-data=" + fixture.gromData,
+		"--signing-certs=" + fixture.signing,
+		"--registry-data=" + fixture.registry,
+	}, failingWriter{})
+	if err == nil || !strings.Contains(err.Error(), "write estimate output") {
+		t.Fatalf("expected output failure, got %v", err)
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
 }
 
 type commandFixture struct {

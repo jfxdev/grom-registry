@@ -92,10 +92,14 @@ func run(arguments []string, output io.Writer) error {
 		}
 		var total int64
 		for _, result := range results {
-			fmt.Fprintf(output, "%s_bytes=%d\n", result.Name, result.Bytes)
+			if _, err := fmt.Fprintf(output, "%s_bytes=%d\n", result.Name, result.Bytes); err != nil {
+				return fmt.Errorf("write estimate output: %w", err)
+			}
 			total += result.Bytes
 		}
-		fmt.Fprintf(output, "estimated_total_bytes=%d\n", total)
+		if _, err := fmt.Fprintf(output, "estimated_total_bytes=%d\n", total); err != nil {
+			return fmt.Errorf("write estimate output: %w", err)
+		}
 		return nil
 	case "create":
 		flags := flag.NewFlagSet("create", flag.ContinueOnError)
@@ -120,9 +124,11 @@ func run(arguments []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(output, "backup_path=%s\nbackup_id=%s\ncreated_at=%s\ntotal_bytes=%d\nduration=%s\n",
+		if _, err := fmt.Fprintf(output, "backup_path=%s\nbackup_id=%s\ncreated_at=%s\ntotal_bytes=%d\nduration=%s\n",
 			path, inspection.Manifest.BackupID, inspection.Manifest.CreatedAt.Format(time.RFC3339),
-			inspection.TotalBytes, time.Since(started).Round(time.Millisecond))
+			inspection.TotalBytes, time.Since(started).Round(time.Millisecond)); err != nil {
+			return fmt.Errorf("write create output: %w", err)
+		}
 		return nil
 	case "inspect":
 		flags := flag.NewFlagSet("inspect", flag.ContinueOnError)
@@ -137,9 +143,11 @@ func run(arguments []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(output, "backup_id=%s\ncreated_at=%s\ngrom_version=%s\ntotal_bytes=%d\nstatus=complete\n",
+		if _, err := fmt.Fprintf(output, "backup_id=%s\ncreated_at=%s\ngrom_version=%s\ntotal_bytes=%d\nstatus=complete\n",
 			inspection.Manifest.BackupID, inspection.Manifest.CreatedAt.Format(time.RFC3339),
-			inspection.Manifest.GromVersion, inspection.TotalBytes)
+			inspection.Manifest.GromVersion, inspection.TotalBytes); err != nil {
+			return fmt.Errorf("write inspect output: %w", err)
+		}
 		return nil
 	case "restore":
 		flags := flag.NewFlagSet("restore", flag.ContinueOnError)
@@ -163,9 +171,11 @@ func run(arguments []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(output, "backup_id=%s\nsource_version=%s\ntotal_bytes=%d\nduration=%s\nstatus=restored\n",
+		if _, err := fmt.Fprintf(output, "backup_id=%s\nsource_version=%s\ntotal_bytes=%d\nduration=%s\nstatus=restored\n",
 			inspection.Manifest.BackupID, inspection.Manifest.GromVersion,
-			inspection.TotalBytes, time.Since(started).Round(time.Millisecond))
+			inspection.TotalBytes, time.Since(started).Round(time.Millisecond)); err != nil {
+			return fmt.Errorf("write restore output: %w", err)
+		}
 		return nil
 	default:
 		return fmt.Errorf("unknown command %q", arguments[0])
