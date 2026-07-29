@@ -124,6 +124,7 @@ type deletionTestDistribution struct {
 	digest    string
 	referrers []ManifestDescriptor
 	deleted   string
+	deleteErr error
 }
 
 func (d *deletionTestDistribution) ListRepositoryTags(context.Context, string) ([]string, error) {
@@ -167,7 +168,7 @@ func (d *deletionTestDistribution) DeleteManifest(
 	digest string,
 ) error {
 	d.deleted = digest
-	return nil
+	return d.deleteErr
 }
 
 type deletionTestAudit struct {
@@ -253,14 +254,17 @@ func TestArtifactDeletionPreviewBlocksOCIReferrers(t *testing.T) {
 	}
 }
 
-func TestArtifactDeletionAuditsPostDeletePersistenceFailures(t *testing.T) {
+func TestArtifactDeletionAuditsExecutionFailures(t *testing.T) {
 	testCases := []struct {
-		name        string
-		markErr     error
-		completeErr error
+		name            string
+		deleteErr       error
+		markErr         error
+		completeErr     error
+		manifestDeleted bool
 	}{
-		{name: "inventory update", markErr: errors.New("inventory unavailable")},
-		{name: "deletion record", completeErr: errors.New("deletion record unavailable")},
+		{name: "distribution deletion", deleteErr: errors.New("distribution unavailable")},
+		{name: "inventory update", markErr: errors.New("inventory unavailable"), manifestDeleted: true},
+		{name: "deletion record", completeErr: errors.New("deletion record unavailable"), manifestDeleted: true},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -274,7 +278,9 @@ func TestArtifactDeletionAuditsPostDeletePersistenceFailures(t *testing.T) {
 			store := &deletionTestStore{
 				repository: repository, markErr: testCase.markErr, completeErr: testCase.completeErr,
 			}
-			distribution := &deletionTestDistribution{digest: "sha256:artifact"}
+			distribution := &deletionTestDistribution{
+				digest: "sha256:artifact", deleteErr: testCase.deleteErr,
+			}
 			inventory := NewInventoryService(store)
 			inventory.SetDistribution(distribution)
 			audit := &deletionTestAudit{}
@@ -294,9 +300,13 @@ func TestArtifactDeletionAuditsPostDeletePersistenceFailures(t *testing.T) {
 				t.Fatalf("expected failed post-delete audit action: %#v", audit.actions)
 			}
 			failure := audit.metadata[1]
+			affectedTags, tagsOK := failure["affectedTags"].([]string)
 			if failure["repository"] != "api" || failure["digest"] != "sha256:artifact" ||
-				failure["manifestDeleted"] != true || failure["error"] != err.Error() {
-				t.Fatalf("unexpected post-delete audit metadata: %#v", failure)
+				!tagsOK || len(affectedTags) != 1 || affectedTags[0] != "dev" ||
+				failure["reason"] != "cleanup" || failure["message"] != deletion.Message ||
+				failure["manifestDeleted"] != testCase.manifestDeleted ||
+				failure["error"] != err.Error() {
+				t.Fatalf("unexpected deletion failure audit metadata: %#v", failure)
 			}
 		})
 	}

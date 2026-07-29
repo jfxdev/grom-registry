@@ -179,11 +179,7 @@ func (s *ArtifactDeletionService) Execute(
 		); completeErr != nil {
 			return nil, completeErr
 		}
-		if s.audit != nil {
-			_ = s.audit.Record(ctx, actor, constants.AuditArtifactDeletionFailed,
-				constants.AuditResourceArtifactDeletion, deletion.ID,
-				map[string]any{"digest": deletion.Digest, "message": deletion.Message})
-		}
+		s.auditDeletionFailure(ctx, actor, deletion, err, false)
 		return deletion, err
 	}
 
@@ -193,7 +189,7 @@ func (s *ArtifactDeletionService) Execute(
 		deletion.Message = "manifest deleted but inventory update failed"
 		deletion.CompletedAt = &completedAt
 		_ = s.store.CompleteArtifactDeletion(ctx, deletion.ID, deletion.Status, deletion.Message, completedAt)
-		s.auditPostDeleteFailure(ctx, actor, deletion, err)
+		s.auditDeletionFailure(ctx, actor, deletion, err, true)
 		return deletion, err
 	}
 	deletion.Status = constants.ArtifactDeletionCompleted
@@ -202,7 +198,7 @@ func (s *ArtifactDeletionService) Execute(
 	if err := s.store.CompleteArtifactDeletion(
 		ctx, deletion.ID, deletion.Status, deletion.Message, completedAt,
 	); err != nil {
-		s.auditPostDeleteFailure(ctx, actor, deletion, err)
+		s.auditDeletionFailure(ctx, actor, deletion, err, true)
 		return deletion, err
 	}
 	if s.audit != nil {
@@ -215,11 +211,12 @@ func (s *ArtifactDeletionService) Execute(
 	return deletion, nil
 }
 
-func (s *ArtifactDeletionService) auditPostDeleteFailure(
+func (s *ArtifactDeletionService) auditDeletionFailure(
 	ctx context.Context,
 	actor foundation.PrincipalRef,
 	deletion *registrydomain.ArtifactDeletion,
 	cause error,
+	manifestDeleted bool,
 ) {
 	if s.audit == nil {
 		return
@@ -228,7 +225,7 @@ func (s *ArtifactDeletionService) auditPostDeleteFailure(
 		constants.AuditResourceArtifactDeletion, deletion.ID, map[string]any{
 			"repository": deletion.Repository, "digest": deletion.Digest,
 			"affectedTags": deletion.AffectedTags, "reason": deletion.Reason,
-			"message": deletion.Message, "error": cause.Error(), "manifestDeleted": true,
+			"message": deletion.Message, "error": cause.Error(), "manifestDeleted": manifestDeleted,
 		})
 }
 
