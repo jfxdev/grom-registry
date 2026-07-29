@@ -1,0 +1,1158 @@
+package httpapi
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"log/slog"
+	"net/http"
+	"net/netip"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jfxdev/grom/backend/api"
+	auditapp "github.com/jfxdev/grom/backend/internal/audit/application"
+	"github.com/jfxdev/grom/backend/internal/constants"
+	"github.com/jfxdev/grom/backend/internal/foundation"
+	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
+	identitydomain "github.com/jfxdev/grom/backend/internal/identity/domain"
+	integrationdomain "github.com/jfxdev/grom/backend/internal/integrations/domain"
+	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
+	projectdomain "github.com/jfxdev/grom/backend/internal/projects/domain"
+	registryapp "github.com/jfxdev/grom/backend/internal/registry/application"
+	registrydomain "github.com/jfxdev/grom/backend/internal/registry/domain"
+	"github.com/jfxdev/grom/backend/internal/registry/infrastructure/distribution"
+	"github.com/jfxdev/grom/backend/internal/webassets"
+)
+
+type Server struct {
+	router             chi.Router
+	identity           *identityapp.Service
+	audit              *auditapp.Service
+	projects           *projectapp.Service
+	repositories       *registryapp.RepositoryService
+	inventory          *registryapp.InventoryService
+	artifactDeletions  *registryapp.ArtifactDeletionService
+	lifecycle          *registryapp.LifecycleService
+	registryTokens     *registryapp.TokenService
+	distributionClient *distribution.Client
+	gateway            http.Handler
+	logger             *slog.Logger
+	publicURL          *url.URL
+	secureCookies      bool
+	enableDocs         bool
+	deploymentProfile  string
+	insecureHTTP       bool
+	trustedProxies     []netip.Prefix
+	loginLimiter       *authenticationFailureLimiter
+	registryLimiter    *authenticationFailureLimiter
+}
+
+type currentUserKey struct{}
+
+func New(
+	identity *identityapp.Service,
+	audit *auditapp.Service,
+	projects *projectapp.Service,
+	repositories *registryapp.RepositoryService,
+	inventory *registryapp.InventoryService,
+	artifactDeletions *registryapp.ArtifactDeletionService,
+	lifecycle *registryapp.LifecycleService,
+	registryTokens *registryapp.TokenService,
+	distributionClient *distribution.Client,
+	gateway http.Handler,
+	logger *slog.Logger,
+	publicURL string,
+	secureCookies bool,
+	enableDocs bool,
+	deploymentProfile string,
+	insecureHTTP bool,
+	securityOptions SecurityOptions,
+) (*Server, error) {
+	if securityOptions.AuthFailureLimit <= 0 ||
+		securityOptions.AuthFailureWindow <= 0 ||
+		securityOptions.AuthBlockDuration <= 0 {
+		return nil, fmt.Errorf("authentication failure limiter settings must be positive")
+	}
+	parsedPublicURL, err := url.Parse(publicURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse public URL: %w", err)
+	}
+	server := &Server{
+		identity: identity, audit: audit, projects: projects, repositories: repositories,
+		inventory: inventory, artifactDeletions: artifactDeletions,
+		lifecycle: lifecycle, registryTokens: registryTokens,
+		distributionClient: distributionClient, gateway: gateway, logger: logger,
+		publicURL: parsedPublicURL, secureCookies: secureCookies, enableDocs: enableDocs,
+		deploymentProfile: deploymentProfile, insecureHTTP: insecureHTTP,
+		trustedProxies:  securityOptions.TrustedProxies,
+		loginLimiter:    newAuthenticationFailureLimiter(securityOptions),
+		registryLimiter: newAuthenticationFailureLimiter(securityOptions),
+	}
+	server.router = server.routes()
+	return server, nil
+}
+
+func (s *Server) Handler() http.Handler {
+	return s.router
+}
+
+func (s *Server) routes() chi.Router {
+	router := chi.NewRouter()
+	router.Use(middleware.RequestID)
+	router.Use(s.trustedRealIP)
+	router.Use(middleware.Recoverer)
+	router.Use(s.accessLog)
+	router.Use(s.originGuard)
+
+	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	router.Get("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	})
+	router.Get("/api/v1/deployment", s.getDeployment)
+	router.Get("/auth/token", s.exchangeRegistryToken)
+	router.Handle("/v2/", s.gateway)
+	router.Handle("/v2/*", s.gateway)
+
+	if s.enableDocs {
+		router.Get("/api/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(api.OpenAPI)
+		})
+		router.Get("/api/docs", s.apiDocs)
+	}
+
+	router.Route("/api/v1", func(apiRouter chi.Router) {
+		apiRouter.Post("/session", s.createSession)
+		apiRouter.Delete("/session", s.deleteSession)
+		apiRouter.Post("/password-resets", s.completePasswordReset)
+
+		apiRouter.Group(func(protected chi.Router) {
+			protected.Use(s.requireSession)
+			protected.Get("/me", s.currentUser)
+			protected.Put("/me/password", s.changeCurrentUserPassword)
+			protected.Get("/users", s.listUsers)
+			protected.Post("/users", s.createUser)
+			protected.Post("/users/{id}/password-reset-link", s.createUserPasswordResetLink)
+
+			protected.Get("/service-accounts", s.listServiceAccounts)
+			protected.Post("/service-accounts", s.createServiceAccount)
+			protected.Delete("/service-accounts/{id}", s.deleteServiceAccount)
+			protected.Get("/service-accounts/{id}/tokens", s.listServiceAccountTokens)
+			protected.Post("/service-accounts/{id}/tokens", s.createServiceAccountToken)
+			protected.Delete("/service-accounts/{id}/tokens/{tokenId}", s.revokeServiceAccountToken)
+
+			protected.Get("/projects", s.listProjects)
+			protected.Post("/projects", s.createProject)
+			protected.Get("/projects/{project}", s.getProject)
+			protected.Delete("/projects/{project}", s.deleteProject)
+			protected.Get("/projects/{project}/members", s.listMemberships)
+			protected.Put("/projects/{project}/members/{principalKind}/{principalId}", s.setMembership)
+			protected.Delete("/projects/{project}/members/{principalKind}/{principalId}", s.deleteMembership)
+			protected.Get("/projects/{project}/repositories", s.listRepositories)
+			protected.Post("/projects/{project}/repositories", s.createRepository)
+			protected.Get("/projects/{project}/repositories/{repositoryId}/policies", s.getRepositoryPolicies)
+			protected.Put("/projects/{project}/repositories/{repositoryId}/policies", s.replaceRepositoryPolicies)
+			protected.Get("/projects/{project}/repository-tags", s.listTags)
+			protected.Post("/projects/{project}/artifact-deletion-previews", s.previewArtifactDeletion)
+			protected.Get("/projects/{project}/artifact-deletions", s.listArtifactDeletions)
+			protected.Post("/projects/{project}/artifact-deletions", s.deleteArtifact)
+			protected.Get("/projects/{project}/repository-inventory", s.listRepositoryInventory)
+			protected.Post("/projects/{project}/repository-inventory-reconciliations", s.reconcileRepositoryInventory)
+			protected.Post("/projects/{project}/lifecycle-previews", s.createLifecyclePreview)
+			protected.Get("/projects/{project}/lifecycle-previews/{previewId}", s.getLifecyclePreview)
+			protected.Post("/projects/{project}/lifecycle-runs", s.createLifecycleRun)
+			protected.Get("/projects/{project}/lifecycle-runs", s.listLifecycleRuns)
+			protected.Get("/projects/{project}/lifecycle-runs/{runId}", s.getLifecycleRun)
+			protected.Get("/registry-policy-presets", s.listRegistryPolicyPresets)
+
+			protected.Get("/integrations", s.listIntegrations)
+			protected.Get("/integrations/{key}", s.getIntegration)
+		})
+	})
+
+	router.NotFound(s.spa)
+	return router
+}
+
+func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	limiterKey := authenticationLimiterKey(r)
+	if allowed, retryAfter := s.loginLimiter.allow(limiterKey, time.Now()); !allowed {
+		writeRateLimitError(w, r, retryAfter)
+		return
+	}
+	raw, user, err := s.identity.Login(r.Context(), input.Email, input.Password)
+	if err != nil {
+		s.loginLimiter.failure(limiterKey, time.Now())
+		writeError(w, r, http.StatusUnauthorized, "unauthenticated", "Invalid email or password")
+		return
+	}
+	s.loginLimiter.success(limiterKey)
+	s.setSessionCookie(w, raw)
+	writeJSON(w, http.StatusOK, user)
+}
+
+func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(constants.SessionCookieName); err == nil {
+		_ = s.identity.Logout(r.Context(), cookie.Value)
+	}
+	s.clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) setSessionCookie(w http.ResponseWriter, value string) {
+	http.SetCookie(w, &http.Cookie{
+		Name: constants.SessionCookieName, Value: value, Path: "/", HttpOnly: true,
+		Secure: s.secureCookies, SameSite: http.SameSiteLaxMode, MaxAge: constants.DefaultSessionHours * 3600,
+	})
+}
+
+func (s *Server) clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name: constants.SessionCookieName, Path: "/", MaxAge: -1,
+		HttpOnly: true, Secure: s.secureCookies, SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (s *Server) currentUser(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, userFromContext(r.Context()))
+}
+
+func (s *Server) getDeployment(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"profile":      s.deploymentProfile,
+		"insecureHttp": s.insecureHTTP,
+	})
+}
+
+func (s *Server) changeCurrentUserPassword(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	err := s.identity.ChangePassword(r.Context(), userFromContext(r.Context()).ID, input.CurrentPassword, input.NewPassword)
+	switch {
+	case errors.Is(err, identityapp.ErrInvalidCurrentPassword):
+		writeError(w, r, http.StatusBadRequest, "invalid_current_password", err.Error())
+	case err != nil:
+		writeError(w, r, http.StatusBadRequest, "invalid_password", err.Error())
+	default:
+		user := userFromContext(r.Context())
+		if auditErr := s.audit.Record(
+			r.Context(), principalForUser(user), constants.AuditUserPasswordChanged,
+			constants.AuditResourceUser, user.ID, map[string]any{},
+		); auditErr != nil {
+			s.logger.Error("record password change audit event", "error", auditErr)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	users, err := s.identity.ListUsers(r.Context())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, users)
+}
+
+func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	var input struct {
+		Email       string `json:"email"`
+		Username    string `json:"username"`
+		Password    string `json:"password"`
+		SystemAdmin bool   `json:"systemAdmin"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	user, err := s.identity.CreateUser(r.Context(), input.Email, input.Username, input.Password, input.SystemAdmin)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_user", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, user)
+}
+
+func (s *Server) createUserPasswordResetLink(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	targetID := foundation.ID(chi.URLParam(r, "id"))
+	created, err := s.identity.CreatePasswordReset(
+		r.Context(),
+		targetID,
+	)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+		return
+	}
+	actor := userFromContext(r.Context())
+	if auditErr := s.audit.Record(
+		r.Context(), principalForUser(actor), constants.AuditUserPasswordResetLinkCreated,
+		constants.AuditResourceUser, targetID, map[string]any{"expiresAt": created.ExpiresAt},
+	); auditErr != nil {
+		s.logger.Error("record password reset link audit event", "error", auditErr)
+	}
+	resetURLBase := s.publicURL.String()
+	if requestOrigin, parseErr := url.Parse(r.Header.Get("Origin")); parseErr == nil && requestOrigin.Scheme != "" && requestOrigin.Host != "" {
+		resetURLBase = requestOrigin.Scheme + "://" + requestOrigin.Host
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"url":       resetURLBase + "/reset-password#token=" + url.QueryEscape(created.Token),
+		"expiresAt": created.ExpiresAt,
+	})
+}
+
+func (s *Server) completePasswordReset(w http.ResponseWriter, r *http.Request) {
+	if cookie, cookieErr := r.Cookie(constants.SessionCookieName); cookieErr == nil {
+		if _, authErr := s.identity.AuthenticateSession(r.Context(), cookie.Value); authErr == nil {
+			writeError(w, r, http.StatusForbidden, "signed_in", "Sign out before using a password reset link")
+			return
+		}
+	}
+	var input struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"newPassword"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	userID, err := s.identity.CompletePasswordReset(r.Context(), input.Token, input.NewPassword)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_password_reset", err.Error())
+		return
+	}
+	if auditErr := s.audit.Record(
+		r.Context(), foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: userID},
+		constants.AuditUserPasswordResetCompleted, constants.AuditResourceUser, userID, map[string]any{},
+	); auditErr != nil {
+		s.logger.Error("record completed password reset audit event", "error", auditErr)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) listServiceAccounts(w http.ResponseWriter, r *http.Request) {
+	accounts, err := s.identity.ListServiceAccounts(r.Context())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, accounts)
+}
+
+func (s *Server) createServiceAccount(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	var input struct {
+		Name        string `json:"name"`
+		Username    string `json:"username"`
+		Description string `json:"description"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	account, err := s.identity.CreateServiceAccount(r.Context(), input.Name, input.Username, input.Description)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_service_account", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, account)
+}
+
+func (s *Server) deleteServiceAccount(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	if err := s.identity.DisableServiceAccount(r.Context(), foundation.ID(chi.URLParam(r, "id"))); err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Service account not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) listServiceAccountTokens(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	tokens, err := s.identity.ListServiceAccountAPITokens(r.Context(), foundation.ID(chi.URLParam(r, "id")))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Service account not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, tokens)
+}
+
+func (s *Server) createServiceAccountToken(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	var input struct {
+		Name      string     `json:"name"`
+		ExpiresAt *time.Time `json:"expiresAt"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	created, err := s.identity.CreateServiceAccountAPIToken(
+		r.Context(), foundation.ID(chi.URLParam(r, "id")), input.Name, input.ExpiresAt,
+	)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_token", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, created)
+}
+
+func (s *Server) revokeServiceAccountToken(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	if err := s.identity.RevokeServiceAccountAPIToken(
+		r.Context(),
+		foundation.ID(chi.URLParam(r, "id")),
+		foundation.ID(chi.URLParam(r, "tokenId")),
+	); err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Token not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
+	user := userFromContext(r.Context())
+	projects, err := s.projects.List(r.Context(), principalForUser(user), user.SystemAdmin)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, projects)
+}
+
+func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	var input struct {
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	user := userFromContext(r.Context())
+	project, err := s.projects.Create(r.Context(), principalForUser(user), user.SystemAdmin, input.Name, input.Slug)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_project", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, project)
+}
+
+func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
+	project, err := s.projects.Find(r.Context(), chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	user := userFromContext(r.Context())
+	if !s.projects.CanView(r.Context(), principalForUser(user), user.SystemAdmin, project) {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, project)
+}
+
+func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	err := s.projects.Delete(r.Context(), true, chi.URLParam(r, "project"))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+	case errors.Is(err, projectapp.ErrProjectNotEmpty):
+		writeError(w, r, http.StatusConflict, "project_not_empty", "Remove every repository before deleting this project")
+	case err != nil:
+		s.internalError(w, r, err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) listMemberships(w http.ResponseWriter, r *http.Request) {
+	user := userFromContext(r.Context())
+	memberships, err := s.projects.ListMemberships(r.Context(), principalForUser(user), user.SystemAdmin, chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, memberships)
+}
+
+func (s *Server) setMembership(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Role string `json:"role"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	principal := foundation.PrincipalRef{
+		Kind: chi.URLParam(r, "principalKind"), ID: foundation.ID(chi.URLParam(r, "principalId")),
+	}
+	if !s.principalExists(r.Context(), principal) {
+		writeError(w, r, http.StatusBadRequest, "invalid_principal", "Principal not found")
+		return
+	}
+	user := userFromContext(r.Context())
+	err := s.projects.SetMembership(r.Context(), principalForUser(user), user.SystemAdmin, chi.URLParam(r, "project"), principal, input.Role)
+	if err != nil {
+		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+func (s *Server) deleteMembership(w http.ResponseWriter, r *http.Request) {
+	principal := foundation.PrincipalRef{
+		Kind: chi.URLParam(r, "principalKind"), ID: foundation.ID(chi.URLParam(r, "principalId")),
+	}
+	user := userFromContext(r.Context())
+	err := s.projects.DeleteMembership(r.Context(), principalForUser(user), user.SystemAdmin, chi.URLParam(r, "project"), principal)
+	if err != nil {
+		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
+	project, err := s.projects.Find(r.Context(), chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	user := userFromContext(r.Context())
+	if !s.projects.CanView(r.Context(), principalForUser(user), user.SystemAdmin, project) {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	discovered, err := s.distributionClient.ListProjectRepositories(r.Context(), project.Slug)
+	catalogAvailable := err == nil
+	if err != nil {
+		s.logger.Warn("distribution catalog unavailable", "error", err)
+		discovered = nil
+	}
+	repositories, err := s.repositories.List(r.Context(), project.ID, discovered, catalogAvailable)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, repositories)
+}
+
+func (s *Server) createRepository(w http.ResponseWriter, r *http.Request) {
+	project, err := s.projects.Find(r.Context(), chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	user := userFromContext(r.Context())
+	if !s.projects.CanManage(r.Context(), principalForUser(user), user.SystemAdmin, project) {
+		writeError(w, r, http.StatusForbidden, "forbidden", "Project administrator permission required")
+		return
+	}
+	var input struct {
+		Name        string                  `json:"name"`
+		Description string                  `json:"description"`
+		Policies    []registrydomain.Policy `json:"policies"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	repository, err := s.repositories.Create(r.Context(), project.ID, input.Name, input.Description, input.Policies)
+	if errors.Is(err, registryapp.ErrRepositoryExists) {
+		writeError(w, r, http.StatusConflict, "repository_exists", "Repository path already exists in this project")
+		return
+	}
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_repository", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, repository)
+}
+
+func (s *Server) listRegistryPolicyPresets(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, registryapp.PolicyPresets())
+}
+
+func (s *Server) getRepositoryPolicies(w http.ResponseWriter, r *http.Request) {
+	project, _, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	repository, err := s.repositories.FindByID(
+		r.Context(), foundation.ID(chi.URLParam(r, "repositoryId")),
+	)
+	if err != nil || repository.ProjectID != project.ID {
+		writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"repositoryId": repository.ID,
+		"version":      repository.PolicyVersion,
+		"policies":     repository.Policies,
+	})
+}
+
+func (s *Server) replaceRepositoryPolicies(w http.ResponseWriter, r *http.Request) {
+	project, actor, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	var input struct {
+		ExpectedVersion int                     `json:"expectedVersion"`
+		Policies        []registrydomain.Policy `json:"policies"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	repository, err := s.repositories.ReplacePolicies(
+		r.Context(), project.ID, foundation.ID(chi.URLParam(r, "repositoryId")),
+		input.ExpectedVersion, input.Policies, actor,
+	)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, "repository_policies_not_updated", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"repositoryId": repository.ID,
+		"version":      repository.PolicyVersion,
+		"policies":     repository.Policies,
+	})
+}
+
+type artifactDeletionInput struct {
+	Repository     string   `json:"repository"`
+	Reference      string   `json:"reference"`
+	Reason         string   `json:"reason"`
+	ExpectedDigest *string  `json:"expectedDigest"`
+	ExpectedTags   []string `json:"expectedTags"`
+}
+
+func (s *Server) previewArtifactDeletion(w http.ResponseWriter, r *http.Request) {
+	project, input, ok := s.authorizeArtifactDeletion(w, r)
+	if !ok {
+		return
+	}
+	preview, err := s.artifactDeletions.Preview(
+		r.Context(), project.ID, project.Slug, input.Repository, input.Reference, input.Reason, false,
+	)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, "deletion_blocked", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, preview)
+}
+
+func (s *Server) deleteArtifact(w http.ResponseWriter, r *http.Request) {
+	project, input, ok := s.authorizeArtifactDeletion(w, r)
+	if !ok {
+		return
+	}
+	deletion, err := s.artifactDeletions.Execute(
+		r.Context(), project.ID, project.Slug, input.Repository, input.Reference,
+		input.Reason, stringValue(input.ExpectedDigest), input.ExpectedTags,
+		principalForUser(userFromContext(r.Context())),
+	)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, "deletion_blocked", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, deletion)
+}
+
+func (s *Server) listArtifactDeletions(w http.ResponseWriter, r *http.Request) {
+	project, _, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	repository := r.URL.Query().Get("repository")
+	if repository == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository is required")
+		return
+	}
+	deletions, err := s.artifactDeletions.List(r.Context(), project.ID, repository)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "artifact_deletions_unavailable", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, deletions)
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func (s *Server) authorizeArtifactDeletion(
+	w http.ResponseWriter,
+	r *http.Request,
+) (*projectdomain.Project, artifactDeletionInput, bool) {
+	var input artifactDeletionInput
+	project, err := s.projects.Find(r.Context(), chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return nil, input, false
+	}
+	user := userFromContext(r.Context())
+	if !s.projects.CanManage(r.Context(), principalForUser(user), user.SystemAdmin, project) {
+		writeError(w, r, http.StatusForbidden, "forbidden", "Project administrator permission required")
+		return nil, input, false
+	}
+	if !decodeJSON(w, r, &input) {
+		return nil, input, false
+	}
+	if input.Repository == "" || input.Reference == "" || strings.Contains(input.Repository, "..") {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "Repository and reference are required")
+		return nil, input, false
+	}
+	return project, input, true
+}
+
+func (s *Server) lifecycleProject(
+	w http.ResponseWriter,
+	r *http.Request,
+	manage bool,
+) (*projectdomain.Project, foundation.PrincipalRef, bool) {
+	project, err := s.projects.Find(r.Context(), chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return nil, foundation.PrincipalRef{}, false
+	}
+	user := userFromContext(r.Context())
+	actor := principalForUser(user)
+	allowed := s.projects.CanView(r.Context(), actor, user.SystemAdmin, project)
+	if manage {
+		allowed = s.projects.CanManage(r.Context(), actor, user.SystemAdmin, project)
+	}
+	if !allowed {
+		writeError(w, r, http.StatusForbidden, "forbidden", "Project administrator permission required")
+		return nil, foundation.PrincipalRef{}, false
+	}
+	return project, actor, true
+}
+
+func (s *Server) listRepositoryInventory(w http.ResponseWriter, r *http.Request) {
+	project, _, ok := s.lifecycleProject(w, r, false)
+	if !ok {
+		return
+	}
+	repository := r.URL.Query().Get("repository")
+	if repository == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository is required")
+		return
+	}
+	items, err := s.inventory.List(r.Context(), project.ID, repository)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "inventory_unavailable", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) reconcileRepositoryInventory(w http.ResponseWriter, r *http.Request) {
+	project, _, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	var input struct {
+		Repository string `json:"repository"`
+	}
+	if !decodeJSON(w, r, &input) || input.Repository == "" {
+		return
+	}
+	items, err := s.inventory.Reconcile(r.Context(), project.ID, project.Slug, input.Repository)
+	if err != nil {
+		writeError(w, r, http.StatusBadGateway, "inventory_reconciliation_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) createLifecyclePreview(w http.ResponseWriter, r *http.Request) {
+	project, actor, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	var input struct {
+		Repository string `json:"repository"`
+	}
+	if !decodeJSON(w, r, &input) || input.Repository == "" {
+		return
+	}
+	preview, err := s.lifecycle.CreatePreview(r.Context(), project.ID, project.Slug, input.Repository, actor)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, "lifecycle_preview_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, preview)
+}
+
+func (s *Server) getLifecyclePreview(w http.ResponseWriter, r *http.Request) {
+	project, _, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	preview, err := s.lifecycle.FindPreview(r.Context(), foundation.ID(chi.URLParam(r, "previewId")))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Lifecycle preview not found")
+		return
+	}
+	repository, err := s.repositories.FindByID(r.Context(), preview.RepositoryID)
+	if err != nil || repository.ProjectID != project.ID {
+		writeError(w, r, http.StatusNotFound, "not_found", "Lifecycle preview not found")
+		return
+	}
+	preview.Repository = repository.Name
+	writeJSON(w, http.StatusOK, preview)
+}
+
+func (s *Server) createLifecycleRun(w http.ResponseWriter, r *http.Request) {
+	project, actor, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	var input struct {
+		PreviewID string `json:"previewId"`
+		Reason    string `json:"reason"`
+	}
+	if !decodeJSON(w, r, &input) || input.PreviewID == "" {
+		return
+	}
+	run, err := s.lifecycle.Execute(
+		r.Context(), project.ID, project.Slug, foundation.ID(input.PreviewID), input.Reason, actor,
+	)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, "lifecycle_execution_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, run)
+}
+
+func (s *Server) listLifecycleRuns(w http.ResponseWriter, r *http.Request) {
+	project, _, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	repository := r.URL.Query().Get("repository")
+	if repository == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository is required")
+		return
+	}
+	runs, err := s.lifecycle.ListRuns(r.Context(), project.ID, repository)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "lifecycle_runs_unavailable", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, runs)
+}
+
+func (s *Server) getLifecycleRun(w http.ResponseWriter, r *http.Request) {
+	project, _, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	run, err := s.lifecycle.FindRun(r.Context(), foundation.ID(chi.URLParam(r, "runId")))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Lifecycle run not found")
+		return
+	}
+	repository, err := s.repositories.FindByID(r.Context(), run.RepositoryID)
+	if err != nil || repository.ProjectID != project.ID {
+		writeError(w, r, http.StatusNotFound, "not_found", "Lifecycle run not found")
+		return
+	}
+	run.Repository = repository.Name
+	writeJSON(w, http.StatusOK, run)
+}
+
+func (s *Server) listTags(w http.ResponseWriter, r *http.Request) {
+	project, err := s.projects.Find(r.Context(), chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	user := userFromContext(r.Context())
+	if !s.projects.CanView(r.Context(), principalForUser(user), user.SystemAdmin, project) {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	repository := r.URL.Query().Get("repository")
+	if repository == "" || strings.HasPrefix(repository, "/") || strings.Contains(repository, "..") {
+		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository path is invalid")
+		return
+	}
+	tags, err := s.distributionClient.ListTags(r.Context(), project.Slug+"/"+repository)
+	if err != nil {
+		writeError(w, r, http.StatusBadGateway, "registry_unavailable", "Registry metadata is unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, tags)
+}
+
+func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, integrationCatalog())
+}
+
+func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) {
+	for _, integration := range integrationCatalog() {
+		if integration.Key == chi.URLParam(r, "key") {
+			writeJSON(w, http.StatusOK, integration)
+			return
+		}
+	}
+	writeError(w, r, http.StatusNotFound, "not_found", "Integration not found")
+}
+
+func (s *Server) exchangeRegistryToken(w http.ResponseWriter, r *http.Request) {
+	limiterKey := authenticationLimiterKey(r)
+	if allowed, retryAfter := s.registryLimiter.allow(limiterKey, time.Now()); !allowed {
+		writeRateLimitError(w, r, retryAfter)
+		return
+	}
+	username, rawToken, ok := r.BasicAuth()
+	if !ok {
+		s.registryLimiter.failure(limiterKey, time.Now())
+		w.Header().Set("WWW-Authenticate", `Basic realm="Grom Registry"`)
+		writeError(w, r, http.StatusUnauthorized, "unauthenticated", "API token required")
+		return
+	}
+	principal, err := s.identity.AuthenticateRegistry(r.Context(), username, rawToken)
+	if err != nil {
+		s.registryLimiter.failure(limiterKey, time.Now())
+		w.Header().Set("WWW-Authenticate", `Basic realm="Grom Registry"`)
+		writeError(w, r, http.StatusUnauthorized, "unauthenticated", "Invalid registry credentials")
+		return
+	}
+	s.registryLimiter.success(limiterKey)
+	token, expiresIn, issuedAt, err := s.registryTokens.Issue(
+		r.Context(), username, principal, r.URL.Query().Get("service"), r.URL.Query()["scope"],
+	)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token": token, "access_token": token, "expires_in": expiresIn, "issued_at": issuedAt,
+	})
+}
+
+func (s *Server) requireSession(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie(constants.SessionCookieName)
+		if err != nil {
+			writeError(w, r, http.StatusUnauthorized, "unauthenticated", "Sign in required")
+			return
+		}
+		user, err := s.identity.AuthenticateSession(r.Context(), cookie.Value)
+		if err != nil {
+			writeError(w, r, http.StatusUnauthorized, "unauthenticated", "Session expired")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), currentUserKey{}, user)))
+	})
+}
+
+func (s *Server) principalExists(ctx context.Context, principal foundation.PrincipalRef) bool {
+	switch principal.Kind {
+	case constants.PrincipalUser:
+		_, err := s.identity.FindUser(ctx, principal.ID)
+		return err == nil
+	case constants.PrincipalServiceAccount:
+		_, err := s.identity.FindServiceAccount(ctx, principal.ID)
+		return err == nil
+	default:
+		return false
+	}
+}
+
+func (s *Server) originGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			if _, err := r.Cookie(constants.SessionCookieName); err == nil {
+				writeError(w, r, http.StatusForbidden, "missing_origin", "Origin is required for authenticated browser mutations")
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+		parsed, err := url.Parse(origin)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" || !s.allowedOrigin(parsed, r) {
+			writeError(w, r, http.StatusForbidden, "invalid_origin", "Request origin is not allowed")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) allowedOrigin(origin *url.URL, r *http.Request) bool {
+	if strings.EqualFold(origin.Scheme, s.publicURL.Scheme) &&
+		strings.EqualFold(origin.Host, s.publicURL.Host) {
+		return true
+	}
+	return isLoopbackHostname(s.publicURL.Hostname()) &&
+		strings.EqualFold(origin.Scheme, requestScheme(r)) &&
+		strings.EqualFold(origin.Host, r.Host)
+}
+
+func requestScheme(r *http.Request) string {
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func isLoopbackHostname(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	address, err := netip.ParseAddr(host)
+	return err == nil && address.IsLoopback()
+}
+
+func (s *Server) accessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(wrapped, r)
+		s.logger.Info("http request", "method", r.Method, "path", r.URL.Path,
+			"status", wrapped.Status(), "duration", time.Since(started),
+			"remote_ip", authenticationLimiterKey(r), "request_id", middleware.GetReqID(r.Context()))
+	})
+}
+
+func (s *Server) internalError(w http.ResponseWriter, r *http.Request, err error) {
+	s.logger.Error("request failed", "error", err, "request_id", middleware.GetReqID(r.Context()))
+	writeError(w, r, http.StatusInternalServerError, "internal_error", "The request could not be completed")
+}
+
+func (s *Server) apiDocs(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(`<!doctype html><html><head><title>Grom API</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{margin:0;background:#0b0d10}</style></head><body>
+<script id="api-reference" data-url="/api/openapi.yaml"></script>
+<script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script></body></html>`))
+}
+
+func (s *Server) spa(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/v2/") {
+		writeError(w, r, http.StatusNotFound, "not_found", "Endpoint not found")
+		return
+	}
+	dist, err := fs.Sub(webassets.Dist, "dist")
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if r.URL.Path != "/" {
+		if file, openErr := dist.Open(strings.TrimPrefix(r.URL.Path, "/")); openErr == nil {
+			_ = file.Close()
+			http.FileServer(http.FS(dist)).ServeHTTP(w, r)
+			return
+		}
+	}
+	index, err := fs.ReadFile(dist, "index.html")
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(index)
+}
+
+func integrationCatalog() []integrationdomain.Descriptor {
+	return []integrationdomain.Descriptor{
+		{Key: constants.IntegrationTrivy, Name: "Trivy", Category: "security", Status: constants.IntegrationStatusPlanned, Capabilities: []string{"scan-on-push", "manual-scan"}},
+		{Key: constants.IntegrationDockerScout, Name: "Docker Scout", Category: "security", Status: constants.IntegrationStatusPlanned, Capabilities: []string{"manual-scan"}},
+		{Key: constants.IntegrationOCI, Name: "OCI artifact scanner", Category: "security", Status: constants.IntegrationStatusPlanned, Capabilities: []string{"oci-referrers"}},
+		{Key: constants.IntegrationWebhook, Name: "Generic webhook", Category: "automation", Status: constants.IntegrationStatusPlanned, Capabilities: []string{"manifest-pushed"}},
+	}
+}
+
+func principalForUser(user *identitydomain.User) foundation.PrincipalRef {
+	return foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: user.ID}
+}
+
+func userFromContext(ctx context.Context) *identitydomain.User {
+	user, _ := ctx.Value(currentUserKey{}).(*identitydomain.User)
+	return user
+}
+
+func requireSystemAdmin(w http.ResponseWriter, r *http.Request) bool {
+	user := userFromContext(r.Context())
+	if user == nil || !user.SystemAdmin {
+		writeError(w, r, http.StatusForbidden, "forbidden", "Installation administrator permission required")
+		return false
+	}
+	return true
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "Request body is invalid")
+		return false
+	}
+	return true
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	writeJSON(w, status, map[string]string{
+		"code": code, "message": message, "requestId": middleware.GetReqID(r.Context()),
+	})
+}
+
+var _ = errors.Is
+var _ = sql.ErrNoRows

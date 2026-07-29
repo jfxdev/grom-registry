@@ -1,0 +1,1694 @@
+openapi: 3.0.3
+info:
+  title: Grom API
+  version: 0.1.0
+  description: Management and registry authentication API for Grom.
+servers:
+  - url: /
+tags:
+  - name: System
+  - name: Identity
+  - name: Projects
+  - name: Registry
+  - name: Registry Policies
+  - name: Integrations
+paths:
+  /healthz:
+    get:
+      tags: [System]
+      operationId: getHealth
+      responses:
+        "200":
+          description: Process health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /readyz:
+    get:
+      tags: [System]
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Application is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /api/v1/deployment:
+    get:
+      tags: [System]
+      operationId: getDeployment
+      responses:
+        "200":
+          description: Non-sensitive deployment posture for operator warnings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deployment"
+  /api/v1/session:
+    post:
+      tags: [Identity]
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed-in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags: [Identity]
+      operationId: deleteSession
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Session ended
+  /api/v1/me:
+    get:
+      tags: [Identity]
+      operationId: getCurrentUser
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/me/password:
+    put:
+      tags: [Identity]
+      operationId: changeCurrentUserPassword
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password changed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/password-resets:
+    post:
+      tags: [Identity]
+      operationId: completePasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompletePasswordResetRequest"
+      responses:
+        "204":
+          description: Password reset completed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/users:
+    get:
+      tags: [Identity]
+      operationId: listUsers
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Installation users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Identity]
+      operationId: createUser
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/users/{id}/password-reset-link:
+    post:
+      tags: [Identity]
+      operationId: createUserPasswordResetLink
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: Reveal-once password reset link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetLink"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/service-accounts:
+    get:
+      tags: [Identity]
+      operationId: listServiceAccounts
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Service accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceAccount"
+    post:
+      tags: [Identity]
+      operationId: createServiceAccount
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceAccountRequest"
+      responses:
+        "201":
+          description: Created service account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceAccount"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/service-accounts/{id}:
+    delete:
+      tags: [Identity]
+      operationId: deleteServiceAccount
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "204":
+          description: Service account disabled
+  /api/v1/service-accounts/{id}/tokens:
+    get:
+      tags: [Identity]
+      operationId: listServiceAccountTokens
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: API tokens owned by the service account
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/APIToken"
+    post:
+      tags: [Identity]
+      operationId: createServiceAccountToken
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceAccountTokenRequest"
+      responses:
+        "201":
+          description: Token and reveal-once secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedToken"
+  /api/v1/service-accounts/{id}/tokens/{tokenId}:
+    delete:
+      tags: [Identity]
+      operationId: revokeServiceAccountToken
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Token revoked
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Visible projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      tags: [Projects]
+      operationId: createProject
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/projects/{project}:
+    get:
+      tags: [Projects]
+      operationId: getProject
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Projects]
+      operationId: deleteProject
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      responses:
+        "204":
+          description: Empty project deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Project still contains logical repositories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/projects/{project}/members:
+    get:
+      tags: [Projects]
+      operationId: listProjectMembers
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      responses:
+        "200":
+          description: Project memberships
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Membership"
+  /api/v1/projects/{project}/members/{principalKind}/{principalId}:
+    put:
+      tags: [Projects]
+      operationId: setProjectMember
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/PrincipalKind"
+        - $ref: "#/components/parameters/PrincipalID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetMembershipRequest"
+      responses:
+        "200":
+          description: Membership saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+    delete:
+      tags: [Projects]
+      operationId: deleteProjectMember
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/PrincipalKind"
+        - $ref: "#/components/parameters/PrincipalID"
+      responses:
+        "204":
+          description: Membership removed
+  /api/v1/projects/{project}/repositories:
+    get:
+      tags: [Registry]
+      operationId: listProjectRepositories
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      responses:
+        "200":
+          description: Project repositories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Repository"
+    post:
+      tags: [Registry]
+      operationId: createProjectRepository
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRepositoryRequest"
+      responses:
+        "201":
+          description: Logical repository and its behavior policies were created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repository"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Repository path already exists in the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/projects/{project}/repositories/{repositoryId}/policies:
+    get:
+      tags: [Registry Policies]
+      operationId: getRepositoryPolicies
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - name: repositoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current versioned repository policy set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryPolicySet"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Registry Policies]
+      operationId: replaceRepositoryPolicies
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - name: repositoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceRepositoryPoliciesRequest"
+      responses:
+        "200":
+          description: Repository policies replaced with a new version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryPolicySet"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The expected policy version is stale or a policy is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/registry-policy-presets:
+    get:
+      tags: [Registry Policies]
+      operationId: listRegistryPolicyPresets
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Global read-only policy presets used to populate repository forms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PolicyPreset"
+  /api/v1/projects/{project}/repository-tags:
+    get:
+      tags: [Registry]
+      operationId: listRepositoryTags
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - name: repository
+          in: query
+          required: true
+          description: Repository path relative to the project, including optional nested segments
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Repository tags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagList"
+  /api/v1/projects/{project}/artifact-deletion-previews:
+    post:
+      tags: [Registry]
+      operationId: previewArtifactDeletion
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArtifactDeletionRequest"
+      responses:
+        "200":
+          description: Digest and every tag that would be affected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactDeletionPreview"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/projects/{project}/artifact-deletions:
+    get:
+      tags: [Registry]
+      operationId: listArtifactDeletions
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - name: repository
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Persisted manual deletion history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArtifactDeletion"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Registry]
+      operationId: deleteArtifact
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArtifactDeletionRequest"
+      responses:
+        "200":
+          description: Persisted manual manifest deletion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactDeletion"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Repository policy prevents deletion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/projects/{project}/repository-inventory:
+    get:
+      tags: [Registry Lifecycle]
+      operationId: listRepositoryInventory
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - name: repository
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Last known manifest inventory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ManifestInventory"
+  /api/v1/projects/{project}/repository-inventory-reconciliations:
+    post:
+      tags: [Registry Lifecycle]
+      operationId: reconcileRepositoryInventory
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepositorySelection"
+      responses:
+        "200":
+          description: Reconciled manifest inventory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ManifestInventory"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/projects/{project}/lifecycle-previews:
+    post:
+      tags: [Registry Lifecycle]
+      operationId: createLifecyclePreview
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepositorySelection"
+      responses:
+        "201":
+          description: Persisted lifecycle dry-run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecyclePreview"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Inventory or policies prevented the preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/projects/{project}/lifecycle-previews/{previewId}:
+    get:
+      tags: [Registry Lifecycle]
+      operationId: getLifecyclePreview
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - name: previewId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lifecycle dry-run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecyclePreview"
+  /api/v1/projects/{project}/lifecycle-runs:
+    get:
+      tags: [Registry Lifecycle]
+      operationId: listLifecycleRuns
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - name: repository
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audited lifecycle execution history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LifecycleRun"
+    post:
+      tags: [Registry Lifecycle]
+      operationId: createLifecycleRun
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLifecycleRunRequest"
+      responses:
+        "200":
+          description: Manual lifecycle execution completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRun"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Preview expired, changed, or execution conflicted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/projects/{project}/lifecycle-runs/{runId}:
+    get:
+      tags: [Registry Lifecycle]
+      operationId: getLifecycleRun
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audited lifecycle execution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRun"
+  /api/v1/integrations:
+    get:
+      tags: [Integrations]
+      operationId: listIntegrations
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Integration catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Integration"
+  /api/v1/integrations/{key}:
+    get:
+      tags: [Integrations]
+      operationId: getIntegration
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Integration descriptor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Integration"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /auth/token:
+    get:
+      tags: [Registry]
+      operationId: exchangeRegistryToken
+      description: Docker Registry v2 delegated token endpoint.
+      security:
+        - basicAuth: []
+      parameters:
+        - name: service
+          in: query
+          schema:
+            type: string
+        - name: scope
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Short-lived registry bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistryToken"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: grom_session
+    basicAuth:
+      type: http
+      scheme: basic
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Project:
+      x-go-name: ProjectSlugParameter
+      name: project
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    PrincipalKind:
+      name: principalKind
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/PrincipalKind"
+    PrincipalID:
+      name: principalId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Insufficient permission
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: Too many failed authentication attempts
+      headers:
+        Retry-After:
+          description: Seconds until another authentication attempt is allowed
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+    Deployment:
+      type: object
+      required: [profile, insecureHttp]
+      properties:
+        profile:
+          type: string
+          enum: [development, permissive, strict]
+        insecureHttp:
+          type: boolean
+          description: True only for an explicitly opted-in permissive HTTP deployment
+    Status:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        requestId:
+          type: string
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+    User:
+      type: object
+      required: [id, email, username, systemAdmin, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        systemAdmin:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        disabledAt:
+          type: string
+          format: date-time
+          nullable: true
+    CreateUserRequest:
+      type: object
+      required: [email, username, password]
+      properties:
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+          pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        password:
+          type: string
+          format: password
+          minLength: 8
+        systemAdmin:
+          type: boolean
+          default: false
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          minLength: 8
+        newPassword:
+          type: string
+          format: password
+          minLength: 12
+    CompletePasswordResetRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          minLength: 1
+        newPassword:
+          type: string
+          format: password
+          minLength: 12
+    PasswordResetLink:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Reveal-once URL containing a single-use token in its fragment
+        expiresAt:
+          type: string
+          format: date-time
+    ServiceAccount:
+      type: object
+      required: [id, name, username, description, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        username:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CreateServiceAccountRequest:
+      type: object
+      required: [name, username]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        username:
+          type: string
+          pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        description:
+          type: string
+          maxLength: 500
+    PrincipalKind:
+      type: string
+      enum: [user, service_account]
+    APIToken:
+      type: object
+      required: [id, publicId, serviceAccountId, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        publicId:
+          type: string
+        serviceAccountId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+    CreateServiceAccountTokenRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+    CreatedToken:
+      type: object
+      required: [token, secret]
+      properties:
+        token:
+          $ref: "#/components/schemas/APIToken"
+        secret:
+          type: string
+          description: Reveal-once API token secret.
+    Project:
+      type: object
+      required: [id, slug, name, createdBy, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        createdBy:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+    CreateProjectRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    ProjectRole:
+      type: string
+      enum: [reader, writer, admin]
+    Membership:
+      type: object
+      required: [projectId, principalKind, principalId, role, createdAt]
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        principalKind:
+          $ref: "#/components/schemas/PrincipalKind"
+        principalId:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+        createdAt:
+          type: string
+          format: date-time
+    SetMembershipRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+    TagList:
+      type: object
+      required: [name, tags]
+      properties:
+        name:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+    RepositoryStatus:
+      type: string
+      enum: [empty, active]
+    RepositoryPolicyType:
+      type: string
+      enum: [tag_protection, immutability, retention, tag_naming, manual_deletion]
+    RepositoryPolicyInput:
+      type: object
+      required: [type, enabled]
+      properties:
+        type:
+          $ref: "#/components/schemas/RepositoryPolicyType"
+        enabled:
+          type: boolean
+          default: true
+        tagPatterns:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+            maxLength: 128
+        preventOverwrite:
+          type: boolean
+          default: false
+        preventDeletion:
+          type: boolean
+          default: false
+        excludeFromLifecycle:
+          type: boolean
+          default: false
+        expireAfterDays:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        keepLast:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        untaggedGraceDays:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        allowedPatterns:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+            maxLength: 128
+        requireReason:
+          type: boolean
+          default: false
+    RepositoryPolicy:
+      allOf:
+        - $ref: "#/components/schemas/RepositoryPolicyInput"
+        - type: object
+          required: [id, version, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+              format: uuid
+            version:
+              type: integer
+              minimum: 1
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    Repository:
+      type: object
+      required:
+        [id, projectId, name, description, status, profile, profileSource,
+         profileConfidence, profileNeedsReview, creationSource, policyVersion,
+         policies, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Repository path relative to its project, including optional nested segments.
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/RepositoryStatus"
+        creationSource:
+          type: string
+          enum: [manual, push, reconciled]
+          description: How the logical repository was first registered in Grom.
+        profile:
+          $ref: "#/components/schemas/RepositoryProfile"
+        profileSource:
+          type: string
+          enum: [none, inferred]
+        profileConfidence:
+          $ref: "#/components/schemas/ClassificationConfidence"
+        profileInferredAt:
+          type: string
+          format: date-time
+          nullable: true
+        profileNeedsReview:
+          type: boolean
+        policyVersion:
+          type: integer
+          minimum: 0
+        policies:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositoryPolicy"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateRepositoryRequest:
+      type: object
+      required: [name, policies]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$"
+        description:
+          type: string
+          maxLength: 500
+          default: ""
+        policies:
+          type: array
+          maxItems: 16
+          items:
+            $ref: "#/components/schemas/RepositoryPolicyInput"
+    RepositoryPolicySet:
+      type: object
+      required: [repositoryId, version, policies]
+      properties:
+        repositoryId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 0
+        policies:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositoryPolicy"
+    ReplaceRepositoryPoliciesRequest:
+      type: object
+      required: [expectedVersion, policies]
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+        policies:
+          type: array
+          maxItems: 16
+          items:
+            $ref: "#/components/schemas/RepositoryPolicyInput"
+    PolicyPreset:
+      type: object
+      required: [key, name, category, description, outcome, policy]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        outcome:
+          type: string
+        caution:
+          type: string
+          nullable: true
+        policy:
+          $ref: "#/components/schemas/RepositoryPolicyInput"
+    ArtifactDeletionRequest:
+      type: object
+      required: [repository, reference]
+      properties:
+        repository:
+          type: string
+          minLength: 1
+          maxLength: 255
+        reference:
+          type: string
+          minLength: 1
+          maxLength: 255
+        reason:
+          type: string
+          maxLength: 500
+          default: ""
+        expectedDigest:
+          type: string
+          nullable: true
+        expectedTags:
+          type: array
+          maxItems: 1000
+          items:
+            type: string
+    ArtifactDeletionPreview:
+      type: object
+      required:
+        [repository, digest, affectedTags, requiresReason, blockedReasons,
+         relatedArtifacts]
+      properties:
+        repository:
+          type: string
+        digest:
+          type: string
+        affectedTags:
+          type: array
+          items:
+            type: string
+        requiresReason:
+          type: boolean
+        blockedReasons:
+          type: array
+          items:
+            type: string
+        relatedArtifacts:
+          type: array
+          items:
+            type: string
+    ArtifactDeletion:
+      type: object
+      required:
+        [id, repositoryId, repository, digest, affectedTags, actorId, reason,
+         status, startedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        repositoryId:
+          type: string
+          format: uuid
+        repository:
+          type: string
+        digest:
+          type: string
+        affectedTags:
+          type: array
+          items:
+            type: string
+        actorId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, failed]
+        message:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+    RepositorySelection:
+      type: object
+      required: [repository]
+      properties:
+        repository:
+          type: string
+          minLength: 1
+          maxLength: 255
+    InventoryState:
+      type: string
+      enum: [active, untagged, missing, deleted]
+    RepositoryProfile:
+      type: string
+      enum: [unknown, container_image, terraform_module, sbom, generic_oci, mixed]
+    ArtifactKind:
+      type: string
+      enum:
+        [container_image, image_index, terraform_module, sbom_spdx,
+         sbom_cyclonedx, signature, helm_chart, generic_oci, unknown_oci]
+    ArtifactRelationship:
+      type: string
+      enum: [primary, referrer]
+    ClassificationConfidence:
+      type: string
+      enum: [none, low, medium, high]
+    ManifestInventory:
+      type: object
+      required:
+        [id, repositoryId, digest, observedKind, artifactRelationship,
+         classificationSource, classificationConfidence, manifestSize, tags,
+         state, firstSeenAt, lastSeenAt]
+      properties:
+        id:
+          type: string
+        repositoryId:
+          type: string
+        digest:
+          type: string
+        mediaType:
+          type: string
+        artifactType:
+          type: string
+        subjectDigest:
+          type: string
+        observedKind:
+          $ref: "#/components/schemas/ArtifactKind"
+        artifactRelationship:
+          $ref: "#/components/schemas/ArtifactRelationship"
+        classificationSource:
+          type: string
+        classificationConfidence:
+          $ref: "#/components/schemas/ClassificationConfidence"
+        manifestSize:
+          type: integer
+          format: int64
+        tags:
+          type: array
+          items:
+            type: string
+        state:
+          $ref: "#/components/schemas/InventoryState"
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastPushedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastSeenAt:
+          type: string
+          format: date-time
+        untaggedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+    LifecycleDecision:
+      type: string
+      enum: [eligible, retained, blocked]
+    LifecyclePreviewItem:
+      type: object
+      required: [id, digest, tags, decision, reasons]
+      properties:
+        id:
+          type: string
+        digest:
+          type: string
+        mediaType:
+          type: string
+        artifactType:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        decision:
+          $ref: "#/components/schemas/LifecycleDecision"
+        reasons:
+          type: array
+          items:
+            type: string
+    LifecyclePreview:
+      type: object
+      required:
+        [id, repositoryId, repository, status, inventoryAt, createdBy, createdAt,
+         expiresAt, eligibleCount, retainedCount, blockedCount, policyVersion,
+         evaluatorVersion, items]
+      properties:
+        id:
+          type: string
+        repositoryId:
+          type: string
+        repository:
+          type: string
+        status:
+          type: string
+          enum: [ready, executing, executed, expired]
+        inventoryAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        eligibleCount:
+          type: integer
+        retainedCount:
+          type: integer
+        blockedCount:
+          type: integer
+        policyVersion:
+          type: integer
+          minimum: 0
+        evaluatorVersion:
+          type: integer
+          minimum: 1
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LifecyclePreviewItem"
+    CreateLifecycleRunRequest:
+      type: object
+      required: [previewId, reason]
+      properties:
+        previewId:
+          type: string
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    LifecycleRunItem:
+      type: object
+      required: [id, digest, status]
+      properties:
+        id:
+          type: string
+        digest:
+          type: string
+        status:
+          type: string
+          enum: [deleted, skipped, failed]
+        message:
+          type: string
+    LifecycleRun:
+      type: object
+      required:
+        [id, previewId, repositoryId, repository, actorId, reason, status, startedAt, items]
+      properties:
+        id:
+          type: string
+        previewId:
+          type: string
+        repositoryId:
+          type: string
+        repository:
+          type: string
+        actorId:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, partially_completed, failed]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LifecycleRunItem"
+    Integration:
+      type: object
+      required: [key, name, category, status, capabilities]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        status:
+          type: string
+          enum: [planned, available, configured, disabled]
+        capabilities:
+          type: array
+          items:
+            type: string
+        documentationUrl:
+          type: string
+          format: uri
+          nullable: true
+    RegistryToken:
+      type: object
+      required: [token, access_token, expires_in, issued_at]
+      properties:
+        token:
+          type: string
+        access_token:
+          type: string
+        expires_in:
+          type: integer
+        issued_at:
+          type: string
+          format: date-time

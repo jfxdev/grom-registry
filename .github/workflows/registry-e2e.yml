@@ -1,0 +1,44 @@
+name: Registry E2E
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  registry-e2e:
+    name: Registry E2E (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Verify Docker prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
+          docker compose version
+
+      - name: Run mandatory registry journey
+        env:
+          GROM_RUN_REGISTRY_E2E: "1"
+        run: make test-registry-e2e

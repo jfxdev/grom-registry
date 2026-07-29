@@ -1,0 +1,10 @@
+.git
+.env
+.DS_Store
+data
+backend/data
+backend/grom
+frontend/node_modules
+frontend/dist
+coverage
+*.out
