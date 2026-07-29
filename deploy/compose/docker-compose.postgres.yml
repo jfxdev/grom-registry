@@ -1,0 +1,25 @@
+services:
+  grom:
+    environment:
+      GROM_DATABASE_URL: postgres://grom:${GROM_POSTGRES_PASSWORD:-grom-local-password}@postgres:5432/grom?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: grom
+      POSTGRES_USER: grom
+      POSTGRES_PASSWORD: ${GROM_POSTGRES_PASSWORD:-grom-local-password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grom -d grom"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

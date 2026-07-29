@@ -1,0 +1,139 @@
+# Grom domain model inventory
+
+This file is the canonical inventory of fundamental structs, domain entities, value objects, and their ownership.
+It is intended to make architectural types easy to locate and prevent duplicate definitions.
+
+## Fundamental structs
+
+Target package: `backend/internal/foundation`.
+
+| Struct | Purpose | Key fields |
+|---|---|---|
+| `ID` | Application-generated portable identifier | String UUID value |
+| `PrincipalRef` | Reference to a user or service account across contexts | Principal kind and ID |
+| `PageRequest` | Validated pagination input | Cursor and limit |
+| `PageResult[T]` | Generic paginated result | Items and next cursor |
+| `Timestamps` | Common creation/update metadata where both are meaningful | CreatedAt and UpdatedAt |
+| `FieldError` | Stable field-level validation failure | Field, code, message |
+| `AppError` | Application-wide classified error | Code, message, fields, cause |
+
+These structs must remain free of Bun persistence tags and HTTP framework dependencies.
+
+## Identity context
+
+| Type | Kind | Responsibility |
+|---|---|---|
+| `User` | Entity | Human identity, password credential, and account status |
+| `PasswordReset` | Entity | Expiring, single-use password-reset capability stored only as a public identifier and secret hash |
+| `ServiceAccount` | Entity | Non-human automation identity |
+| `APIToken` | Child entity | Revocable long-lived registry credential owned by exactly one `ServiceAccount` through `ServiceAccountID` |
+| `Session` | Entity | Web authentication session |
+| `Username` | Value object | Normalized registry login name |
+| `Email` | Value object | Normalized human email |
+| `TokenSecret` | Value object | Reveal-once plaintext used only at creation/verification boundaries |
+
+Identity verifies credentials but does not decide repository access.
+
+## Projects context
+
+| Type | Kind | Responsibility |
+|---|---|---|
+| `Project` | Entity | Immutable project slug, display metadata, and administrator-controlled lifecycle |
+| `Membership` | Entity | Principal assignment and project role |
+| `ProjectSlug` | Value object | First repository path segment and authorization boundary |
+| `ProjectRole` | Value object | Reader, Writer, or Admin |
+| `AccessDecision` | Value object | Allowed subset of requested project actions |
+
+Projects owns the authorization policy that maps memberships and roles to allowed actions.
+Only installation administrators create or delete projects. Deletion is rejected
+while Registry reports any logical repository for the project; an accepted
+deletion cascades only the now-empty project's memberships.
+
+## Registry context
+
+| Type | Kind | Responsibility |
+|---|---|---|
+| `RepositoryScope` | Value object | Parsed repository name and requested actions |
+| `RepositoryName` | Value object | Project-prefixed OCI repository path |
+| `RegistryAction` | Value object | Pull, push, or delete request |
+| `TokenGrant` | Value object | Authorized repository actions encoded in a short-lived JWT |
+| `RepositorySummary` | Read model | Repository data presented in the management API |
+| `ManifestSummary` | Read model | Digest, media type, size, and available metadata |
+| `Repository` | Entity | Project-owned logical OCI repository with creation provenance, a passive inferred content profile, and an optimistic policy-set version |
+| `Policy` | Child entity | Typed, replaceable repository behavior for protection, immutability, retention, tag naming, or manual deletion |
+| `PolicyPreset` | Read model | Global read-only recommendation used only to populate the repository creation form |
+| `ArtifactDeletionPreview` | Read model | Digest, aliases, OCI relationships, and deletion requirements resolved immediately before deletion |
+| `ArtifactDeletion` | Entity | Persisted, audited result of one manually confirmed manifest deletion |
+| `ManifestInventory` | Entity | Historical metadata for a Distribution manifest, including aliases, observation times, OCI type, and subject relationship |
+| `ManifestObservation` | Value object | Metadata captured from a successful manifest push or reconciliation |
+| `ManifestClassification` | Value object | Observed OCI kind, primary/referrer relationship, inferred repository profile, evidence source, and confidence |
+| `LifecyclePreview` | Entity | Persisted, expiring dry-run calculated from a reconciled inventory, policy-set version, and evaluator version |
+| `LifecyclePreviewItem` | Child entity | Digest-level eligible, retained, or blocked lifecycle decision with expected aliases and reasons |
+| `LifecycleRun` | Entity | Audited manual execution created from exactly one valid preview |
+| `LifecycleRunItem` | Child entity | Revalidated digest deletion, skip, or failure result |
+
+Repository policies belong to exactly one repository and therefore inherit its
+project boundary. The complete set is replaced under an optimistic repository
+policy version, allowing push-created and reconciled repositories to receive
+policies after creation without silently overwriting concurrent changes.
+Presets are not persisted with projects or repositories and have no runtime
+effect by themselves. Registry does not own project roles or identity
+credentials.
+
+Projects are created only by installation administrators. When an authenticated
+registry client requests push scope, Grom may idempotently create an empty
+logical repository only when its project already exists and the principal
+currently has Writer or Admin membership. The same short-lived token grants
+push, allowing the first upload to succeed. Reader access and pull requests
+never create repositories.
+
+Distribution remains the content source of truth. The Registry inventory is the
+historical decision index used for lifecycle behavior; it never stores manifest
+or blob payloads. Manifests participating in an OCI subject/referrer relationship
+are blocked from lifecycle and manual deletion until an explicit cascade policy
+exists.
+Only tagged primary manifests influence a repository profile. Auxiliary referrers
+remain visible in the inventory without changing the profile. Conflicting
+specific primary classifications produce a reviewable `mixed` profile; inference
+never activates a policy or rejects content.
+
+## Audit context
+
+| Type | Kind | Responsibility |
+|---|---|---|
+| `AuditEvent` | Entity | Immutable record of a security-sensitive action |
+| `AuditAction` | Value object | Stable event action identifier |
+| `AuditResource` | Value object | Referenced resource kind and ID |
+
+The Audit context records user password changes, administrator reset-link
+creation, completed password resets, lifecycle previews, and manual-execution events.
+Detailed per-digest outcomes remain in Registry lifecycle run items.
+
+## Integrations context
+
+| Type | Kind | Responsibility |
+|---|---|---|
+| `IntegrationDescriptor` | Read model | Backend-owned integration catalog entry |
+| `IntegrationKey` | Value object | Stable provider identifier |
+| `IntegrationStatus` | Value object | Planned, available, configured, or disabled |
+| `IntegrationCapability` | Value object | Provider capability such as scan-on-push |
+
+Only planned/read-only descriptors are implemented in the MVP.
+
+## Constants ownership
+
+Stable backend constants are defined in `backend/internal/constants`, split by concern.
+Externally visible enum values are described by OpenAPI and generated for the frontend.
+Frontend-only constants are defined under `frontend/src/shared/constants`.
+
+Do not manually duplicate server-owned roles, statuses, principal kinds, or registry actions in frontend code.
+
+## Update checklist
+
+When adding or changing an architectural type:
+
+1. Confirm its owning bounded context.
+2. Reuse a fundamental struct when semantics match exactly.
+3. Add a new foundation struct only when multiple contexts require identical semantics.
+4. Keep ORM models and transport DTOs out of this inventory unless they become architectural contracts.
+5. Update this file and `docs/code-map.md` in the same change.

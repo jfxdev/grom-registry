@@ -1,0 +1,76 @@
+// @vitest-environment jsdom
+
+import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
+import { flushPromises, mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import UserProfilePage from './UserProfilePage.vue'
+
+const mocks = vi.hoisted(() => ({
+  changePassword: vi.fn(),
+  user: {
+    id: '8a24b252-3aa7-4cc7-8384-52441dab9f1d',
+    email: 'alex@example.com',
+    username: 'alex',
+    systemAdmin: false,
+    createdAt: '2026-07-27T00:00:00Z',
+  },
+}))
+
+vi.mock('@/modules/auth/api/session', () => ({
+  changePassword: mocks.changePassword,
+}))
+
+vi.mock('@/modules/auth/store/session', () => ({
+  useSessionStore: () => ({
+    user: mocks.user,
+  }),
+}))
+
+function mountPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: { mutations: { retry: false } },
+  })
+  return mount(UserProfilePage, {
+    global: { plugins: [[VueQueryPlugin, { queryClient }]] },
+  })
+}
+
+describe('UserProfilePage', () => {
+  beforeEach(() => {
+    mocks.changePassword.mockReset()
+  })
+
+  it('does not submit mismatched password confirmation', async () => {
+    const wrapper = mountPage()
+    const passwordInputs = wrapper.findAll('input[type="password"]')
+
+    await passwordInputs[0]!.setValue('current-password')
+    await passwordInputs[1]!.setValue('replacement-password')
+    await passwordInputs[2]!.setValue('different-password')
+    await wrapper.get('form').trigger('submit')
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('do not match')
+    expect(mocks.changePassword).not.toHaveBeenCalled()
+  })
+
+  it('changes the password after confirming the current password', async () => {
+    mocks.changePassword.mockResolvedValue(undefined)
+    const wrapper = mountPage()
+    const passwordInputs = wrapper.findAll('input[type="password"]')
+
+    await passwordInputs[0]!.setValue('current-password')
+    await passwordInputs[1]!.setValue('replacement-password')
+    await passwordInputs[2]!.setValue('replacement-password')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(mocks.changePassword).toHaveBeenCalledWith(
+      {
+        currentPassword: 'current-password',
+        newPassword: 'replacement-password',
+      },
+      expect.any(Object),
+    )
+    expect(wrapper.get('[role="status"]').text()).toContain('changed successfully')
+  })
+})

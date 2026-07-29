@@ -1,0 +1,33 @@
+version: 0.1
+
+log:
+  level: info
+  formatter: json
+
+storage:
+  filesystem:
+    rootdirectory: /var/lib/registry
+  delete:
+    enabled: true
+
+http:
+  addr: :5000
+  headers:
+    X-Content-Type-Options:
+      - nosniff
+
+auth:
+  token:
+    realm: http://localhost:8080/auth/token
+    service: grom-registry
+    issuer: grom
+    rootcertbundle: /certs/signing-cert.pem
+    jwks: /certs/jwks.json
+
+notifications:
+  events:
+    includereferences: true
+
+maintenance:
+  readonly:
+    enabled: false

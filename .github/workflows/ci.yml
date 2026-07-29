@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Check Go formatting
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l .)"
+          if [[ -n "${unformatted}" ]]; then
+            printf 'Go files require gofmt:\n%s\n' "${unformatted}"
+            exit 1
+          fi
+
+      - name: Verify generated OpenAPI code
+        working-directory: backend
+        run: |
+          go tool oapi-codegen --config oapi-codegen.yaml api/openapi.yaml
+          git -C .. diff --exit-code
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          mkdir -p coverage
+          go test -covermode=atomic -coverprofile=coverage/backend.out ./...
+
+      - name: Upload backend coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          disable_search: true
+          fail_ci_if_error: true
+          files: backend/coverage/backend.out
+          flags: backend
+          name: backend
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  go-lint:
+    name: Go Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.4
+          working-directory: backend
+          args: --timeout=5m
+
+  go-vulnerability-check:
+    name: Go Vulnerability Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          repo-checkout: false
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+          work-dir: backend
+          go-package: ./...
+          output-format: text
+
+  frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm run test:coverage
+
+      - name: Upload frontend coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          disable_search: true
+          fail_ci_if_error: true
+          files: frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Run frontend typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Build production frontend
+        working-directory: frontend
+        run: npm run build
