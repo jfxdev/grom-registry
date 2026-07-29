@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"context"
+	"errors"
 
 	"github.com/uptrace/bun"
 )
@@ -42,7 +43,6 @@ func init() {
 		return nil
 	}, func(context.Context, *bun.DB) error {
 		// SQLite cannot portably drop columns on every supported version.
-		// Forward migrations are authoritative, so this rollback is intentionally a no-op.
-		return nil
+		return errors.New("migration 202607270003 rollback is unsupported")
 	})
 }

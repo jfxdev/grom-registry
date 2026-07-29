@@ -16,7 +16,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `frontend/` | Vue web application |
 | `deploy/compose/` | Local and small-installation deployment |
 | `deploy/distribution/` | CNCF Distribution configuration |
-| `.github/workflows/ci.yml` | Mandatory Go formatting/tests, golangci-lint, govulncheck, and frontend lint/tests/typecheck/build checks |
+| `.github/workflows/ci.yml` | Mandatory Go formatting/tests, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and separate backend/frontend Codecov uploads |
 | `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry acceptance check for pull requests, main, and merge queues |
 | `docs/` | Architecture, domain inventory, operations, decisions, and visual identity |
 | `AGENTS.md` | Current operational instructions for coding agents |
@@ -135,6 +135,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 |---|---|
 | `make generate` | Regenerate Go and TypeScript models from OpenAPI |
 | `make test` | Run backend tests, frontend lint, tests, and type checks |
+| `make test-coverage` | Generate Go and frontend LCOV coverage reports used by Codecov |
 | `make test-registry-e2e` | Run the isolated real-Docker authorization, policy, JWT, and inventory journey |
 | `make build` | Build frontend and backend |
 | `make dev` | Start the Go backend and Vite frontend together |

@@ -291,8 +291,11 @@ Current evidence:
 
 - `.github/workflows/ci.yml` runs stable `Backend Tests` and `Frontend Tests`
   checks on pull requests, `main`, merge queues, and manual dispatch. Backend
-  checks enforce `gofmt` and `go test ./...`; frontend checks use `npm ci` and
-  run lint, Vitest, TypeScript checking, and the production Vite build.
+  checks enforce `gofmt` and run Go tests with an atomic coverage profile;
+  frontend checks use `npm ci` and run lint, Vitest with LCOV coverage,
+  TypeScript checking, and the production Vite build. Both jobs upload their
+  reports to Codecov with separate `backend` and `frontend` flags through the
+  repository's `CODECOV_TOKEN` Actions secret.
 - The same workflow runs stable `Go Lint` and `Go Vulnerability Check` jobs.
   golangci-lint 2.11.4 performs static analysis, while the official Go
   govulncheck action uses text output so reachable known vulnerabilities fail
@@ -1394,7 +1397,8 @@ Grom instances are supported.
   generated-code freshness and bidirectional route coverage remain open.
 - **Implemented:** CI enforces Go formatting and tests, SQLite integration,
   frontend lint/tests/typechecking/build, golangci-lint, govulncheck, and the
-  isolated real-Docker registry journey.
+  isolated real-Docker registry journey. Backend and frontend unit coverage
+  reports are uploaded separately to Codecov.
 - **Pending:** production image build and scanning, broader dependency/container
   scanning, and PostgreSQL CI before PostgreSQL is advertised as fully
   supported.

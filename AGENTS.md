@@ -16,6 +16,7 @@ Keep this file aligned with the code that actually exists.
 
 - Generate Go and TypeScript OpenAPI models: `make generate`
 - Run backend and frontend checks: `make test`
+- Generate backend and frontend coverage reports: `make test-coverage`
 - Run the isolated real-Docker registry journey: `make test-registry-e2e`
 - Build both applications: `make build`
 - Start backend and frontend together: `cp .env.example .env && make dev`
@@ -44,6 +45,9 @@ The mandatory GitHub status checks are `Backend Tests`, `Frontend Tests`,
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
+The `Backend Tests` and `Frontend Tests` jobs upload separate `backend` and
+`frontend` coverage reports to Codecov. They require the repository Actions
+secret `CODECOV_TOKEN`; never commit or log its plaintext value.
 
 Do not edit generated files under `backend/internal/generated/openapi` or `frontend/src/shared/api/generated`.
 

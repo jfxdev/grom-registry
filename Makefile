@@ -1,4 +1,4 @@
-.PHONY: generate test test-registry-e2e build dev compose-up compose-up-postgres compose-down
+.PHONY: generate test test-coverage test-registry-e2e build dev compose-up compose-up-postgres compose-down
 
 DEV_ENV_FILE ?= .env
 
@@ -9,6 +9,10 @@ generate:
 test:
 	cd backend && go test ./...
 	cd frontend && npm run lint && npm test && npm run typecheck
+
+test-coverage:
+	cd backend && mkdir -p coverage && go test -covermode=atomic -coverprofile=coverage/backend.out ./...
+	cd frontend && npm run test:coverage
 
 test-registry-e2e:
 	cd backend && GROM_RUN_REGISTRY_E2E=1 go test -count=1 -timeout=10m ./tests/registrye2e

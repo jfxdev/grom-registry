@@ -1,5 +1,7 @@
 # Grom
 
+[![codecov](https://codecov.io/gh/jfxdev/grom-registry/graph/badge.svg?token=5NOmSFnvkT)](https://codecov.io/gh/jfxdev/grom-registry)
+
 Lightweight OCI registry with project-scoped access control.
 
 ## What is included

@@ -386,7 +386,7 @@ func runRepositoryPersistenceFlow(
 		t.Fatal("expected revoked service account token authentication to fail")
 	}
 
-	firstMovedAt := time.Now().UTC().Add(-2 * time.Minute)
+	firstMovedAt := time.Now().UTC().Truncate(time.Microsecond).Add(-2 * time.Minute)
 	if err := registryStore.UpsertManifestObservation(ctx, repository.ID, registrydomain.ManifestObservation{
 		Digest: "sha256:moved-from", Tag: "moving",
 		MediaType: "application/vnd.oci.image.manifest.v1+json",
