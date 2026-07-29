@@ -506,7 +506,7 @@ implemented. The `Coming soon` controls cannot save configuration.
 
 ## 17. Operational capabilities
 
-**Availability: Runtime and API**
+**Availability: Web, API, and runtime**
 
 - One Go process serves the management API, registry-token service, streaming
   gateway, and embedded Vue application.
@@ -521,10 +521,20 @@ implemented. The `Coming soon` controls cannot save configuration.
   documentation at `/api/docs`.
 - Local Compose profiles support the default SQLite stack and an optional
   PostgreSQL stack.
+- Installation administrators create, monitor, list five at a time, download,
+  and delete complete SQLite/local-volume recovery points from **Backup &
+  recovery**. Local deletion requires typed confirmation and does not affect
+  previously downloaded bundles.
+- Backup briefly drains and blocks mutations and registry traffic while an
+  isolated, networkless agent snapshots the recovery-critical volumes.
+- The same Grom image provides a standalone, loopback-only recovery UI that
+  validates an uploaded bundle and restores empty volumes after total loss.
+- The installed backup and recovery workflow does not require a source
+  checkout, `make`, a Docker socket, or a shell inside the application.
 
 Production installations require HTTPS and secure cookies. Startup rejects a
 non-local public URL that does not satisfy both requirements. The default
-two-container, SQLite configuration is designed for a small single-instance
+SQLite configuration is designed for a small single-instance
 installation; active-active Grom replicas are not supported.
 
 ## 18. Current channel coverage
@@ -549,6 +559,8 @@ installation; active-active Grom replicas are not supported.
 | Passive profile inference | Displayed | Returned | Yes |
 | Manual deletion preview/execution/history | Yes | Yes | Yes |
 | Lifecycle preview/execution/history | Yes | Yes | Yes |
+| Backup creation/paginated list/download/confirmed deletion | Yes | Yes | Isolated agent |
+| Empty-volume disaster recovery | Local recovery UI | Local recovery service | Staged restore |
 | Audit event recording | No | No | Yes |
 | Integrations catalog | Read-only | Read-only | No provider |
 
@@ -568,6 +580,8 @@ The executable product does not currently provide:
 - registry mirroring or pull-through cache;
 - OIDC or enterprise identity providers;
 - multi-instance active-active operation;
+- scheduled backups, remote-backup credentials, PostgreSQL recovery, or S3
+  recovery;
 - billing, quotas, replication, or a Kubernetes operator.
 
 These omissions are product boundaries, not implicit partial features.

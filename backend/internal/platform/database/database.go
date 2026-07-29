@@ -93,6 +93,21 @@ func Migrate(ctx context.Context, db *bun.DB, kind Kind, lockWait time.Duration,
 	return nil
 }
 
+func Checkpoint(ctx context.Context, db *bun.DB, kind Kind) error {
+	if kind != SQLite {
+		return fmt.Errorf("integrated backup supports SQLite only")
+	}
+	var busy, logFrames, checkpointedFrames int
+	if err := db.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").
+		Scan(&busy, &logFrames, &checkpointedFrames); err != nil {
+		return fmt.Errorf("checkpoint sqlite database: %w", err)
+	}
+	if busy != 0 {
+		return fmt.Errorf("checkpoint sqlite database: database remained busy")
+	}
+	return nil
+}
+
 func migrationLock(ctx context.Context, db *bun.DB, kind Kind, wait time.Duration) (func(), error) {
 	if kind == SQLite {
 		sqliteMigrationMu.Lock()

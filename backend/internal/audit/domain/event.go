@@ -20,4 +20,5 @@ type Event struct {
 
 type Store interface {
 	Record(ctx context.Context, event *Event) error
+	RecordOnce(ctx context.Context, event *Event) error
 }

@@ -46,7 +46,7 @@ scanner execution.
 | Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, and mandatory backend/frontend/lint/Go-vulnerability CI jobs exist | OpenAPI validation/freshness, explicit SQLite integration CI, image build and remaining dependency/container scanning; PostgreSQL CI before claiming full support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
 | Phase 2: registry browsing and core UI | Partially accepted | Project, repository, membership, user, service-account, policy, deletion and lifecycle flows exist | Manifest detail, essential audit persistence, missing UI management actions, pagination decision and first-push Playwright coverage |
-| Phase 3: operational hardening | Open | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution and a non-root Grom image exist | Default backup/restore, key rotation, upgrade tests, Docker smoke test and release artifacts; expanded matrices follow advertised capabilities |
+| Phase 3: operational hardening | In progress | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, and UI-driven quiesced backup plus same-image recovery exist | Key rotation, upgrade tests, Docker smoke test and release artifacts; expanded matrices follow advertised capabilities |
 | Phase 4: integrations placeholder | Accepted for MVP | Backend-driven planned catalog and disabled read-only UI exist | ADR is required before active event delivery or scan-result storage, not for the inert placeholder |
 
 `make test` passed on July 29, 2026, including backend tests, the SQLite
@@ -401,6 +401,8 @@ Acceptance:
 
 ### Completion step 7: complete operational hardening
 
+**Backup and restore status: implemented and accepted on July 29, 2026.**
+
 Work:
 
 1. Add request and server timeouts that protect management traffic without
@@ -409,7 +411,8 @@ Work:
    single-instance deployment profile.
 3. Test PostgreSQL advisory-lock timeout and recovery.
 4. First write and test backup and restore for SQLite, signing keys,
-   Distribution metadata, and local blob storage.
+   Distribution metadata, and local blob storage. Follow the detailed
+   [`backup and disaster recovery implementation plan`](backup-and-disaster-recovery-implementation-plan.md).
 5. Write and test signing-key rotation procedures, including Distribution trust
    updates and in-flight JWT behavior.
 6. Add upgrade tests from every supported previous release.
@@ -1470,7 +1473,8 @@ browsing page is post-MVP unless promoted explicitly.
   HTTPS/cookie validation, and graceful shutdown exist; streaming-specific
   timeout evidence, backup/restore documentation, key rotation, and upgrade
   tests remain.
-- **Pending:** default SQLite/local-storage recovery matrix.
+- **Implemented:** the default SQLite/local-storage recovery matrix is covered
+  by the mandatory `Backup Restore E2E` volume-loss journey.
 - **Implemented:** mandatory Docker protocol acceptance through the isolated
   registry E2E workflow.
 - **Capability-specific:** PostgreSQL, S3, extended ORAS/referrer, and OCI
@@ -1562,7 +1566,7 @@ Status vocabulary:
 | 16 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Partial | Bidirectional route/contract test and production docs smoke check |
 | 17 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Partial | Add frontend generated-code freshness and bidirectional route/contract checks |
 | 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
-| 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Missing | Automated or recorded backup/restore acceptance run |
+| 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |
 | 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Partial | Complete step 2 and verify durable events |
 | 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Missing | User-disable API/UI implementation and session-revocation acceptance test |
 | 22 | ORAS can push and pull representative generic OCI content | Generic OCI support | Missing | ORAS smoke job before advertising generic OCI support |

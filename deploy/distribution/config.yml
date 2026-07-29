@@ -29,5 +29,7 @@ notifications:
     includereferences: true
 
 maintenance:
+  uploadpurging:
+    enabled: false
   readonly:
     enabled: false

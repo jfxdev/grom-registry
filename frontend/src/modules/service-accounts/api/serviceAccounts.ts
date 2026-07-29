@@ -3,13 +3,15 @@ import type { APIToken, CreatedToken, ServiceAccount } from '@/shared/api/models
 
 export const serviceAccountKeys = {
   all: ['service-accounts'] as const,
+  list: (includeDisabled = false) => ['service-accounts', includeDisabled ? 'all' : 'active'] as const,
   tokens: (serviceAccountId: string) => ['service-accounts', serviceAccountId, 'tokens'] as const,
 }
 
-export const listServiceAccounts = () => apiRequest<ServiceAccount[]>('/api/v1/service-accounts')
+export const listServiceAccounts = (includeDisabled = false) =>
+  apiRequest<ServiceAccount[]>(`/api/v1/service-accounts${includeDisabled ? '?includeDisabled=true' : ''}`)
 export const createServiceAccount = (input: { name: string; username: string; description: string }) =>
   apiRequest<ServiceAccount>('/api/v1/service-accounts', { method: 'POST', body: JSON.stringify(input) })
-export const deleteServiceAccount = (id: string) =>
+export const disableServiceAccount = (id: string) =>
   apiRequest<void>(`/api/v1/service-accounts/${id}`, { method: 'DELETE' })
 export const listServiceAccountTokens = (serviceAccountId: string) =>
   apiRequest<APIToken[]>(`/api/v1/service-accounts/${serviceAccountId}/tokens`)

@@ -1,4 +1,4 @@
-.PHONY: generate test test-coverage test-registry-e2e build dev compose-up compose-up-postgres compose-down
+.PHONY: generate test test-coverage test-registry-e2e test-backup-restore-e2e build dev compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
 
 DEV_ENV_FILE ?= .env
 
@@ -17,11 +17,15 @@ test-coverage:
 test-registry-e2e:
 	cd backend && GROM_RUN_REGISTRY_E2E=1 go test -count=1 -timeout=10m ./tests/registrye2e
 
+test-backup-restore-e2e:
+	cd backend && GROM_RUN_BACKUP_RESTORE_E2E=1 go test -count=1 -timeout=15m ./tests/backuprestoree2e
+
 build:
 	cd frontend && npm run build
 	find backend/internal/webassets/dist -type f ! -name .keep -delete
 	cp -R frontend/dist/. backend/internal/webassets/dist/
 	cd backend && go build ./cmd/grom
+	cd backend && go build ./cmd/grom-backup
 
 dev:
 	@if [ ! -f "$(DEV_ENV_FILE)" ]; then \
@@ -61,3 +65,25 @@ compose-up-postgres:
 
 compose-down:
 	docker compose --env-file .env -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.postgres.yml down
+
+reset-local:
+	@if [ ! -f "$(DEV_ENV_FILE)" ]; then \
+		echo "Missing $(DEV_ENV_FILE). Run: cp .env.example .env"; \
+		exit 1; \
+	fi
+	@echo "Resetting the local Grom stack and deleting its development data..."
+	docker compose --env-file "$(DEV_ENV_FILE)" -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.postgres.yml down --volumes --remove-orphans
+	rm -rf -- "$(CURDIR)/backend/data" "$(CURDIR)/data"
+	@echo "Local reset complete. Docker volumes and local development data were removed."
+
+backup:
+	@test -n "$(BACKUP_DIR)" || (echo "BACKUP_DIR must be an explicit absolute host path" >&2; exit 1)
+	@deploy/backup/backup-compose.sh create "$(BACKUP_DIR)"
+
+backup-inspect:
+	@test -n "$(BACKUP_PATH)" || (echo "BACKUP_PATH must be an explicit absolute backup path" >&2; exit 1)
+	@deploy/backup/backup-compose.sh inspect "$(BACKUP_PATH)"
+
+restore:
+	@test -n "$(BACKUP_PATH)" || (echo "BACKUP_PATH must be an explicit absolute backup path" >&2; exit 1)
+	@deploy/backup/restore-compose.sh "$(BACKUP_PATH)"

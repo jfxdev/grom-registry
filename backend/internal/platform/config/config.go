@@ -43,6 +43,7 @@ type Config struct {
 	AuthFailureLimit  int
 	AuthFailureWindow time.Duration
 	AuthBlockDuration time.Duration
+	BackupAgentSocket string
 }
 
 func Load() (Config, error) {
@@ -106,6 +107,7 @@ func Load() (Config, error) {
 		AuthFailureLimit:  authFailureLimit,
 		AuthFailureWindow: authFailureWindow,
 		AuthBlockDuration: authBlockDuration,
+		BackupAgentSocket: env("GROM_BACKUP_AGENT_SOCKET", ""),
 	}
 	if cfg.BootstrapEmail == "" || cfg.BootstrapUsername == "" || cfg.BootstrapPassword == "" {
 		return Config{}, fmt.Errorf("bootstrap administrator credentials cannot be empty")

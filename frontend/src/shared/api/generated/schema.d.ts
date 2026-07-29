@@ -174,7 +174,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["deleteServiceAccount"];
+        delete: operations["disableServiceAccount"];
         options?: never;
         head?: never;
         patch?: never;
@@ -500,6 +500,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listBackups"];
+        put?: never;
+        post: operations["createBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/backups/{backupId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteBackup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/backups/{backupId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadBackup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/token": {
         parameters: {
             query?: never;
@@ -530,6 +578,36 @@ export interface components {
             profile: "development" | "permissive" | "strict";
             /** @description True only for an explicitly opted-in permissive HTTP deployment */
             insecureHttp: boolean;
+        };
+        /** @enum {string} */
+        BackupStatus: "starting" | "quiescing" | "creating" | "complete" | "failed";
+        BackupOperation: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["BackupStatus"];
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            completedAt?: string | null;
+            message?: string | null;
+        };
+        BackupSummary: {
+            /** Format: uuid */
+            backupId: string;
+            /** Format: date-time */
+            createdAt: string;
+            gromVersion: string;
+            /** Format: int64 */
+            totalBytes: number;
+        };
+        BackupOverview: {
+            available: boolean;
+            activeOperation?: components["schemas"]["BackupOperation"] | null;
+            backups: components["schemas"]["BackupSummary"][];
+            totalBackups: number;
+            /** @enum {integer} */
+            pageSize: 5;
+            nextCursor?: string | null;
         };
         Status: {
             status: string;
@@ -594,6 +672,8 @@ export interface components {
             description: string;
             /** Format: date-time */
             createdAt: string;
+            /** Format: date-time */
+            disabledAt?: string | null;
         };
         CreateServiceAccountRequest: {
             name: string;
@@ -1200,7 +1280,10 @@ export interface operations {
     };
     listServiceAccounts: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Include disabled service accounts in the administrative listing. */
+                includeDisabled?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1243,7 +1326,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
-    deleteServiceAccount: {
+    disableServiceAccount: {
         parameters: {
             query?: never;
             header?: never;
@@ -1989,6 +2072,133 @@ export interface operations {
                     "application/json": components["schemas"]["Integration"];
                 };
             };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listBackups: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup availability, active operation, and completed recovery points */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupOverview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup operation accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupOperation"];
+                };
+            };
+            /** @description A backup is already running or maintenance cannot begin */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The internal backup agent is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backupId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Another backup mutation is running */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The internal backup agent is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    downloadBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backupId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Portable tar bundle containing the complete backup set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-tar": string;
+                };
+            };
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

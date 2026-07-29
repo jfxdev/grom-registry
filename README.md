@@ -16,6 +16,7 @@ Lightweight OCI registry with project-scoped access control.
 - Contract-first OpenAPI documentation at `/api/docs`.
 - OCI manifest inventory with retention dry-runs and audited manual lifecycle execution.
 - Passive repository-profile inference for container images, Terraform modules, SBOMs, and generic OCI content.
+- Installation-admin backup UI and same-image, loopback-only disaster-recovery UI.
 - Read-only integrations roadmap.
 
 ## Quick start
@@ -27,6 +28,11 @@ docker compose --env-file .env -f deploy/compose/docker-compose.yml up --build
 
 Open `http://localhost:8080` and sign in with the bootstrap credentials from `.env`.
 Change the example password before exposing Grom outside localhost.
+
+The Compose bundle builds and tags one self-contained image by default. A
+release deployment can set `GROM_IMAGE` to the desired published Grom image;
+the normal server, isolated backup agent, and disaster-recovery UI all use that
+same image.
 
 To use PostgreSQL instead of SQLite:
 
@@ -85,6 +91,19 @@ To load another environment file:
 make dev DEV_ENV_FILE=.env.development
 ```
 
+To fully reset the local installation, first stop any running `make dev`
+process and then run:
+
+```bash
+make reset-local
+```
+
+This removes the Grom, Distribution, signing-certificate, and optional
+PostgreSQL Compose volumes, orphan containers from the local stack, and the
+default `backend/data` and `data` development directories. It preserves
+`.env`, installed frontend dependencies, Docker images, and unrelated Docker
+resources.
+
 Run all checks with:
 
 ```bash
@@ -101,11 +120,19 @@ This opt-in check requires Docker Engine and Docker Compose. It uses an
 isolated Compose project on a random loopback port and removes its temporary
 containers, volumes, credentials, and image tags when it finishes.
 
+Installation administrators create and download recovery points from
+**Backup & recovery** in the web interface. If the installation volumes are
+lost, start the deployment's `recovery` profile and open the loopback recovery
+port configured by `GROM_RECOVERY_PORT`. No source checkout or `make` command
+is part of the installed backup or recovery workflow. See the
+[backup and disaster recovery guide](docs/backup-and-disaster-recovery.md).
+
 ## Documentation
 
 - [Product features and business rules](docs/product-features.md)
 - [Architecture and MVP plan](docs/architecture-and-mvp.md)
 - [Registry E2E implementation plan](docs/registry-e2e-implementation-plan.md)
+- [Backup and disaster recovery](docs/backup-and-disaster-recovery.md)
 - [Code map](docs/code-map.md)
 - [Domain model inventory](docs/domain-model.md)
 - [Agent guide](AGENTS.md)

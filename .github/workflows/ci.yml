@@ -54,7 +54,24 @@ jobs:
         working-directory: backend
         run: |
           mkdir -p coverage
-          go test -covermode=atomic -coverprofile=coverage/backend.out ./...
+          go tool gotestsum \
+            --junitfile coverage/backend-junit.xml \
+            -- \
+            -covermode=atomic \
+            -coverprofile=coverage/backend.out \
+            ./...
+
+      - name: Upload backend test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          disable_search: true
+          fail_ci_if_error: true
+          files: backend/coverage/backend-junit.xml
+          flags: backend
+          name: backend-test-results
+          report-type: test_results
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload backend coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -139,7 +156,19 @@ jobs:
 
       - name: Run frontend tests
         working-directory: frontend
-        run: npm run test:coverage
+        run: npm run test:coverage:ci
+
+      - name: Upload frontend test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          disable_search: true
+          fail_ci_if_error: true
+          files: frontend/coverage/frontend-junit.xml
+          flags: frontend
+          name: frontend-test-results
+          report-type: test_results
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload frontend coverage to Codecov
         uses: codecov/codecov-action@v5
