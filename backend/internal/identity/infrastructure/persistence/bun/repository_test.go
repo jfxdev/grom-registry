@@ -62,7 +62,7 @@ func assertListServiceAccountsCanIncludeDisabled(t *testing.T, ctx context.Conte
 	}
 	t.Cleanup(func() {
 		_, _ = db.NewDelete().Model((*serviceAccountModel)(nil)).
-			Where("id IN (?)", bun.In([]string{active.ID.String(), disabled.ID.String()})).Exec(context.Background())
+			Where("id IN (?)", bun.List([]string{active.ID.String(), disabled.ID.String()})).Exec(context.Background())
 	})
 	if err := repository.CreateServiceAccount(ctx, active); err != nil {
 		t.Fatal(err)

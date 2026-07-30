@@ -203,17 +203,10 @@ func TestManagerDoesNotHoldMutexDuringAgentAvailabilityCheck(t *testing.T) {
 	}()
 	<-agent.availableAt
 
-	acquired := make(chan struct{})
-	go func() {
-		manager.mu.Lock()
-		manager.mu.Unlock()
-		close(acquired)
-	}()
-	select {
-	case <-acquired:
-	case <-time.After(time.Second):
+	if !manager.mu.TryLock() {
 		t.Fatal("manager mutex remained locked during agent availability check")
 	}
+	manager.mu.Unlock()
 	close(agent.availableOn)
 	if err := <-result; err != nil {
 		t.Fatal(err)
