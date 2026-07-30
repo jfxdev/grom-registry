@@ -1,0 +1,93 @@
+services:
+  backup-estimate:
+    profiles: ["backup"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GROM_VERSION: ${GROM_VERSION:-dev}
+    user: "0:0"
+    entrypoint: ["/usr/local/bin/grom-backup"]
+    command: ["estimate"]
+    volumes:
+      - grom-data:/source/grom-data:ro
+      - signing-certs:/source/signing-certs:ro
+      - registry-data:/source/registry-data:ro
+    network_mode: none
+    cap_drop: ["ALL"]
+    cap_add: ["DAC_READ_SEARCH"]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+
+  backup-create:
+    profiles: ["backup"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GROM_VERSION: ${GROM_VERSION:-dev}
+    user: "0:0"
+    entrypoint: ["/usr/local/bin/grom-backup"]
+    command:
+      - create
+      - --destination
+      - /backup
+      - --deployment-profile
+      - ${GROM_DEPLOYMENT_PROFILE:-development}
+      - --distribution-config
+      - /source/distribution-config/config.yml
+    volumes:
+      - grom-data:/source/grom-data:ro
+      - signing-certs:/source/signing-certs:ro
+      - registry-data:/source/registry-data:ro
+      - distribution-config:/source/distribution-config:ro
+      - ${BACKUP_MOUNT_ROOT:?BACKUP_MOUNT_ROOT must be set to an absolute backup directory}:/backup
+    network_mode: none
+    cap_drop: ["ALL"]
+    cap_add: ["DAC_READ_SEARCH"]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+
+  backup-inspect:
+    profiles: ["backup"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GROM_VERSION: ${GROM_VERSION:-dev}
+    user: "0:0"
+    entrypoint: ["/usr/local/bin/grom-backup"]
+    command: ["inspect", "--path", "/backup/${BACKUP_SET_NAME:?BACKUP_SET_NAME must identify a backup set}"]
+    volumes:
+      - ${BACKUP_MOUNT_ROOT:?BACKUP_MOUNT_ROOT must be set to an absolute backup directory}:/backup:ro
+    network_mode: none
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+
+  backup-restore:
+    profiles: ["backup"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GROM_VERSION: ${GROM_VERSION:-dev}
+    user: "0:0"
+    entrypoint: ["/usr/local/bin/grom-backup"]
+    command:
+      - restore
+      - --path
+      - /backup/${BACKUP_SET_NAME:?BACKUP_SET_NAME must identify a backup set}
+      - --distribution-config-target
+      - /target/distribution-config/config.yml
+    volumes:
+      - ${BACKUP_MOUNT_ROOT:?BACKUP_MOUNT_ROOT must be set to an absolute backup directory}:/backup:ro
+      - grom-data:/target/grom-data
+      - signing-certs:/target/signing-certs
+      - registry-data:/target/registry-data
+      - distribution-config:/target/distribution-config
+    network_mode: none
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"

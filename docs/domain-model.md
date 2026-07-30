@@ -32,7 +32,10 @@ These structs must remain free of Bun persistence tags and HTTP framework depend
 | `Email` | Value object | Normalized human email |
 | `TokenSecret` | Value object | Reveal-once plaintext used only at creation/verification boundaries |
 
-Identity verifies credentials but does not decide repository access.
+Identity verifies credentials but does not decide repository access. On the
+first boot after a recovery restore, Identity atomically invalidates all
+restored web sessions and password-reset capabilities. Service-account API
+tokens remain durable credentials at the selected recovery point.
 
 ## Projects context
 
@@ -108,6 +111,12 @@ never activates a policy or rejects content.
 The Audit context records user password changes, administrator reset-link
 creation, completed password resets, lifecycle previews, and manual-execution events.
 Detailed per-digest outcomes remain in Registry lifecycle run items.
+Audit also records sanitized `platform.backup_created`,
+`platform.backup_delete_requested`, and `platform.backup_deleted` events, plus
+an idempotent `platform.restore_completed` event keyed by the backup ID after
+restored ephemeral credentials are invalidated. Backup manifests, operations,
+pagination cursors, and restore markers are platform-operational records rather
+than domain entities.
 
 ## Integrations context
 

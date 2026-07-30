@@ -31,7 +31,10 @@ vi.mock('@/modules/auth/store/session', () => ({
 
 vi.mock('@/modules/service-accounts/api/serviceAccounts', () => ({
   listServiceAccounts: mocks.listServiceAccounts,
-  serviceAccountKeys: { all: ['service-accounts'] },
+  serviceAccountKeys: {
+    all: ['service-accounts'],
+    list: (includeDisabled = false) => ['service-accounts', includeDisabled ? 'all' : 'active'],
+  },
 }))
 
 vi.mock('@/modules/users/api/users', () => ({
@@ -126,6 +129,16 @@ describe('ProjectPage membership management', () => {
     await buttonWithText(wrapper, 'Members').trigger('click')
 
     expect(wrapper.text()).not.toContain('Add service account')
+  })
+
+  it('uses the labelled delete button for project deletion', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const deleteButton = buttonWithText(wrapper, 'Delete project')
+
+    expect(deleteButton.classes()).toContain('grom-button-variant-delete')
+    expect(deleteButton.get('.lucide-trash-2')).toBeTruthy()
   })
 
   it('shows API errors in the member dialog', async () => {

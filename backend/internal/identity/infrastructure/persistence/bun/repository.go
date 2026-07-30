@@ -174,6 +174,16 @@ func (r *Repository) DeleteSession(ctx context.Context, publicID string) error {
 	return err
 }
 
+func (r *Repository) InvalidateEphemeralCredentials(ctx context.Context) error {
+	return r.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().Model((*sessionModel)(nil)).Where("1 = 1").Exec(ctx); err != nil {
+			return err
+		}
+		_, err := tx.NewDelete().Model((*passwordResetModel)(nil)).Where("1 = 1").Exec(ctx)
+		return err
+	})
+}
+
 func (r *Repository) CreateServiceAccount(ctx context.Context, account *identity.ServiceAccount) error {
 	model := &serviceAccountModel{
 		ID: account.ID.String(), Name: account.Name, Username: account.Username,
@@ -183,9 +193,13 @@ func (r *Repository) CreateServiceAccount(ctx context.Context, account *identity
 	return err
 }
 
-func (r *Repository) ListServiceAccounts(ctx context.Context) ([]identity.ServiceAccount, error) {
+func (r *Repository) ListServiceAccounts(ctx context.Context, includeDisabled bool) ([]identity.ServiceAccount, error) {
 	var models []serviceAccountModel
-	if err := r.db.NewSelect().Model(&models).Where("disabled_at IS NULL").OrderExpr("created_at ASC").Scan(ctx); err != nil {
+	query := r.db.NewSelect().Model(&models)
+	if !includeDisabled {
+		query = query.Where("disabled_at IS NULL")
+	}
+	if err := query.OrderExpr("created_at ASC").Scan(ctx); err != nil {
 		return nil, err
 	}
 	result := make([]identity.ServiceAccount, 0, len(models))

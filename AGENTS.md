@@ -9,6 +9,9 @@ Read these files before making architectural or cross-module changes:
 Read `docs/visual-identity.md` and `docs/visual-implementation-plan.md` before
 making broad frontend styling, branding, asset, or application-shell changes.
 
+Read `docs/backup-and-disaster-recovery-implementation-plan.md` before making
+backup, restore, persistent-volume recovery, or disaster-recovery changes.
+
 The first executable MVP is implemented.
 Keep this file aligned with the code that actually exists.
 
@@ -18,11 +21,16 @@ Keep this file aligned with the code that actually exists.
 - Run backend and frontend checks: `make test`
 - Generate backend and frontend coverage reports: `make test-coverage`
 - Run the isolated real-Docker registry journey: `make test-registry-e2e`
+- Run the isolated destructive backup/restore journey: `make test-backup-restore-e2e`
+- Exercise the low-level offline backup compatibility tool: `make backup BACKUP_DIR=/absolute/path`
+- Inspect a backup with the development tool: `make backup-inspect BACKUP_PATH=/absolute/path/to/backup`
+- Exercise low-level empty-volume restore: `make restore BACKUP_PATH=/absolute/path/to/backup`
 - Build both applications: `make build`
 - Start backend and frontend together: `cp .env.example .env && make dev`
 - Start the full local stack: `cp .env.example .env && make compose-up`
 - Start the local stack with PostgreSQL: `make compose-up-postgres`
 - Stop the local stack: `make compose-down`
+- Fully reset the local stack and delete its data: `make reset-local`
 - Backend only: `cd backend && GROM_DEPLOYMENT_PROFILE=development GROM_BOOTSTRAP_ADMIN_PASSWORD=change-this-password go run ./cmd/grom`
 - Frontend only: `cd frontend && npm run dev`
 
@@ -30,6 +38,9 @@ Keep the exact Go patch version in `backend/go.mod` and the Dockerfile builder
 image aligned. Go 1.26.5 is the current minimum because earlier 1.26 patch
 releases are affected by reachable standard-library vulnerability
 `GO-2026-5856`.
+The runtime `grom` account is fixed at UID 100 and GID 101. Keep the Dockerfile,
+restored-volume ownership, and backup-agent socket group aligned; changing these
+IDs requires an explicit volume-ownership migration.
 
 `make test-registry-e2e` requires an accessible Docker daemon and Docker
 Compose. It owns only its unique Compose project, loopback port, temporary
@@ -40,16 +51,35 @@ JWTs, so the expiry assertion is bounded but can take about one minute.
 Authenticate E2E principals immediately before their scenario because the
 shared Docker daemon may cache bearer tokens for one registry address.
 The mandatory GitHub status checks are `Backend Tests`, `Frontend Tests`,
-`Go Lint`, `Go Vulnerability Check`, and `Registry E2E (Docker)`, defined under
-`.github/workflows`. Keep these job names stable and require all five in the
+`Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`, and
+`Backup Restore E2E`, defined under `.github/workflows`. Keep these job names
+stable and require all six in the
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
 The `Backend Tests` and `Frontend Tests` jobs upload separate `backend` and
-`frontend` coverage reports to Codecov. They require the repository Actions
-secret `CODECOV_TOKEN`; never commit or log its plaintext value.
+`frontend` coverage and JUnit test-result reports to Codecov. They require the
+repository Actions secret `CODECOV_TOKEN`; never commit or log its plaintext
+value. `codecov.yml` requires at least 70% patch coverage with 1% tolerance and
+excludes only generated OpenAPI code and static frontend assets; do not lower
+the target or broaden exclusions to hide untested production code.
 
 Do not edit generated files under `backend/internal/generated/openapi` or `frontend/src/shared/api/generated`.
+
+The installed backup interface is the installation-admin web UI. Disaster
+recovery uses the `recovery` mode of the same Grom image and its local web UI.
+Never make a source checkout, `make`, a host shell script, or Docker-socket
+access a requirement of the product flow. The backup agent must remain
+network-isolated, read source volumes only, and communicate with Grom only over
+its dedicated Unix socket. Backup quiescence must drain and block management
+mutations, token exchanges, and registry traffic; Distribution upload purging
+must remain disabled for this profile. Recovery must remain loopback-only by
+default and must refuse non-empty target volumes.
+Backup listings use stable cursor pagination with exactly five recovery points
+per page. Local snapshot deletion is installation-admin-only, requires UI
+confirmation, resolves only a validated backup UUID, and must remain serialized
+against creation and download. Deleting a local snapshot must never affect an
+already downloaded bundle.
 
 ## Architecture
 

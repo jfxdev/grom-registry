@@ -2,11 +2,10 @@
 import { useSessionStore } from '@/modules/auth/store/session'
 import { APIError } from '@/shared/api/client'
 import { ActionButton, Button, CancelButton } from '@/shared/components/ui/button'
-import { Card } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { ROUTES } from '@/shared/constants'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ArrowUpRight, Box, Boxes, KeyRound, Plus, ShieldCheck, X } from '@lucide/vue'
+import { ArrowUpRight, Box, Plus, Search, X } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import { createProject, listProjects, projectKeys } from '../api/projects'
 
@@ -16,8 +15,17 @@ const modalOpen = ref(false)
 const name = ref('')
 const slug = ref('')
 const error = ref('')
+const searchQuery = ref('')
 const projects = useQuery({ queryKey: projectKeys.all, queryFn: listProjects })
 const projectCount = computed(() => projects.data.value?.length ?? 0)
+const filteredProjects = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase()
+  if (!query) return projects.data.value ?? []
+
+  return (projects.data.value ?? []).filter((project) =>
+    project.name.toLocaleLowerCase().includes(query) || project.slug.toLocaleLowerCase().includes(query),
+  )
+})
 const create = useMutation({
   mutationFn: createProject,
   onMutate: () => {
@@ -60,55 +68,48 @@ function submitCreate() {
       <ActionButton v-if="session.user?.systemAdmin" @click="openCreateModal"><Plus :size="17" /> New project</ActionButton>
     </header>
 
-    <section class="overview-grid" aria-label="Registry overview">
-      <Card class="overview-card">
-        <div class="overview-card-heading">
-          <span>Projects</span>
-          <Boxes :size="16" />
-        </div>
-        <p class="overview-value">{{ projects.isLoading.value ? '—' : projectCount }}</p>
-        <p class="overview-detail">Immutable registry namespaces</p>
-      </Card>
-      <Card class="overview-card">
-        <div class="overview-card-heading">
-          <span>Authorization</span>
-          <ShieldCheck :size="16" />
-        </div>
-        <p class="overview-value overview-value-label">Project scoped</p>
-        <p class="overview-detail">Reader, writer and admin roles</p>
-      </Card>
-      <Card class="overview-card">
-        <div class="overview-card-heading">
-          <span>Registry access</span>
-          <KeyRound :size="16" />
-        </div>
-        <p class="overview-value overview-value-label">Service accounts</p>
-        <p class="overview-detail">Reveal-once access keys</p>
-      </Card>
-    </section>
-
     <section class="projects-panel">
       <div class="panel-heading">
         <div>
           <h2>All projects</h2>
           <p>Each project is the first segment of an OCI image path.</p>
         </div>
-        <span v-if="!projects.isLoading.value" class="panel-count">{{ projectCount }} total</span>
+        <div class="panel-actions">
+          <div class="project-search">
+            <Search :size="16" aria-hidden="true" />
+            <Input
+              v-model="searchQuery"
+              type="search"
+              placeholder="Search projects"
+              aria-label="Search projects"
+            />
+          </div>
+          <span v-if="!projects.isLoading.value" class="panel-count">
+            {{ searchQuery.trim() ? `${filteredProjects.length} of ${projectCount}` : `${projectCount} total` }}
+          </span>
+        </div>
       </div>
 
       <div v-if="projects.isLoading.value" class="project-list">
         <div v-for="index in 3" :key="index" class="project-row project-row-loading" />
       </div>
-      <div v-else-if="!projects.data.value?.length" class="empty-state project-empty-state">
+      <div v-else-if="!projectCount" class="empty-state project-empty-state">
         <div>
           <Box class="mx-auto mb-3 text-accent" :size="28" />
           <p class="font-medium text-foreground">No projects yet</p>
           <p class="mt-1 text-sm">Create the first namespace for your images.</p>
         </div>
       </div>
+      <div v-else-if="!filteredProjects.length" class="empty-state project-empty-state">
+        <div>
+          <Search class="mx-auto mb-3 text-accent" :size="28" />
+          <p class="font-medium text-foreground">No matching projects</p>
+          <p class="mt-1 text-sm">Try a different name or slug.</p>
+        </div>
+      </div>
       <div v-else class="project-list">
         <RouterLink
-          v-for="project in projects.data.value"
+          v-for="project in filteredProjects"
           :key="project.id"
           :to="`${ROUTES.projects}/${project.slug}`"
           class="project-row group"
@@ -152,45 +153,6 @@ function submitCreate() {
 </template>
 
 <style scoped>
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.85rem;
-  margin-bottom: 1rem;
-}
-
-.overview-card {
-  min-height: 8.9rem;
-  padding: 1.1rem 1.2rem;
-}
-
-.overview-card-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  font-weight: 580;
-}
-
-.overview-value {
-  margin: 1.15rem 0 0;
-  color: var(--foreground);
-  font-size: 1.8rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-}
-
-.overview-value-label {
-  font-size: 1.35rem;
-}
-
-.overview-detail {
-  margin: 0.25rem 0 0;
-  color: var(--muted-foreground);
-  font-size: 0.72rem;
-}
-
 .projects-panel {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -218,6 +180,33 @@ function submitCreate() {
   margin: 0.3rem 0 0;
   color: var(--muted-foreground);
   font-size: 0.75rem;
+}
+
+.panel-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.project-search {
+  position: relative;
+  width: min(18rem, 34vw);
+}
+
+.project-search > svg {
+  position: absolute;
+  top: 50%;
+  left: 0.8rem;
+  z-index: 2;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.project-search :deep(.grom-input) {
+  min-height: 2.35rem;
+  padding-left: 2.35rem;
 }
 
 .panel-count {
@@ -345,14 +334,6 @@ function submitCreate() {
 }
 
 @media (max-width: 900px) {
-  .overview-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .overview-card {
-    min-height: 0;
-  }
-
   .project-row {
     grid-template-columns: minmax(10rem, 1fr) auto;
   }
@@ -363,6 +344,19 @@ function submitCreate() {
 }
 
 @media (max-width: 560px) {
+  .panel-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .panel-actions {
+    width: 100%;
+  }
+
+  .project-search {
+    width: 100%;
+  }
+
   .project-meta {
     display: none;
   }

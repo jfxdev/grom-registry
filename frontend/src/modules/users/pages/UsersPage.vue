@@ -6,8 +6,8 @@ import { ActionButton, Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { writeClipboardText } from '@/shared/lib/clipboard'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Check, Copy, KeyRound, Plus, ShieldAlert, UserRound, X } from '@lucide/vue'
-import { ref } from 'vue'
+import { Check, Copy, KeyRound, Plus, Search, ShieldAlert, UserRound, X } from '@lucide/vue'
+import { computed, ref } from 'vue'
 import { createUser, createUserPasswordResetLink, listUsers, userKeys } from '../api/users'
 
 const queryClient = useQueryClient()
@@ -23,6 +23,16 @@ const resetLink = ref('')
 const resetExpiresAt = ref('')
 const copied = ref(false)
 const copyError = ref('')
+const searchQuery = ref('')
+const userCount = computed(() => users.data.value?.length ?? 0)
+const filteredUsers = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase()
+  if (!query) return users.data.value ?? []
+
+  return (users.data.value ?? []).filter((user) =>
+    user.username.toLocaleLowerCase().includes(query) || user.email.toLocaleLowerCase().includes(query),
+  )
+})
 
 const create = useMutation({
   mutationFn: createUser,
@@ -95,17 +105,56 @@ async function copyResetLink() {
     </header>
 
     <div class="table-shell">
-      <div v-for="user in users.data.value" :key="user.id" class="data-row">
-        <div class="flex items-center gap-3">
-          <div class="avatar"><UserRound :size="15" /></div>
-          <div><p class="text-sm font-semibold">{{ user.username }}</p><p class="mt-1 text-xs text-muted-foreground">{{ user.email }}</p></div>
+      <div class="list-toolbar">
+        <div>
+          <h2>All users</h2>
+          <p>People with access to the management interface.</p>
         </div>
-        <p class="text-xs text-muted-foreground">Created {{ new Date(user.createdAt).toLocaleDateString() }}</p>
-        <div class="user-actions">
-          <Badge :tone="user.systemAdmin ? 'success' : 'neutral'">{{ user.systemAdmin ? 'System admin' : 'User' }}</Badge>
-          <Button size="sm" variant="outline" @click="openReset(user)"><KeyRound :size="15" /> Reset password</Button>
+        <div class="list-toolbar-actions">
+          <div class="list-search">
+            <Search :size="16" aria-hidden="true" />
+            <Input
+              v-model="searchQuery"
+              type="search"
+              placeholder="Search users"
+              aria-label="Search users"
+            />
+          </div>
+          <span v-if="!users.isLoading.value" class="list-count">
+            {{ searchQuery.trim() ? `${filteredUsers.length} of ${userCount}` : `${userCount} total` }}
+          </span>
         </div>
       </div>
+
+      <div v-if="users.isLoading.value" class="empty-state list-empty-state" role="status">
+        <p class="text-sm text-muted-foreground">Loading users…</p>
+      </div>
+      <div v-else-if="!userCount" class="empty-state list-empty-state">
+        <div>
+          <UserRound class="mx-auto mb-3 text-accent" :size="28" />
+          <p class="font-medium text-foreground">No users yet</p>
+        </div>
+      </div>
+      <div v-else-if="!filteredUsers.length" class="empty-state list-empty-state">
+        <div>
+          <Search class="mx-auto mb-3 text-accent" :size="28" />
+          <p class="font-medium text-foreground">No matching users</p>
+          <p class="mt-1 text-sm">Try a different username or email.</p>
+        </div>
+      </div>
+      <template v-else>
+        <div v-for="user in filteredUsers" :key="user.id" class="data-row">
+          <div class="flex items-center gap-3">
+            <div class="avatar"><UserRound :size="15" /></div>
+            <div><p class="text-sm font-semibold">{{ user.username }}</p><p class="mt-1 text-xs text-muted-foreground">{{ user.email }}</p></div>
+          </div>
+          <p class="text-xs text-muted-foreground">Created {{ new Date(user.createdAt).toLocaleDateString() }}</p>
+          <div class="user-actions">
+            <Badge :tone="user.systemAdmin ? 'success' : 'neutral'">{{ user.systemAdmin ? 'System admin' : 'User' }}</Badge>
+            <Button size="sm" variant="outline" @click="openReset(user)"><KeyRound :size="15" /> Reset password</Button>
+          </div>
+        </div>
+      </template>
     </div>
 
     <div v-if="modalOpen" class="modal-backdrop" @click.self="modalOpen = false">
@@ -165,6 +214,73 @@ async function copyResetLink() {
 </template>
 
 <style scoped>
+.list-toolbar {
+  display: flex;
+  min-height: 4.65rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.9rem 1rem;
+}
+
+.list-toolbar h2 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.list-toolbar p {
+  margin: 0.3rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.list-toolbar-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.list-search {
+  position: relative;
+  width: min(18rem, 34vw);
+}
+
+.list-search > svg {
+  position: absolute;
+  top: 50%;
+  left: 0.8rem;
+  z-index: 2;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.list-search :deep(.grom-input) {
+  min-height: 2.35rem;
+  padding-left: 2.35rem;
+}
+
+.list-count {
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  padding: 0.3rem 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+}
+
+.list-empty-state {
+  min-height: 16rem;
+  border: 0;
+  border-radius: 0;
+}
+
+.list-toolbar + .data-row {
+  border-top: 0;
+}
+
 .user-actions {
   display: flex;
   align-items: center;
@@ -201,6 +317,18 @@ async function copyResetLink() {
   .user-actions {
     align-items: flex-end;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .list-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .list-toolbar-actions,
+  .list-search {
+    width: 100%;
   }
 }
 </style>

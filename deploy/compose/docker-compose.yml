@@ -1,8 +1,23 @@
 services:
+  distribution-config-init:
+    image: ${GROM_IMAGE:-grom-registry:local}
+    user: "0:0"
+    command: ["config-init"]
+    volumes:
+      - distribution-config:/distribution-config
+    network_mode: none
+    cap_drop: ["ALL"]
+    cap_add: ["DAC_OVERRIDE", "FOWNER"]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+
   grom:
+    image: ${GROM_IMAGE:-grom-registry:local}
     build:
       context: ../..
       dockerfile: Dockerfile
+      args:
+        GROM_VERSION: ${GROM_VERSION:-dev}
     environment:
       GROM_HTTP_ADDRESS: :8080
       GROM_DEPLOYMENT_PROFILE: ${GROM_DEPLOYMENT_PROFILE:-development}
@@ -23,17 +38,47 @@ services:
       GROM_AUTH_FAILURE_WINDOW: ${GROM_AUTH_FAILURE_WINDOW:-5m}
       GROM_AUTH_BLOCK_DURATION: ${GROM_AUTH_BLOCK_DURATION:-15m}
       GROM_REGISTRY_TOKEN_TTL: ${GROM_REGISTRY_TOKEN_TTL:-5m}
+      GROM_BACKUP_AGENT_SOCKET: /run/grom-backup/agent.sock
     ports:
       - "${GROM_BIND_ADDRESS:-127.0.0.1}:${GROM_HTTP_PORT:-8080}:8080"
     volumes:
       - grom-data:/data
       - signing-certs:/certs
+      - backup-agent-run:/run/grom-backup
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
       interval: 2s
       timeout: 2s
       retries: 15
     restart: unless-stopped
+
+  backup-agent:
+    image: ${GROM_IMAGE:-grom-registry:local}
+    user: "0:101"
+    command:
+      - backup-agent
+      - --distribution-config
+      - /source/distribution-config/config.yml
+    volumes:
+      - grom-data:/source/grom-data:ro
+      - signing-certs:/source/signing-certs:ro
+      - registry-data:/source/registry-data:ro
+      - distribution-config:/source/distribution-config:ro
+      - grom-backups:/backups
+      - backup-agent-run:/run/grom-backup
+    network_mode: none
+    cap_drop: ["ALL"]
+    cap_add: ["DAC_READ_SEARCH"]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "test", "-S", "/run/grom-backup/agent.sock"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    restart: unless-stopped
+    depends_on:
+      distribution-config-init:
+        condition: service_completed_successfully
 
   distribution:
     image: registry:3
@@ -45,15 +90,38 @@ services:
       REGISTRY_AUTH_TOKEN_JWKS: /certs/jwks.json
       REGISTRY_HTTP_SECRET: ${GROM_REGISTRY_HTTP_SECRET:-grom-local-http-secret-change-me}
     volumes:
-      - ../distribution/config.yml:/etc/distribution/config.yml:ro
+      - distribution-config:/etc/distribution:ro
       - registry-data:/var/lib/registry
       - signing-certs:/certs:ro
     depends_on:
       grom:
         condition: service_healthy
+      distribution-config-init:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  recovery:
+    image: ${GROM_IMAGE:-grom-registry:local}
+    profiles: ["recovery"]
+    user: "0:0"
+    command: ["recovery", "--listen=:8080"]
+    ports:
+      - "127.0.0.1:${GROM_RECOVERY_PORT:-8081}:8080"
+    volumes:
+      - grom-backups:/backups
+      - grom-data:/target/grom-data
+      - signing-certs:/target/signing-certs
+      - registry-data:/target/registry-data
+      - distribution-config:/target/distribution-config
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
 
 volumes:
   grom-data:
   registry-data:
   signing-certs:
+  grom-backups:
+  backup-agent-run:
+  distribution-config:

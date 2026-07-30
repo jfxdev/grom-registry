@@ -34,3 +34,22 @@ func (s *Service) Record(
 		MetadataJSON: string(raw), CreatedAt: time.Now().UTC(),
 	})
 }
+
+func (s *Service) RecordOnce(
+	ctx context.Context,
+	id foundation.ID,
+	actor foundation.PrincipalRef,
+	action, resourceKind string,
+	resourceID foundation.ID,
+	metadata map[string]any,
+) error {
+	raw, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	return s.store.RecordOnce(ctx, &auditdomain.Event{
+		ID: id, ActorKind: actor.Kind, ActorID: actor.ID,
+		Action: action, ResourceKind: resourceKind, ResourceID: resourceID,
+		MetadataJSON: string(raw), CreatedAt: time.Now().UTC(),
+	})
+}

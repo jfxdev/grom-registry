@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -13,12 +14,15 @@ import (
 
 	auditapp "github.com/jfxdev/grom/backend/internal/audit/application"
 	auditstore "github.com/jfxdev/grom/backend/internal/audit/infrastructure/persistence/bun"
+	"github.com/jfxdev/grom/backend/internal/constants"
 	"github.com/jfxdev/grom/backend/internal/foundation"
 	"github.com/jfxdev/grom/backend/internal/httpapi"
 	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
 	identitystore "github.com/jfxdev/grom/backend/internal/identity/infrastructure/persistence/bun"
+	"github.com/jfxdev/grom/backend/internal/platform/backup"
 	"github.com/jfxdev/grom/backend/internal/platform/config"
 	"github.com/jfxdev/grom/backend/internal/platform/database"
+	"github.com/jfxdev/grom/backend/internal/platform/maintenance"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
 	projectstore "github.com/jfxdev/grom/backend/internal/projects/infrastructure/persistence/bun"
 	registryapp "github.com/jfxdev/grom/backend/internal/registry/application"
@@ -26,6 +30,8 @@ import (
 	registrystore "github.com/jfxdev/grom/backend/internal/registry/infrastructure/persistence/bun"
 	"github.com/jfxdev/grom/backend/internal/registry/infrastructure/signing"
 )
+
+var version = "dev"
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -73,6 +79,63 @@ func run(logger *slog.Logger) error {
 	auditService := auditapp.New(auditstore.New(db))
 	repositoryService.SetAuditRecorder(auditService)
 	inventoryService := registryapp.NewInventoryService(registryRepository)
+	maintenanceController := maintenance.New()
+	var backupManager *backup.Manager
+	if databaseKind == database.SQLite && cfg.BackupAgentSocket != "" {
+		backupManager = backup.NewManager(
+			backup.NewAgentClient(cfg.BackupAgentSocket),
+			maintenanceController,
+			func(checkpointContext context.Context) error {
+				return database.Checkpoint(checkpointContext, db, databaseKind)
+			},
+			version,
+			string(cfg.DeploymentProfile),
+			func(completeContext context.Context, summary backup.Summary) error {
+				return auditService.Record(
+					completeContext,
+					foundation.PrincipalRef{Kind: "system", ID: foundation.ID("grom")},
+					constants.AuditBackupCreated,
+					constants.AuditResourceBackup,
+					foundation.ID(summary.BackupID),
+					map[string]any{
+						"gromVersion": summary.GromVersion,
+						"totalBytes":  summary.TotalBytes,
+					},
+				)
+			},
+		)
+	} else if cfg.BackupAgentSocket != "" {
+		logger.Warn(
+			"integrated backups are disabled because the backup agent requires SQLite",
+			"database_kind", databaseKind,
+		)
+	}
+
+	restoreMarker, restoreMarkerPath, err := backup.ReadRestoreMarker(cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	if restoreMarker.BackupID != "" {
+		if err := identityService.InvalidateEphemeralCredentials(ctx); err != nil {
+			return fmt.Errorf("invalidate restored ephemeral credentials: %w", err)
+		}
+		restoreID := foundation.ID(restoreMarker.BackupID)
+		if err := auditService.RecordOnce(
+			ctx,
+			restoreID,
+			foundation.PrincipalRef{Kind: "system", ID: foundation.ID("grom")},
+			constants.AuditRestoreCompleted,
+			constants.AuditResourceBackup,
+			restoreID,
+			map[string]any{"sourceVersion": restoreMarker.SourceVersion},
+		); err != nil {
+			return fmt.Errorf("record restore completion: %w", err)
+		}
+		if err := backup.ConsumeRestoreMarker(restoreMarkerPath); err != nil {
+			return fmt.Errorf("consume restore marker: %w", err)
+		}
+		logger.Info("restored ephemeral credentials invalidated", "backup_id", restoreMarker.BackupID)
+	}
 
 	if err := identityService.BootstrapAdmin(
 		ctx, cfg.BootstrapEmail, cfg.BootstrapUsername, cfg.BootstrapPassword,
@@ -122,6 +185,7 @@ func run(logger *slog.Logger) error {
 			TrustedProxies: cfg.TrustedProxies, AuthFailureLimit: cfg.AuthFailureLimit,
 			AuthFailureWindow: cfg.AuthFailureWindow, AuthBlockDuration: cfg.AuthBlockDuration,
 		},
+		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController},
 	)
 	if err != nil {
 		return err

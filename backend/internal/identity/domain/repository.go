@@ -23,9 +23,10 @@ type Repository interface {
 	CreateSession(ctx context.Context, session *Session) error
 	FindSessionByPublicID(ctx context.Context, publicID string) (*Session, error)
 	DeleteSession(ctx context.Context, publicID string) error
+	InvalidateEphemeralCredentials(ctx context.Context) error
 
 	CreateServiceAccount(ctx context.Context, account *ServiceAccount) error
-	ListServiceAccounts(ctx context.Context) ([]ServiceAccount, error)
+	ListServiceAccounts(ctx context.Context, includeDisabled bool) ([]ServiceAccount, error)
 	FindServiceAccountByID(ctx context.Context, id foundation.ID) (*ServiceAccount, error)
 	FindServiceAccountByUsername(ctx context.Context, username string) (*ServiceAccount, error)
 	DisableServiceAccount(ctx context.Context, id foundation.ID) error

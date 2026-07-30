@@ -4,6 +4,10 @@ const (
 	AuditUserPasswordChanged          = "identity.user_password_changed"
 	AuditUserPasswordResetLinkCreated = "identity.user_password_reset_link_created"
 	AuditUserPasswordResetCompleted   = "identity.user_password_reset_completed"
+	AuditRestoreCompleted             = "platform.restore_completed"
+	AuditBackupCreated                = "platform.backup_created"
+	AuditBackupDeleteRequested        = "platform.backup_delete_requested"
+	AuditBackupDeleted                = "platform.backup_deleted"
 
 	AuditLifecyclePreviewCreated   = "registry.lifecycle_preview_created"
 	AuditLifecycleRunStarted       = "registry.lifecycle_run_started"
@@ -22,4 +26,5 @@ const (
 	AuditResourceArtifactDeletion = "artifact_deletion"
 	AuditResourceLifecycleRun     = "lifecycle_run"
 	AuditResourceUser             = "user"
+	AuditResourceBackup           = "backup"
 )

@@ -15,9 +15,13 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `backend/` | Go API, authentication service, gateway, and application logic |
 | `frontend/` | Vue web application |
 | `deploy/compose/` | Local and small-installation deployment |
+| `deploy/backup/` | Low-level development and compatibility helpers for offline backup inspection and restore |
+| `deploy/docker/` | Multi-mode image entrypoint for normal, backup-agent, and recovery execution |
 | `deploy/distribution/` | CNCF Distribution configuration |
-| `.github/workflows/ci.yml` | Mandatory Go formatting/tests, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and separate backend/frontend Codecov uploads |
+| `.github/workflows/ci.yml` | Mandatory Go formatting/tests, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and separate backend/frontend Codecov coverage and JUnit test-result uploads |
+| `codecov.yml` | Explicit 70% patch-coverage gate and narrow generated-code/static-asset exclusions |
 | `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry acceptance check for pull requests, main, and merge queues |
+| `.github/workflows/backup-restore-e2e.yml` | Real-Docker volume-loss and recovery acceptance check |
 | `docs/` | Architecture, domain inventory, operations, decisions, and visual identity |
 | `AGENTS.md` | Current operational instructions for coding agents |
 
@@ -29,6 +33,8 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/product-features.md` | Implemented product capabilities, business rules, permissions, channel coverage, and explicit gaps |
 | `docs/domain-model.md` | Canonical inventory of domain types and ownership |
 | `docs/code-map.md` | Repository navigation and operational entry points |
+| `docs/backup-and-disaster-recovery-implementation-plan.md` | Implemented default SQLite/local-storage backup, empty-volume restore, and recovery acceptance design |
+| `docs/backup-and-disaster-recovery.md` | Operator backup, restore, encrypted retention, drill, and troubleshooting procedure |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
 | `docs/visual-identity.md` | Approved visual direction, responsive rules, and UI acceptance criteria |
 | `docs/visual-implementation-plan.md` | Detailed frontend delivery phases, interaction behavior, and validation plan |
@@ -64,6 +70,9 @@ only if an actual split is implemented.
 | `backend/internal/constants/` | Stable named constants organized by concern |
 | `backend/internal/platform/` | Configuration, database setup, server lifecycle, logging, and composition |
 | `backend/internal/platform/config/` | Deployment-profile policy, private-address validation, trusted-proxy ranges, authentication-limit settings, and public URL/cookie validation |
+| `backend/internal/platform/backup/` | Backup manager and agent, portable bundles, recovery web server, versioned sets, safe archives, and staged restore |
+| `backend/internal/platform/maintenance/` | Drains active writes and blocks mutations and registry traffic during a quiesced snapshot |
+| `backend/cmd/grom-backup/` | Image entry points for the backup agent, recovery UI, and low-level offline compatibility commands |
 | `backend/internal/httpapi/security.go` | Bounded authentication failure limiter, trusted real-client-IP resolution, and rate-limit responses |
 | `backend/migrations/` | Ordered migrations applied automatically during boot |
 | `backend/api/openapi.yaml` | Canonical HTTP API contract |
@@ -80,6 +89,7 @@ only if an actual split is implemented.
 | `service-accounts` | Service-account lifecycle, assignments, and nested access-key management |
 | `users` | User profile, password management, and installation user administration |
 | `integrations` | Backend-driven integration catalog |
+| `backups` | Installation-admin recovery-point creation, status, listing, and download |
 
 Audit presentation and settings modules are planned completion work and do not
 currently exist under `frontend/src/modules`.
@@ -110,6 +120,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `/api/v1/projects/{project}/lifecycle-previews`, `/api/v1/projects/{project}/lifecycle-runs` | Persisted retention dry-runs and audited manual execution |
 | `/api/v1/integrations` | Integrations |
 | `/api/v1/deployment` | Public non-sensitive deployment posture used for operator warnings |
+| `/api/v1/backups`, `/api/v1/backups/{backupId}`, `/api/v1/backups/{backupId}/download` | Installation-admin paginated backup operations, confirmed local deletion, and portable recovery bundles |
 | `/auth/token` | Registry authentication |
 | `/v2/` | Streaming gateway to Distribution |
 
@@ -127,6 +138,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `backend/internal/registry/infrastructure/persistence/bun/lifecycle.go` | Inventory, preview, run, and execution-lock persistence |
 | `backend/internal/audit/` | Immutable lifecycle audit event recording |
 | `backend/tests/registrye2e/` | Opt-in public-endpoint journey, isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
+| `backend/tests/backuprestoree2e/` | Opt-in destructive volume-loss recovery journey through public Grom and Docker endpoints |
 | `frontend/src/modules/registry/` | Inventory and lifecycle API integration |
 
 ## Operational entry points
@@ -137,11 +149,16 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `make test` | Run backend tests, frontend lint, tests, and type checks |
 | `make test-coverage` | Generate Go and frontend LCOV coverage reports used by Codecov |
 | `make test-registry-e2e` | Run the isolated real-Docker authorization, policy, JWT, and inventory journey |
+| `make test-backup-restore-e2e` | Destroy and restore an isolated default installation and verify old and new registry activity |
 | `make build` | Build frontend and backend |
 | `make dev` | Start the Go backend and Vite frontend together |
 | `make compose-up` | Build and start Grom plus Distribution |
 | `make compose-up-postgres` | Build and start Grom, Distribution, and PostgreSQL |
 | `make compose-down` | Stop the local stack |
+| `make backup BACKUP_DIR=/absolute/path` | Exercise the low-level offline compatibility path during development |
+| `make backup-inspect BACKUP_PATH=/absolute/path` | Inspect a transported set with the development tool |
+| `make restore BACKUP_PATH=/absolute/path` | Exercise low-level empty-volume restore during development |
+| `make reset-local` | Stop the local stack, remove its Compose volumes and orphan containers, and delete default local development data |
 
 ## Navigation rules
 

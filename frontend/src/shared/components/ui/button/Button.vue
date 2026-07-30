@@ -3,7 +3,7 @@ import { cn } from '@/shared/lib/cn'
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
-  variant?: 'default' | 'secondary' | 'outline' | 'ghost' | 'danger'
+  variant?: 'default' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'delete'
   size?: 'default' | 'sm' | 'icon'
   type?: 'button' | 'submit' | 'reset'
   disabled?: boolean
@@ -150,6 +150,37 @@ const classes = computed(() => cn(
 .grom-button-variant-outline:active:not(:disabled),
 .grom-button-variant-danger:active:not(:disabled) {
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.grom-button-variant-delete {
+  border-color: #ff625b;
+  background: linear-gradient(
+    180deg,
+    #f24a43 0%,
+    #d92f2a 18%,
+    #9d1c19 100%
+  );
+  color: #fff;
+  box-shadow:
+    0 var(--button-rise) 0 #681310,
+    0 calc(var(--button-rise) + 4px) 12px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.grom-button-variant-delete:hover:not(:disabled) {
+  background: linear-gradient(
+    180deg,
+    #ff5750 0%,
+    #e63832 22%,
+    #b9231f 100%
+  );
+}
+
+.grom-button-variant-delete:active:not(:disabled) {
+  box-shadow:
+    0 0 0 #681310,
+    0 2px 5px rgba(0, 0, 0, 0.22),
+    inset 0 1px 2px rgba(0, 0, 0, 0.18);
 }
 
 .grom-button-variant-ghost {

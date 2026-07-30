@@ -1,0 +1,41 @@
+name: Backup Restore E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-restore-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backup-restore-e2e:
+    name: Backup Restore E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Verify Docker prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
+          docker compose version
+      - name: Run backup and recovery journey
+        env:
+          GROM_RUN_BACKUP_RESTORE_E2E: "1"
+        run: make test-backup-restore-e2e

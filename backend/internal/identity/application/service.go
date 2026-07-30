@@ -117,6 +117,10 @@ func (s *Service) Logout(ctx context.Context, raw string) error {
 	return s.repository.DeleteSession(ctx, publicID)
 }
 
+func (s *Service) InvalidateEphemeralCredentials(ctx context.Context) error {
+	return s.repository.InvalidateEphemeralCredentials(ctx)
+}
+
 func (s *Service) ListUsers(ctx context.Context) ([]identity.User, error) {
 	return s.repository.ListUsers(ctx)
 }
@@ -228,8 +232,8 @@ func (s *Service) CreateServiceAccount(ctx context.Context, name, username, desc
 	return account, nil
 }
 
-func (s *Service) ListServiceAccounts(ctx context.Context) ([]identity.ServiceAccount, error) {
-	return s.repository.ListServiceAccounts(ctx)
+func (s *Service) ListServiceAccounts(ctx context.Context, includeDisabled bool) ([]identity.ServiceAccount, error) {
+	return s.repository.ListServiceAccounts(ctx, includeDisabled)
 }
 
 func (s *Service) FindServiceAccount(ctx context.Context, id foundation.ID) (*identity.ServiceAccount, error) {

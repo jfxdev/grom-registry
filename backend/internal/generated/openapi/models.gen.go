@@ -87,6 +87,48 @@ func (e ArtifactRelationship) Valid() bool {
 	}
 }
 
+// Defines values for BackupOverviewPageSize.
+const (
+	N5 BackupOverviewPageSize = 5
+)
+
+// Valid indicates whether the value is a known member of the BackupOverviewPageSize enum.
+func (e BackupOverviewPageSize) Valid() bool {
+	switch e {
+	case N5:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackupStatus.
+const (
+	BackupStatusComplete  BackupStatus = "complete"
+	BackupStatusCreating  BackupStatus = "creating"
+	BackupStatusFailed    BackupStatus = "failed"
+	BackupStatusQuiescing BackupStatus = "quiescing"
+	BackupStatusStarting  BackupStatus = "starting"
+)
+
+// Valid indicates whether the value is a known member of the BackupStatus enum.
+func (e BackupStatus) Valid() bool {
+	switch e {
+	case BackupStatusComplete:
+		return true
+	case BackupStatusCreating:
+		return true
+	case BackupStatusFailed:
+		return true
+	case BackupStatusQuiescing:
+		return true
+	case BackupStatusStarting:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ClassificationConfidence.
 const (
 	ClassificationConfidenceHigh   ClassificationConfidence = "high"
@@ -478,6 +520,39 @@ type ArtifactKind string
 // ArtifactRelationship defines model for ArtifactRelationship.
 type ArtifactRelationship string
 
+// BackupOperation defines model for BackupOperation.
+type BackupOperation struct {
+	CompletedAt *time.Time         `json:"completedAt,omitempty"`
+	Id          openapi_types.UUID `json:"id"`
+	Message     *string            `json:"message,omitempty"`
+	StartedAt   time.Time          `json:"startedAt"`
+	Status      BackupStatus       `json:"status"`
+}
+
+// BackupOverview defines model for BackupOverview.
+type BackupOverview struct {
+	ActiveOperation *BackupOperation       `json:"activeOperation,omitempty"`
+	Available       bool                   `json:"available"`
+	Backups         []BackupSummary        `json:"backups"`
+	NextCursor      *string                `json:"nextCursor,omitempty"`
+	PageSize        BackupOverviewPageSize `json:"pageSize"`
+	TotalBackups    int                    `json:"totalBackups"`
+}
+
+// BackupOverviewPageSize defines model for BackupOverview.PageSize.
+type BackupOverviewPageSize int
+
+// BackupStatus defines model for BackupStatus.
+type BackupStatus string
+
+// BackupSummary defines model for BackupSummary.
+type BackupSummary struct {
+	BackupId    openapi_types.UUID `json:"backupId"`
+	CreatedAt   time.Time          `json:"createdAt"`
+	GromVersion string             `json:"gromVersion"`
+	TotalBytes  int64              `json:"totalBytes"`
+}
+
 // ChangePasswordRequest defines model for ChangePasswordRequest.
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
@@ -815,6 +890,7 @@ type RepositoryStatus string
 type ServiceAccount struct {
 	CreatedAt   time.Time          `json:"createdAt"`
 	Description string             `json:"description"`
+	DisabledAt  *time.Time         `json:"disabledAt,omitempty"`
 	Id          openapi_types.UUID `json:"id"`
 	Name        string             `json:"name"`
 	Username    string             `json:"username"`
@@ -870,6 +946,12 @@ type TooManyRequests = Error
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
 
+// ListBackupsParams defines parameters for ListBackups.
+type ListBackupsParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListArtifactDeletionsParams defines parameters for ListArtifactDeletions.
 type ListArtifactDeletionsParams struct {
 	Repository string `form:"repository" json:"repository"`
@@ -889,6 +971,12 @@ type ListRepositoryInventoryParams struct {
 type ListRepositoryTagsParams struct {
 	// Repository Repository path relative to the project, including optional nested segments
 	Repository string `form:"repository" json:"repository"`
+}
+
+// ListServiceAccountsParams defines parameters for ListServiceAccounts.
+type ListServiceAccountsParams struct {
+	// IncludeDisabled Include disabled service accounts in the administrative listing.
+	IncludeDisabled *bool `form:"includeDisabled,omitempty" json:"includeDisabled,omitempty"`
 }
 
 // ExchangeRegistryTokenParams defines parameters for ExchangeRegistryToken.

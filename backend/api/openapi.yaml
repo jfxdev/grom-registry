@@ -12,6 +12,7 @@ tags:
   - name: Registry
   - name: Registry Policies
   - name: Registry Lifecycle
+  - name: Backups
   - name: Integrations
 paths:
   /healthz:
@@ -189,6 +190,14 @@ paths:
       operationId: listServiceAccounts
       security:
         - cookieAuth: []
+      parameters:
+        - name: includeDisabled
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include disabled service accounts in the administrative listing.
       responses:
         "200":
           description: Service accounts
@@ -221,7 +230,7 @@ paths:
   /api/v1/service-accounts/{id}:
     delete:
       tags: [Identity]
-      operationId: deleteServiceAccount
+      operationId: disableServiceAccount
       security:
         - cookieAuth: []
       parameters:
@@ -824,6 +833,113 @@ paths:
                 $ref: "#/components/schemas/Integration"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/backups:
+    get:
+      tags: [Backups]
+      operationId: listBackups
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          description: Opaque cursor returned by the previous page
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        "200":
+          description: Backup availability, active operation, and completed recovery points
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupOverview"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      tags: [Backups]
+      operationId: createBackup
+      security:
+        - cookieAuth: []
+      responses:
+        "202":
+          description: Backup operation accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupOperation"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A backup is already running or maintenance cannot begin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: The internal backup agent is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/backups/{backupId}:
+    delete:
+      tags: [Backups]
+      operationId: deleteBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: backupId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Backup deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Another backup mutation is running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: The internal backup agent is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/backups/{backupId}/download:
+    get:
+      tags: [Backups]
+      operationId: downloadBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: backupId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Portable tar bundle containing the complete backup set
+          content:
+            application/x-tar:
+              schema:
+                type: string
+                format: binary
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /auth/token:
     get:
       tags: [Registry]
@@ -948,6 +1064,67 @@ components:
         insecureHttp:
           type: boolean
           description: True only for an explicitly opted-in permissive HTTP deployment
+    BackupStatus:
+      type: string
+      enum: [starting, quiescing, creating, complete, failed]
+    BackupOperation:
+      type: object
+      required: [id, status, startedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/BackupStatus"
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        message:
+          type: string
+          nullable: true
+    BackupSummary:
+      type: object
+      required: [backupId, createdAt, gromVersion, totalBytes]
+      properties:
+        backupId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        gromVersion:
+          type: string
+        totalBytes:
+          type: integer
+          format: int64
+    BackupOverview:
+      type: object
+      required: [available, backups, totalBackups, pageSize]
+      properties:
+        available:
+          type: boolean
+        activeOperation:
+          allOf:
+            - $ref: "#/components/schemas/BackupOperation"
+          nullable: true
+        backups:
+          type: array
+          items:
+            $ref: "#/components/schemas/BackupSummary"
+          maxItems: 5
+        totalBackups:
+          type: integer
+          minimum: 0
+        pageSize:
+          type: integer
+          enum: [5]
+        nextCursor:
+          type: string
+          nullable: true
     Status:
       type: object
       required: [status]
@@ -1063,6 +1240,10 @@ components:
         createdAt:
           type: string
           format: date-time
+        disabledAt:
+          type: string
+          format: date-time
+          nullable: true
     CreateServiceAccountRequest:
       type: object
       required: [name, username]

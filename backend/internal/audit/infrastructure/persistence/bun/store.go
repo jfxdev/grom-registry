@@ -29,11 +29,23 @@ func New(db *bun.DB) *Store {
 }
 
 func (s *Store) Record(ctx context.Context, event *auditdomain.Event) error {
-	_, err := s.db.NewInsert().Model(&eventModel{
+	return s.record(ctx, event, false)
+}
+
+func (s *Store) RecordOnce(ctx context.Context, event *auditdomain.Event) error {
+	return s.record(ctx, event, true)
+}
+
+func (s *Store) record(ctx context.Context, event *auditdomain.Event, once bool) error {
+	query := s.db.NewInsert().Model(&eventModel{
 		ID: event.ID.String(), ActorKind: event.ActorKind, ActorID: event.ActorID.String(),
 		Action: event.Action, ResourceKind: event.ResourceKind, ResourceID: event.ResourceID.String(),
 		MetadataJSON: event.MetadataJSON, CreatedAt: event.CreatedAt,
-	}).Exec(ctx)
+	})
+	if once {
+		query = query.On("CONFLICT (id) DO NOTHING")
+	}
+	_, err := query.Exec(ctx)
 	return err
 }
 

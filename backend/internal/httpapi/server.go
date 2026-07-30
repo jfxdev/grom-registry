@@ -6,16 +6,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
+	"path"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"github.com/jfxdev/grom/backend/api"
 	auditapp "github.com/jfxdev/grom/backend/internal/audit/application"
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -23,6 +27,8 @@ import (
 	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
 	identitydomain "github.com/jfxdev/grom/backend/internal/identity/domain"
 	integrationdomain "github.com/jfxdev/grom/backend/internal/integrations/domain"
+	platformbackup "github.com/jfxdev/grom/backend/internal/platform/backup"
+	"github.com/jfxdev/grom/backend/internal/platform/maintenance"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
 	projectdomain "github.com/jfxdev/grom/backend/internal/projects/domain"
 	registryapp "github.com/jfxdev/grom/backend/internal/registry/application"
@@ -52,9 +58,16 @@ type Server struct {
 	trustedProxies     []netip.Prefix
 	loginLimiter       *authenticationFailureLimiter
 	registryLimiter    *authenticationFailureLimiter
+	backups            *platformbackup.Manager
+	maintenance        *maintenance.Controller
 }
 
 type currentUserKey struct{}
+
+type OperationalOptions struct {
+	Backups     *platformbackup.Manager
+	Maintenance *maintenance.Controller
+}
 
 func New(
 	identity *identityapp.Service,
@@ -74,6 +87,7 @@ func New(
 	deploymentProfile string,
 	insecureHTTP bool,
 	securityOptions SecurityOptions,
+	operationalOptions OperationalOptions,
 ) (*Server, error) {
 	if securityOptions.AuthFailureLimit <= 0 ||
 		securityOptions.AuthFailureWindow <= 0 ||
@@ -94,6 +108,11 @@ func New(
 		trustedProxies:  securityOptions.TrustedProxies,
 		loginLimiter:    newAuthenticationFailureLimiter(securityOptions),
 		registryLimiter: newAuthenticationFailureLimiter(securityOptions),
+		backups:         operationalOptions.Backups,
+		maintenance:     operationalOptions.Maintenance,
+	}
+	if server.maintenance == nil {
+		server.maintenance = maintenance.New()
 	}
 	server.router = server.routes()
 	return server, nil
@@ -110,6 +129,7 @@ func (s *Server) routes() chi.Router {
 	router.Use(middleware.Recoverer)
 	router.Use(s.accessLog)
 	router.Use(s.originGuard)
+	router.Use(s.maintenanceGate)
 
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -176,11 +196,124 @@ func (s *Server) routes() chi.Router {
 
 			protected.Get("/integrations", s.listIntegrations)
 			protected.Get("/integrations/{key}", s.getIntegration)
+			protected.Get("/backups", s.listBackups)
+			protected.Post("/backups", s.createBackup)
+			protected.Delete("/backups/{backupId}", s.deleteBackup)
+			protected.Get("/backups/{backupId}/download", s.downloadBackup)
 		})
 	})
 
 	router.NotFound(s.spa)
 	return router
+}
+
+func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	cursor := r.URL.Query().Get("cursor")
+	if len(cursor) > 512 {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Backup page cursor is invalid")
+		return
+	}
+	if s.backups == nil {
+		writeJSON(w, http.StatusOK, platformbackup.Overview{
+			Available: false, Backups: []platformbackup.Summary{},
+			TotalBackups: 0, PageSize: platformbackup.PageSize,
+		})
+		return
+	}
+	overview, err := s.backups.Overview(r.Context(), cursor)
+	if errors.Is(err, platformbackup.ErrInvalidCursor) {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Backup page cursor is invalid")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, overview)
+}
+
+func (s *Server) createBackup(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	if s.backups == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "backup_unavailable", "The integrated backup agent is unavailable")
+		return
+	}
+	operation, err := s.backups.Start()
+	if err != nil {
+		if errors.Is(err, platformbackup.ErrOperationInProgress) {
+			writeError(w, r, http.StatusConflict, "backup_active", "A backup operation is already running")
+			return
+		}
+		writeError(w, r, http.StatusServiceUnavailable, "backup_unavailable", "The integrated backup agent is unavailable")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, operation)
+}
+
+func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	if s.backups == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "backup_unavailable", "The integrated backup agent is unavailable")
+		return
+	}
+	backupID := chi.URLParam(r, "backupId")
+	if uuid.Validate(backupID) != nil {
+		writeError(w, r, http.StatusNotFound, "backup_not_found", "Backup not found")
+		return
+	}
+	user := userFromContext(r.Context())
+	if auditErr := s.audit.Record(
+		r.Context(), principalForUser(user), constants.AuditBackupDeleteRequested,
+		constants.AuditResourceBackup, foundation.ID(backupID), map[string]any{},
+	); auditErr != nil {
+		s.logger.Error("record backup deletion request audit event", "error", auditErr)
+	}
+	err := s.backups.Delete(r.Context(), backupID)
+	switch {
+	case errors.Is(err, platformbackup.ErrOperationInProgress):
+		writeError(w, r, http.StatusConflict, "backup_active", "Another backup operation is already running")
+	case errors.Is(err, os.ErrNotExist):
+		writeError(w, r, http.StatusNotFound, "backup_not_found", "Backup not found")
+	case err != nil:
+		writeError(w, r, http.StatusServiceUnavailable, "backup_unavailable", "The integrated backup agent could not delete this backup")
+	default:
+		if auditErr := s.audit.Record(
+			r.Context(), principalForUser(user), constants.AuditBackupDeleted,
+			constants.AuditResourceBackup, foundation.ID(backupID), map[string]any{},
+		); auditErr != nil {
+			s.logger.Error("record backup deletion audit event", "error", auditErr)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) downloadBackup(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	if s.backups == nil {
+		writeError(w, r, http.StatusNotFound, "backup_not_found", "Backup not found")
+		return
+	}
+	response, err := s.backups.Download(r.Context(), chi.URLParam(r, "backupId"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "backup_not_found", "Backup not found")
+		return
+	}
+	defer func() { _ = response.Body.Close() }()
+	w.Header().Set("Content-Type", "application/x-tar")
+	if disposition := response.Header.Get("Content-Disposition"); disposition != "" {
+		w.Header().Set("Content-Disposition", disposition)
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, response.Body)
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
@@ -361,7 +494,8 @@ func (s *Server) listServiceAccounts(w http.ResponseWriter, r *http.Request) {
 	if !requireSystemAdmin(w, r) {
 		return
 	}
-	accounts, err := s.identity.ListServiceAccounts(r.Context())
+	includeDisabled := r.URL.Query().Get("includeDisabled") == "true"
+	accounts, err := s.identity.ListServiceAccounts(r.Context(), includeDisabled)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
@@ -1005,6 +1139,35 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), currentUserKey{}, user)))
 	})
+}
+
+func (s *Server) maintenanceGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !requiresQuiescenceTracking(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		leave, allowed := s.maintenance.Enter()
+		if !allowed {
+			w.Header().Set("Retry-After", "5")
+			writeError(w, r, http.StatusServiceUnavailable, "maintenance_active", "Backup maintenance is in progress; retry this operation shortly")
+			return
+		}
+		defer leave()
+		next.ServeHTTP(w, r)
+	})
+}
+
+func requiresQuiescenceTracking(r *http.Request) bool {
+	normalizedPath := path.Clean("/" + strings.TrimPrefix(r.URL.Path, "/"))
+	if r.Method == http.MethodPost && normalizedPath == "/api/v1/backups" {
+		return false
+	}
+	if normalizedPath == "/auth/token" || normalizedPath == "/v2" ||
+		strings.HasPrefix(normalizedPath, "/v2/") {
+		return true
+	}
+	return r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions
 }
 
 func (s *Server) principalExists(ctx context.Context, principal foundation.PrincipalRef) bool {

@@ -19,7 +19,7 @@ import type {
   RepositoryPolicySet,
 } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
-import { Button } from '@/shared/components/ui/button'
+import { Button, DeleteButton } from '@/shared/components/ui/button'
 import { Card } from '@/shared/components/ui/card'
 import { Dialog } from '@/shared/components/ui/dialog'
 import { ROUTES } from '@/shared/constants'
@@ -74,7 +74,7 @@ const projectDeletionError = ref('')
 const project = useQuery({ queryKey: computed(() => projectKeys.detail(slug.value)), queryFn: () => getProject(slug.value) })
 const repositories = useQuery({ queryKey: computed(() => projectKeys.repositories(slug.value)), queryFn: () => listRepositories(slug.value) })
 const members = useQuery({ queryKey: computed(() => projectKeys.members(slug.value)), queryFn: () => listMembers(slug.value) })
-const accounts = useQuery({ queryKey: serviceAccountKeys.all, queryFn: listServiceAccounts })
+const accounts = useQuery({ queryKey: serviceAccountKeys.list(), queryFn: () => listServiceAccounts() })
 const users = useQuery({ queryKey: userKeys.all, queryFn: listUsers, enabled: computed(() => session.user?.systemAdmin === true) })
 const canManage = computed(() =>
   session.user?.systemAdmin === true ||
@@ -264,9 +264,9 @@ function profileLabel(profile: Repository['profile']) {
       </div>
       <div class="flex items-center gap-2">
         <Badge tone="success">Active</Badge>
-        <Button v-if="session.user?.systemAdmin" variant="danger" size="sm" @click="projectDeletionOpen = true">
-          <Trash2 :size="14" /> Delete project
-        </Button>
+        <DeleteButton v-if="session.user?.systemAdmin" size="sm" @click="projectDeletionOpen = true">
+          Delete project
+        </DeleteButton>
       </div>
     </header>
 
@@ -342,9 +342,9 @@ function profileLabel(profile: Repository['profile']) {
         <p v-if="projectDeletionError" class="error-text">{{ projectDeletionError }}</p>
         <div class="flex justify-end gap-2">
           <Button variant="ghost" type="button" @click="projectDeletionOpen = false">Cancel</Button>
-          <Button variant="danger" type="submit" :disabled="removeProject.isPending.value">
+          <DeleteButton type="submit" :disabled="removeProject.isPending.value">
             {{ removeProject.isPending.value ? 'Deleting…' : 'Delete project' }}
-          </Button>
+          </DeleteButton>
         </div>
       </form>
     </Dialog>
@@ -481,13 +481,12 @@ function profileLabel(profile: Repository['profile']) {
         <p v-if="deletionError" class="error-text">{{ deletionError }}</p>
         <div class="flex justify-end gap-2">
           <Button variant="ghost" type="button" @click="deletionPreview = null">Cancel</Button>
-          <Button
-            variant="danger"
+          <DeleteButton
             type="submit"
             :disabled="confirmDeletion.isPending.value || deletionPreview.blockedReasons.length > 0 || (deletionPreview.requiresReason && !deletionReason.trim())"
           >
             {{ confirmDeletion.isPending.value ? 'Deleting…' : 'Delete artifact' }}
-          </Button>
+          </DeleteButton>
         </div>
       </form>
     </Dialog>
@@ -560,13 +559,12 @@ function profileLabel(profile: Repository['profile']) {
           <p v-if="lifecycleError" class="error-text">{{ lifecycleError }}</p>
           <div class="flex justify-end gap-2">
             <Button variant="ghost" @click="lifecyclePreview = null">Cancel</Button>
-            <Button
-              variant="danger"
+            <DeleteButton
               :disabled="!lifecycleReason.trim() || !lifecyclePreview.eligibleCount || runLifecycle.isPending.value"
               @click="runLifecycle.mutate()"
             >
               {{ runLifecycle.isPending.value ? 'Executing…' : `Delete ${lifecyclePreview.eligibleCount} eligible` }}
-            </Button>
+            </DeleteButton>
           </div>
         </template>
       </section>

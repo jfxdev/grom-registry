@@ -33,7 +33,7 @@ function mountPage() {
   })
 }
 
-describe('ProjectsPage creation error', () => {
+describe('ProjectsPage', () => {
   beforeEach(() => {
     mocks.createProject.mockReset()
     mocks.listProjects.mockReset()
@@ -56,5 +56,55 @@ describe('ProjectsPage creation error', () => {
     await wrapper.get('button').trigger('click')
 
     expect(wrapper.text()).not.toContain('Project already exists')
+  })
+
+  it('filters projects by name or slug from the main panel search', async () => {
+    mocks.listProjects.mockResolvedValue([
+      {
+        id: 'project-1',
+        name: 'Payments API',
+        slug: 'payments',
+        createdBy: 'user-1',
+        createdAt: '2026-07-29T10:00:00Z',
+      },
+      {
+        id: 'project-2',
+        name: 'Customer Portal',
+        slug: 'web-store',
+        createdBy: 'user-1',
+        createdAt: '2026-07-29T10:00:00Z',
+      },
+    ])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const search = wrapper.get('input[aria-label="Search projects"]')
+    await search.setValue('payments')
+    expect(wrapper.text()).toContain('Payments API')
+    expect(wrapper.text()).not.toContain('Customer Portal')
+    expect(wrapper.text()).toContain('1 of 2')
+
+    await search.setValue('WEB-STORE')
+    expect(wrapper.text()).toContain('Customer Portal')
+    expect(wrapper.text()).not.toContain('Payments API')
+  })
+
+  it('shows a dedicated empty state when the search has no matches', async () => {
+    mocks.listProjects.mockResolvedValue([
+      {
+        id: 'project-1',
+        name: 'Payments API',
+        slug: 'payments',
+        createdBy: 'user-1',
+        createdAt: '2026-07-29T10:00:00Z',
+      },
+    ])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('input[aria-label="Search projects"]').setValue('missing')
+
+    expect(wrapper.text()).toContain('No matching projects')
+    expect(wrapper.text()).toContain('0 of 1')
   })
 })

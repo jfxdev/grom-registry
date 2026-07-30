@@ -53,6 +53,12 @@ export const router = createRouter({
       component: () => import('@/modules/integrations/pages/IntegrationsPage.vue'),
     },
     {
+      path: ROUTES.backups,
+      name: 'backups',
+      component: () => import('@/modules/backups/pages/BackupsPage.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: ROUTES.projects,
     },
