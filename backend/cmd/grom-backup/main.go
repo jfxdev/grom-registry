@@ -15,6 +15,8 @@ import (
 
 var version = "dev"
 
+const defaultRecoveryListenAddress = "127.0.0.1:8080"
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "grom-backup:", err)
@@ -29,7 +31,7 @@ func run(arguments []string, output io.Writer) error {
 	switch arguments[0] {
 	case "recovery":
 		flags := flag.NewFlagSet("recovery", flag.ContinueOnError)
-		listen := flags.String("listen", ":8080", "recovery UI listen address")
+		listen := flags.String("listen", defaultRecoveryListenAddress, "recovery UI listen address")
 		backupRoot := flags.String("backup-root", "/backups", "verified backup storage")
 		gromData := flags.String("grom-data-target", "/target/grom-data", "empty Grom data target")
 		signingCerts := flags.String("signing-certs-target", "/target/signing-certs", "empty signing target")

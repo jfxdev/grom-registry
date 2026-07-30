@@ -38,6 +38,9 @@ Keep the exact Go patch version in `backend/go.mod` and the Dockerfile builder
 image aligned. Go 1.26.5 is the current minimum because earlier 1.26 patch
 releases are affected by reachable standard-library vulnerability
 `GO-2026-5856`.
+The runtime `grom` account is fixed at UID 100 and GID 101. Keep the Dockerfile,
+restored-volume ownership, and backup-agent socket group aligned; changing these
+IDs requires an explicit volume-ownership migration.
 
 `make test-registry-e2e` requires an accessible Docker daemon and Docker
 Compose. It owns only its unique Compose project, loopback port, temporary

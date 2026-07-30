@@ -47,6 +47,7 @@ func TestBackupRestoreJourney(t *testing.T) {
 		"GROM_BOOTSTRAP_ADMIN_USERNAME=backup-admin", "GROM_BOOTSTRAP_ADMIN_PASSWORD="+adminPassword,
 		"GROM_REGISTRY_HTTP_SECRET=backup-restore-e2e-secret", "GROM_AUTH_FAILURE_LIMIT=50",
 		fmt.Sprintf("GROM_RECOVERY_PORT=%d", recoveryPort), "GROM_VERSION=dev",
+		"BACKUP_MOUNT_ROOT="+t.TempDir(), "BACKUP_SET_NAME=unused-e2e-backup",
 	)
 	stack := composeStack{root: root, project: project, env: env}
 	t.Cleanup(func() {

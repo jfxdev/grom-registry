@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,7 +121,7 @@ func TestReadManifestRejectsMissingOversizedUnknownAndTrailingData(t *testing.T)
 	}
 }
 
-func TestListUsesManifestAndSurfacesIncompleteSets(t *testing.T) {
+func TestListUsesManifestAndSkipsInvalidSets(t *testing.T) {
 	fixture := createFixture(t)
 	root := t.TempDir()
 	inspection, backupPath, err := Create(CreateOptions{
@@ -145,8 +146,48 @@ func TestListUsesManifestAndSurfacesIncompleteSets(t *testing.T) {
 	if err := os.Remove(filepath.Join(backupPath, "COMPLETE")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := List(root); err == nil || !strings.Contains(err.Error(), "incomplete") {
-		t.Fatalf("expected incomplete set to remain visible as a listing error, got %v", err)
+
+	malformedPath := filepath.Join(root, "grom-backup-malformed")
+	if err := os.Mkdir(malformedPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(malformedPath, "COMPLETE"), []byte{}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(malformedPath, "manifest.json"), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	validInspection, _, err := Create(CreateOptions{
+		DestinationRoot: root, GromData: fixture.gromData, SigningCerts: fixture.signing,
+		RegistryData: fixture.registry, DistributionConfig: fixture.config,
+		GromVersion: "test-version", DeploymentProfile: "development",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
+	summaries, err = List(root)
+	if err != nil || len(summaries) != 1 || summaries[0].BackupID != validInspection.Manifest.BackupID {
+		t.Fatalf("expected only the valid backup: summaries=%#v error=%v", summaries, err)
+	}
+	if !strings.Contains(logs.String(), filepath.Base(backupPath)) ||
+		!strings.Contains(logs.String(), filepath.Base(malformedPath)) {
+		t.Fatalf("expected warnings for both invalid sets, got %s", logs.String())
+	}
+	var bundle bytes.Buffer
+	if _, err := Bundle(root, validInspection.Manifest.BackupID, &bundle); err != nil {
+		t.Fatalf("bundle valid backup alongside invalid sets: %v", err)
+	}
+	if _, err := Delete(root, validInspection.Manifest.BackupID); err != nil {
+		t.Fatalf("delete valid backup alongside invalid sets: %v", err)
+	}
+	if _, err := Delete(root, inspection.Manifest.BackupID); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected invalid backup to remain unavailable for deletion, got %v", err)
 	}
 }
 

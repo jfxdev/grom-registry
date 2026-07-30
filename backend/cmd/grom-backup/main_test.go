@@ -3,11 +3,22 @@ package main
 import (
 	"bytes"
 	"errors"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRecoveryDefaultListenAddressIsLoopback(t *testing.T) {
+	address, err := netip.ParseAddrPort(defaultRecoveryListenAddress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !address.Addr().IsLoopback() {
+		t.Fatalf("recovery default must be loopback-only, got %s", address)
+	}
+}
 
 func TestRunValidatesCommandsAndArguments(t *testing.T) {
 	for _, test := range []struct {

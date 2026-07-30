@@ -51,6 +51,11 @@ func ServeAgent(ctx context.Context, options AgentOptions) error {
 	}
 	defer func() { _ = listener.Close() }()
 	defer func() { _ = os.Remove(options.SocketPath) }()
+	if os.Geteuid() == 0 && os.Getegid() != gromServiceGID {
+		if err := os.Chown(options.SocketPath, -1, gromServiceGID); err != nil {
+			return fmt.Errorf("set agent socket group: %w", err)
+		}
+	}
 	if err := os.Chmod(options.SocketPath, 0o660); err != nil {
 		return fmt.Errorf("set agent socket permissions: %w", err)
 	}

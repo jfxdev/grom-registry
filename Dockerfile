@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${GROM_VERS
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${GROM_VERSION}" -o /out/grom-backup ./cmd/grom-backup
 
 FROM alpine:3.22
-RUN addgroup -S grom && adduser -S -G grom grom
+RUN addgroup -S -g 101 grom && adduser -S -u 100 -G grom grom
 WORKDIR /app
 COPY --from=backend /out/grom /usr/local/bin/grom
 COPY --from=backend /out/grom-backup /usr/local/bin/grom-backup

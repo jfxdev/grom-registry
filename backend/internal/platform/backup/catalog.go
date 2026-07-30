@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -58,11 +59,21 @@ func List(root string) ([]Summary, error) {
 		path := filepath.Join(root, entry.Name())
 		marker, err := os.Stat(filepath.Join(path, "COMPLETE"))
 		if err != nil || !marker.Mode().IsRegular() || marker.Size() != 0 {
-			return nil, fmt.Errorf("read completion marker for %q: backup is incomplete", entry.Name())
+			slog.Warn(
+				"skipping invalid backup set",
+				"backup_set", entry.Name(),
+				"reason", "completion marker is missing or invalid",
+			)
+			continue
 		}
 		manifest, _, err := readManifest(path)
 		if err != nil {
-			return nil, fmt.Errorf("read manifest for %q: %w", entry.Name(), err)
+			slog.Warn(
+				"skipping invalid backup set",
+				"backup_set", entry.Name(),
+				"reason", "manifest is missing or invalid",
+			)
+			continue
 		}
 		var totalBytes int64
 		for _, component := range manifest.Components {

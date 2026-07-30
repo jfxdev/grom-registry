@@ -15,7 +15,7 @@ import (
 const (
 	safeRestoreModeMask = 0o770
 	gromServiceUID      = 100
-	gromServiceGID      = 100
+	gromServiceGID      = 101
 )
 
 func writeArchive(source, destination string) (Component, error) {
