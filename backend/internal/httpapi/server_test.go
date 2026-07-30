@@ -641,6 +641,24 @@ func backupTestServer(agent platformbackup.Agent, auditStore *serverTestAuditSto
 	}
 }
 
+func TestRequiresQuiescenceTrackingNormalizesSecuritySensitivePaths(t *testing.T) {
+	for _, test := range []struct {
+		method string
+		target string
+		want   bool
+	}{
+		{method: http.MethodGet, target: "http://grom/ignored/%2e%2e/auth/token", want: true},
+		{method: http.MethodGet, target: "http://grom/ignored/%2e%2e/v2/manifests/latest", want: true},
+		{method: http.MethodGet, target: "http://grom//v2//blobs/digest", want: true},
+		{method: http.MethodPost, target: "http://grom/api//v1/./backups", want: false},
+	} {
+		request := httptest.NewRequest(test.method, test.target, nil)
+		if actual := requiresQuiescenceTracking(request); actual != test.want {
+			t.Fatalf("%s %s: expected %v, got %v", test.method, test.target, test.want, actual)
+		}
+	}
+}
+
 func backupAdminRequest(method, target string, systemAdmin bool) *http.Request {
 	request := httptest.NewRequest(method, target, nil)
 	return request.WithContext(context.WithValue(request.Context(), currentUserKey{}, &identitydomain.User{

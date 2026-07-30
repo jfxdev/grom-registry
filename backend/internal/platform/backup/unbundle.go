@@ -90,6 +90,9 @@ func Unbundle(root string, input io.Reader, maxBytes int64) (Summary, error) {
 	if _, err := Inspect(partial); err != nil {
 		return Summary{}, err
 	}
+	if err := syncDirectory(partial); err != nil {
+		return Summary{}, err
+	}
 	final := filepath.Join(root, topLevel)
 	if _, err := os.Lstat(final); !os.IsNotExist(err) {
 		return Summary{}, fmt.Errorf("backup set already exists")

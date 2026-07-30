@@ -51,7 +51,7 @@ func ServeAgent(ctx context.Context, options AgentOptions) error {
 	}
 	defer func() { _ = listener.Close() }()
 	defer func() { _ = os.Remove(options.SocketPath) }()
-	if err := os.Chmod(options.SocketPath, 0o666); err != nil {
+	if err := os.Chmod(options.SocketPath, 0o660); err != nil {
 		return fmt.Errorf("set agent socket permissions: %w", err)
 	}
 
@@ -116,9 +116,9 @@ func newAgentHandler(options AgentOptions) http.Handler {
 	})
 	mux.HandleFunc("GET /v1/backups/{backupID}/bundle", func(w http.ResponseWriter, r *http.Request) {
 		storageMu.RLock()
-		defer storageMu.RUnlock()
 		backupID := r.PathValue("backupID")
-		summary, err := findSummary(options.DestinationRoot, backupID)
+		snapshot, err := prepareBundle(options.DestinationRoot, backupID)
+		storageMu.RUnlock()
 		if errors.Is(err, os.ErrNotExist) {
 			writeAgentError(w, http.StatusNotFound)
 			return
@@ -127,10 +127,10 @@ func newAgentHandler(options AgentOptions) http.Handler {
 			writeAgentError(w, http.StatusInternalServerError)
 			return
 		}
+		defer snapshot.close()
 		w.Header().Set("Content-Type", "application/x-tar")
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.tar"`, filepath.Base(summary.Path)))
-		_, err = Bundle(options.DestinationRoot, backupID, w)
-		if err != nil {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, snapshot.filename))
+		if err := snapshot.writeTo(w); err != nil {
 			return
 		}
 	})

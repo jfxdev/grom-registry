@@ -41,7 +41,7 @@ services:
       - signing-certs:/source/signing-certs:ro
       - registry-data:/source/registry-data:ro
       - distribution-config:/source/distribution-config:ro
-      - ${BACKUP_MOUNT_ROOT:-/tmp/grom-backup-path-required}:/backup
+      - ${BACKUP_MOUNT_ROOT:?BACKUP_MOUNT_ROOT must be set to an absolute backup directory}:/backup
     network_mode: none
     cap_drop: ["ALL"]
     cap_add: ["DAC_READ_SEARCH"]
@@ -57,9 +57,9 @@ services:
         GROM_VERSION: ${GROM_VERSION:-dev}
     user: "0:0"
     entrypoint: ["/usr/local/bin/grom-backup"]
-    command: ["inspect", "--path", "/backup/${BACKUP_SET_NAME:-BACKUP_SET_NAME_REQUIRED}"]
+    command: ["inspect", "--path", "/backup/${BACKUP_SET_NAME:?BACKUP_SET_NAME must identify a backup set}"]
     volumes:
-      - ${BACKUP_MOUNT_ROOT:-/tmp/grom-backup-path-required}:/backup:ro
+      - ${BACKUP_MOUNT_ROOT:?BACKUP_MOUNT_ROOT must be set to an absolute backup directory}:/backup:ro
     network_mode: none
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
@@ -77,11 +77,11 @@ services:
     command:
       - restore
       - --path
-      - /backup/${BACKUP_SET_NAME:-BACKUP_SET_NAME_REQUIRED}
+      - /backup/${BACKUP_SET_NAME:?BACKUP_SET_NAME must identify a backup set}
       - --distribution-config-target
       - /target/distribution-config/config.yml
     volumes:
-      - ${BACKUP_MOUNT_ROOT:-/tmp/grom-backup-path-required}:/backup:ro
+      - ${BACKUP_MOUNT_ROOT:?BACKUP_MOUNT_ROOT must be set to an absolute backup directory}:/backup:ro
       - grom-data:/target/grom-data
       - signing-certs:/target/signing-certs
       - registry-data:/target/registry-data

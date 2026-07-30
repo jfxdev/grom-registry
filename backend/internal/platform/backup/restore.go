@@ -125,22 +125,57 @@ func Restore(options RestoreOptions) (Inspection, error) {
 			return Inspection{}, err
 		}
 	}
+	type promotedEntry struct {
+		staged string
+		target string
+	}
+	promoted := make([]promotedEntry, 0)
+	configPromoted := false
+	rollbackPromotion := func(cause error) error {
+		var rollbackFailures []error
+		if configPromoted {
+			if err := os.Rename(options.DistributionConfigTarget, configStaging); err != nil {
+				rollbackFailures = append(rollbackFailures, err)
+			}
+		}
+		for index := len(promoted) - 1; index >= 0; index-- {
+			move := promoted[index]
+			if err := os.MkdirAll(filepath.Dir(move.staged), 0o700); err != nil {
+				rollbackFailures = append(rollbackFailures, err)
+				continue
+			}
+			if err := os.Rename(move.target, move.staged); err != nil {
+				rollbackFailures = append(rollbackFailures, err)
+			}
+		}
+		if len(rollbackFailures) != 0 {
+			cleanupStaging = false
+			return fmt.Errorf("%w; restore rollback failed and restore targets are dirty; wipe them before retrying: %v", cause, rollbackFailures)
+		}
+		return cause
+	}
 	for index, target := range targets {
 		entries, err := os.ReadDir(staging[index])
 		if err != nil {
-			return Inspection{}, fmt.Errorf("list restore staging: %w", err)
+			return Inspection{}, rollbackPromotion(fmt.Errorf("list restore staging: %w", err))
 		}
 		for _, entry := range entries {
-			if err := os.Rename(filepath.Join(staging[index], entry.Name()), filepath.Join(target, entry.Name())); err != nil {
-				return Inspection{}, fmt.Errorf("promote restored component: %w", err)
+			stagedPath := filepath.Join(staging[index], entry.Name())
+			targetPath := filepath.Join(target, entry.Name())
+			if err := os.Rename(stagedPath, targetPath); err != nil {
+				return Inspection{}, rollbackPromotion(fmt.Errorf("promote restored component: %w", err))
 			}
-		}
-		if err := os.Remove(staging[index]); err != nil {
-			return Inspection{}, fmt.Errorf("remove restore staging: %w", err)
+			promoted = append(promoted, promotedEntry{staged: stagedPath, target: targetPath})
 		}
 	}
 	if err := os.Rename(configStaging, options.DistributionConfigTarget); err != nil {
-		return Inspection{}, fmt.Errorf("promote restored distribution configuration: %w", err)
+		return Inspection{}, rollbackPromotion(fmt.Errorf("promote restored distribution configuration: %w", err))
+	}
+	configPromoted = true
+	for _, path := range staging {
+		if err := os.Remove(path); err != nil {
+			return Inspection{}, rollbackPromotion(fmt.Errorf("remove restore staging: %w", err))
+		}
 	}
 	cleanupStaging = false
 	return inspection, nil

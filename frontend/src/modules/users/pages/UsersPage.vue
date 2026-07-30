@@ -126,13 +126,16 @@ async function copyResetLink() {
         </div>
       </div>
 
-      <div v-if="!users.isLoading.value && !userCount" class="empty-state list-empty-state">
+      <div v-if="users.isLoading.value" class="empty-state list-empty-state" role="status">
+        <p class="text-sm text-muted-foreground">Loading users…</p>
+      </div>
+      <div v-else-if="!userCount" class="empty-state list-empty-state">
         <div>
           <UserRound class="mx-auto mb-3 text-accent" :size="28" />
           <p class="font-medium text-foreground">No users yet</p>
         </div>
       </div>
-      <div v-else-if="!users.isLoading.value && !filteredUsers.length" class="empty-state list-empty-state">
+      <div v-else-if="!filteredUsers.length" class="empty-state list-empty-state">
         <div>
           <Search class="mx-auto mb-3 text-accent" :size="28" />
           <p class="font-medium text-foreground">No matching users</p>

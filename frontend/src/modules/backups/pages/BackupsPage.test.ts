@@ -161,6 +161,15 @@ describe('BackupsPage', () => {
     expect(wrapper.get('header button').attributes('disabled')).toBeDefined()
   })
 
+  it('distinguishes overview failures from an empty backup list', async () => {
+    mocks.getBackupOverview.mockRejectedValue(new Error('network failure'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Could not load recovery points')
+    expect(wrapper.text()).not.toContain('No recovery points yet')
+  })
+
   it('shows API failures and closes confirmations without mutating', async () => {
     mocks.createBackup.mockRejectedValue(new APIError(503, 'backup_unavailable', 'Agent unavailable'))
     mocks.deleteBackup.mockRejectedValue(new Error('network failure'))

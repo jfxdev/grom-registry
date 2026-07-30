@@ -32,6 +32,8 @@ type Overview struct {
 
 var ErrOperationInProgress = errors.New("a backup operation is already running")
 
+const agentAvailabilityTimeout = 5 * time.Second
+
 type Agent interface {
 	List(context.Context) ([]Summary, error)
 	Create(context.Context, AgentCreateRequest) (Summary, error)
@@ -99,9 +101,20 @@ func (manager *Manager) Start() (Operation, error) {
 		manager.mu.Unlock()
 		return Operation{}, ErrOperationInProgress
 	}
-	if !manager.agent.Available(context.Background()) {
-		manager.mu.Unlock()
+	manager.mu.Unlock()
+
+	availabilityContext, cancel := context.WithTimeout(context.Background(), agentAvailabilityTimeout)
+	available := manager.agent.Available(availabilityContext)
+	cancel()
+	if !available {
 		return Operation{}, fmt.Errorf("backup agent is unavailable")
+	}
+
+	manager.mu.Lock()
+	if manager.deleting || manager.lastOperation != nil &&
+		manager.lastOperation.Status != "complete" && manager.lastOperation.Status != "failed" {
+		manager.mu.Unlock()
+		return Operation{}, ErrOperationInProgress
 	}
 	operation := Operation{ID: uuid.NewString(), Status: "starting", StartedAt: time.Now().UTC()}
 	storedOperation := operation

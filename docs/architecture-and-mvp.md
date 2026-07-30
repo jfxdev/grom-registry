@@ -412,8 +412,8 @@ Work:
 2. Add and test a cross-process SQLite migration lock compatible with the
    single-instance deployment profile.
 3. Test PostgreSQL advisory-lock timeout and recovery.
-4. First write and test backup and restore for SQLite, signing keys,
-   Distribution metadata, and local blob storage. Follow the detailed
+4. Maintain and periodically validate backup and restore for SQLite, signing
+   keys, Distribution metadata, and local blob storage. Follow the detailed
    [`backup and disaster recovery implementation plan`](backup-and-disaster-recovery-implementation-plan.md).
 5. Write and test signing-key rotation procedures, including Distribution trust
    updates and in-flight JWT behavior.

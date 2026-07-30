@@ -2118,6 +2118,7 @@ export interface operations {
                     "application/json": components["schemas"]["BackupOperation"];
                 };
             };
+            403: components["responses"]["Forbidden"];
             /** @description A backup is already running or maintenance cannot begin */
             409: {
                 headers: {

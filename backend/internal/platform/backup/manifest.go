@@ -70,16 +70,11 @@ func validateManifest(manifest Manifest) error {
 		(manifest.FormatVersion == QuiescedFormatVersion && manifest.Consistency != "quiesced") {
 		return fmt.Errorf("unsupported consistency mode")
 	}
-	if strings.TrimSpace(manifest.GromVersion) == "" || len(manifest.GromVersion) > 128 {
-		return fmt.Errorf("grom version is required")
-	}
 	if manifest.Database != "sqlite" || manifest.RegistryStorage != "filesystem" {
 		return fmt.Errorf("unsupported database or registry storage profile")
 	}
-	switch manifest.DeploymentProfile {
-	case "development", "permissive", "strict":
-	default:
-		return fmt.Errorf("deployment profile is invalid")
+	if err := validateManifestMetadata(manifest.GromVersion, manifest.DeploymentProfile); err != nil {
+		return err
 	}
 	if len(manifest.Components) != len(requiredComponents) {
 		return fmt.Errorf("backup must declare exactly %d components", len(requiredComponents))
@@ -101,6 +96,18 @@ func validateManifest(manifest Manifest) error {
 		}
 	}
 	return nil
+}
+
+func validateManifestMetadata(gromVersion, deploymentProfile string) error {
+	if strings.TrimSpace(gromVersion) == "" || len(gromVersion) > 128 {
+		return fmt.Errorf("grom version is required")
+	}
+	switch deploymentProfile {
+	case "development", "permissive", "strict":
+		return nil
+	default:
+		return fmt.Errorf("deployment profile is invalid")
+	}
 }
 
 func readManifest(path string) (Manifest, []byte, error) {

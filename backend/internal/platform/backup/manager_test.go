@@ -22,6 +22,8 @@ type fakeAgent struct {
 	createErr   error
 	downloadErr error
 	deleteErr   error
+	availableAt chan struct{}
+	availableOn chan struct{}
 }
 
 func (agent *fakeAgent) List(context.Context) ([]Summary, error) {
@@ -63,7 +65,17 @@ func (agent *fakeAgent) Delete(context.Context, string) error {
 	return nil
 }
 
-func (agent *fakeAgent) Available(context.Context) bool { return !agent.unavailable }
+func (agent *fakeAgent) Available(ctx context.Context) bool {
+	if agent.availableAt != nil {
+		close(agent.availableAt)
+		select {
+		case <-agent.availableOn:
+		case <-ctx.Done():
+			return false
+		}
+	}
+	return !agent.unavailable
+}
 
 func TestManagerQuiescesWritesBeforeCheckpointAndCreate(t *testing.T) {
 	controller := maintenance.New()
@@ -178,6 +190,33 @@ func TestManagerRejectsUnavailableAndConcurrentOperations(t *testing.T) {
 	}
 	if err := manager.Delete(context.Background(), "backup"); !errors.Is(err, ErrOperationInProgress) {
 		t.Fatalf("expected active operation delete conflict, got %v", err)
+	}
+}
+
+func TestManagerDoesNotHoldMutexDuringAgentAvailabilityCheck(t *testing.T) {
+	agent := &fakeAgent{availableAt: make(chan struct{}), availableOn: make(chan struct{})}
+	manager := NewManager(agent, maintenance.New(), func(context.Context) error { return nil }, "test", "development", nil)
+	result := make(chan error, 1)
+	go func() {
+		_, err := manager.Start()
+		result <- err
+	}()
+	<-agent.availableAt
+
+	acquired := make(chan struct{})
+	go func() {
+		manager.mu.Lock()
+		manager.mu.Unlock()
+		close(acquired)
+	}()
+	select {
+	case <-acquired:
+	case <-time.After(time.Second):
+		t.Fatal("manager mutex remained locked during agent availability check")
+	}
+	close(agent.availableOn)
+	if err := <-result; err != nil {
+		t.Fatal(err)
 	}
 }
 

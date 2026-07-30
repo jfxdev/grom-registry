@@ -221,6 +221,34 @@ func TestBundleRoundTripRejectsUnexpectedOuterEntries(t *testing.T) {
 	}
 }
 
+func TestPreparedBundleRemainsDownloadableAfterDeletion(t *testing.T) {
+	fixture := createFixture(t)
+	root := t.TempDir()
+	inspection, _, err := Create(CreateOptions{
+		DestinationRoot: root, GromData: fixture.gromData, SigningCerts: fixture.signing,
+		RegistryData: fixture.registry, DistributionConfig: fixture.config,
+		GromVersion: "test-version", DeploymentProfile: "development",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := prepareBundle(root, inspection.Manifest.BackupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snapshot.close()
+	if _, err := Delete(root, inspection.Manifest.BackupID); err != nil {
+		t.Fatal(err)
+	}
+	var bundle bytes.Buffer
+	if err := snapshot.writeTo(&bundle); err != nil {
+		t.Fatalf("stream prepared bundle after deletion: %v", err)
+	}
+	if _, err := Unbundle(t.TempDir(), bytes.NewReader(bundle.Bytes()), 1<<20); err != nil {
+		t.Fatalf("import prepared bundle after deletion: %v", err)
+	}
+}
+
 func TestInspectRejectsIncompleteCorruptAndUnexpectedSets(t *testing.T) {
 	fixture := createFixture(t)
 	_, backupPath, err := Create(CreateOptions{
@@ -344,6 +372,46 @@ func TestExtractArchiveRejectsTraversalAndSpecialFiles(t *testing.T) {
 				t.Fatal("expected unsafe archive rejection")
 			}
 		})
+	}
+}
+
+func TestExtractArchiveSanitizesPermissionsAndOwnership(t *testing.T) {
+	archivePath := filepath.Join(t.TempDir(), "metadata.tar")
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := tar.NewWriter(file)
+	header := &tar.Header{
+		Name: "payload", Typeflag: tar.TypeReg, Mode: 0o777,
+		Uid: 12345, Gid: 23456, Size: 1,
+	}
+	if err := writer.WriteHeader(header); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = writer.Write([]byte("x"))
+	_ = writer.Close()
+	_ = file.Close()
+
+	staging := t.TempDir()
+	if err := extractArchive(archivePath, staging, Component{EntryCount: 1, ContentBytes: 1}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(staging, "payload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != safeRestoreModeMask {
+		t.Fatalf("expected sanitized permissions %o, got %o", safeRestoreModeMask, info.Mode().Perm())
+	}
+	if os.Geteuid() == 0 {
+		restoredHeader, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if restoredHeader.Uid != gromServiceUID || restoredHeader.Gid != gromServiceGID {
+			t.Fatalf("expected service ownership %d:%d, got %d:%d", gromServiceUID, gromServiceGID, restoredHeader.Uid, restoredHeader.Gid)
+		}
 	}
 }
 

@@ -67,6 +67,14 @@ describe('ServiceAccountsPage', () => {
     ])
   })
 
+  it('shows a loading state before service accounts resolve', () => {
+    mocks.listServiceAccounts.mockReturnValue(new Promise(() => {}))
+    const wrapper = mountPage()
+
+    expect(wrapper.text()).toContain('Loading service accounts')
+    expect(wrapper.text()).not.toContain('No active service accounts')
+  })
+
   it('filters service accounts by name, username or description', async () => {
     const wrapper = mountPage()
     await flushPromises()

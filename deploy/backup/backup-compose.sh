@@ -54,10 +54,17 @@ action="${1:-}"
 case "${action}" in
   create)
     [ "$#" -eq 2 ] || fail "usage: backup-compose.sh create /absolute/backup/directory"
-    mkdir -p "$2"
-    chmod 0700 "$2"
+    case "$2" in
+      /*) ;;
+      *) fail "path must be absolute" ;;
+    esac
+    if [ ! -e "$2" ]; then
+      mkdir -p "$2"
+      chmod 0700 "$2"
+    fi
     BACKUP_MOUNT_ROOT="$(absolute_existing_directory "$2")"
-    export BACKUP_MOUNT_ROOT
+    BACKUP_SET_NAME="pending-backup-set"
+    export BACKUP_MOUNT_ROOT BACKUP_SET_NAME
 
     "${compose[@]}" build backup-estimate backup-create backup-inspect
     grom_id="$("${compose[@]}" ps -q grom)"
@@ -80,8 +87,12 @@ case "${action}" in
     printf '%s\n' "${estimate_output}"
     estimated_bytes="$(printf '%s\n' "${estimate_output}" | sed -n 's/^estimated_total_bytes=//p' | tail -n 1)"
     available_kib="$(df -Pk "${BACKUP_MOUNT_ROOT}" | tail -n 1 | awk '{print $4}')"
-    [ -n "${estimated_bytes}" ] && [ -n "${available_kib}" ] ||
-      fail "could not determine required and available backup capacity"
+    case "${estimated_bytes}" in
+      ''|*[!0-9]*) fail "could not determine required and available backup capacity" ;;
+    esac
+    case "${available_kib}" in
+      ''|*[!0-9]*) fail "could not determine required and available backup capacity" ;;
+    esac
     if [ "${estimated_bytes}" -gt $((available_kib * 1024)) ]; then
       fail "backup destination does not have enough available capacity"
     fi

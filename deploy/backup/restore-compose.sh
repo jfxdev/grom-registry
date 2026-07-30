@@ -50,12 +50,6 @@ fi
 "${compose[@]}" build backup-inspect backup-restore
 "${compose[@]}" run --rm --no-deps backup-inspect
 
-cleanup() {
-  local status=$?
-  trap - EXIT
-  exit "${status}"
-}
-trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 

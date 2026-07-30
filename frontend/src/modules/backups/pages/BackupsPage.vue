@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { APIError } from '@/shared/api/client'
-import type { BackupSummary } from '@/shared/api/models'
+import type { BackupStatus, BackupSummary } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
 import { ActionButton, Button, CancelButton, DeleteButton } from '@/shared/components/ui/button'
 import { Card } from '@/shared/components/ui/card'
@@ -19,18 +19,19 @@ const currentCursor = computed(() => pageCursors.value[pageIndex.value] ?? '')
 const deletionTarget = ref<BackupSummary | null>(null)
 const deletionConfirmation = ref('')
 const deletionError = ref('')
+const terminalStatuses = new Set<BackupStatus>(['complete', 'failed'])
 const overview = useQuery({
   queryKey: computed(() => backupKeys.overview(currentCursor.value)),
   queryFn: () => getBackupOverview(currentCursor.value),
   refetchInterval: (query) => {
     const status = query.state.data?.activeOperation?.status
-    return status && !['complete', 'failed'].includes(status) ? 1500 : 10_000
+    return status && !terminalStatuses.has(status) ? 1500 : 10_000
   },
 })
 const operation = computed(() => overview.data.value?.activeOperation)
 const operationRunning = computed(() => {
   const status = operation.value?.status
-  return status != null && !['complete', 'failed'].includes(status)
+  return status != null && !terminalStatuses.has(status)
 })
 const create = useMutation({
   mutationFn: createBackup,
@@ -114,9 +115,10 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`
 }
 
-function statusTone(status?: string) {
-  if (status === 'failed') return 'danger'
-  if (status === 'complete') return 'success'
+function statusTone(status?: BackupStatus) {
+  if (status && terminalStatuses.has(status)) {
+    return status === 'failed' ? 'danger' : 'success'
+  }
   return 'warning'
 }
 
@@ -190,6 +192,11 @@ function downloadBackup(backupId: string) {
       </div>
       <div v-if="overview.isLoading.value" class="backup-list">
         <div v-for="index in 3" :key="index" class="backup-row backup-row-loading" />
+      </div>
+      <div v-else-if="overview.isError.value" class="empty-state" role="alert">
+        <CircleAlert class="mx-auto mb-3 text-destructive" :size="30" />
+        <p class="font-medium text-foreground">Could not load recovery points</p>
+        <p class="mt-1 text-sm">Check the Grom service and try again.</p>
       </div>
       <div v-else-if="!overview.data.value?.backups.length" class="empty-state">
         <DatabaseBackup class="mx-auto mb-3 text-accent" :size="30" />

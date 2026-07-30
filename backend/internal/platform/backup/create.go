@@ -30,6 +30,9 @@ func Create(options CreateOptions) (Inspection, string, error) {
 	if !filepath.IsAbs(options.DestinationRoot) {
 		return Inspection{}, "", fmt.Errorf("backup destination must be absolute")
 	}
+	if err := validateManifestMetadata(options.GromVersion, options.DeploymentProfile); err != nil {
+		return Inspection{}, "", err
+	}
 	if options.Now == nil {
 		options.Now = time.Now
 	}
@@ -120,7 +123,8 @@ func Create(options CreateOptions) (Inspection, string, error) {
 	if err := writeSyncedFile(filepath.Join(partial, "COMPLETE"), []byte{}); err != nil {
 		return Inspection{}, "", err
 	}
-	if _, err := Inspect(partial); err != nil {
+	inspection, err := Inspect(partial)
+	if err != nil {
 		return Inspection{}, "", fmt.Errorf("validate completed backup: %w", err)
 	}
 	if err := syncDirectory(partial); err != nil {
@@ -133,8 +137,7 @@ func Create(options CreateOptions) (Inspection, string, error) {
 	if err := syncDirectory(options.DestinationRoot); err != nil {
 		return Inspection{}, "", err
 	}
-	inspection, err := Inspect(final)
-	return inspection, final, err
+	return inspection, final, nil
 }
 
 func copyRegularFile(source, destination string) (Component, error) {

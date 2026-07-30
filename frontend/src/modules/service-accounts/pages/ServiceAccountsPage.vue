@@ -133,7 +133,10 @@ function confirmDisable() {
         </div>
       </div>
 
-      <div v-if="!accounts.isLoading.value && !statusAccounts.length" class="empty-state list-empty-state">
+      <div v-if="accounts.isLoading.value" class="empty-state list-empty-state" role="status">
+        <p class="text-sm text-muted-foreground">Loading service accounts…</p>
+      </div>
+      <div v-else-if="!statusAccounts.length" class="empty-state list-empty-state">
         <div>
           <Bot class="mx-auto mb-3 text-accent" :size="28" />
           <p class="font-medium text-foreground">
@@ -141,7 +144,7 @@ function confirmDisable() {
           </p>
         </div>
       </div>
-      <div v-else-if="!accounts.isLoading.value && !filteredAccounts.length" class="empty-state list-empty-state">
+      <div v-else-if="!filteredAccounts.length" class="empty-state list-empty-state">
         <div>
           <Search class="mx-auto mb-3 text-accent" :size="28" />
           <p class="font-medium text-foreground">No matching service accounts</p>

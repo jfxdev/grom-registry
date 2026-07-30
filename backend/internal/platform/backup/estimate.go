@@ -13,8 +13,17 @@ type EstimateResult struct {
 }
 
 func Estimate(sources map[string]string) ([]EstimateResult, error) {
-	results := make([]EstimateResult, 0, len(requiredComponents))
-	for _, expected := range requiredComponents[:3] {
+	tarComponents := 0
+	for _, component := range requiredComponents {
+		if component.Kind == "tar" {
+			tarComponents++
+		}
+	}
+	results := make([]EstimateResult, 0, tarComponents)
+	for _, expected := range requiredComponents {
+		if expected.Kind != "tar" {
+			continue
+		}
 		source, ok := sources[expected.Name]
 		if !ok || !filepath.IsAbs(source) {
 			return nil, fmt.Errorf("estimate source for %q must be absolute", expected.Name)

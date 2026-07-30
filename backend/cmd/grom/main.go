@@ -104,6 +104,11 @@ func run(logger *slog.Logger) error {
 				)
 			},
 		)
+	} else if cfg.BackupAgentSocket != "" {
+		logger.Warn(
+			"integrated backups are disabled because the backup agent requires SQLite",
+			"database_kind", databaseKind,
+		)
 	}
 
 	restoreMarker, restoreMarkerPath, err := backup.ReadRestoreMarker(cfg.DataDir)

@@ -12,6 +12,12 @@ import (
 	"strings"
 )
 
+const (
+	safeRestoreModeMask = 0o770
+	gromServiceUID      = 100
+	gromServiceGID      = 100
+)
+
 func writeArchive(source, destination string) (Component, error) {
 	output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -145,7 +151,7 @@ func extractArchive(archivePath, staging string, expected Component) error {
 		if !pathWithin(staging, target) {
 			return fmt.Errorf("component archive path escapes staging")
 		}
-		mode := os.FileMode(header.Mode) & os.ModePerm
+		mode := os.FileMode(header.Mode) & safeRestoreModeMask
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, mode); err != nil {
@@ -179,7 +185,7 @@ func extractArchive(archivePath, staging string, expected Component) error {
 			return fmt.Errorf("restore permissions: %w", err)
 		}
 		if os.Geteuid() == 0 {
-			if err := os.Chown(target, header.Uid, header.Gid); err != nil {
+			if err := os.Chown(target, gromServiceUID, gromServiceGID); err != nil {
 				return fmt.Errorf("restore ownership: %w", err)
 			}
 		}

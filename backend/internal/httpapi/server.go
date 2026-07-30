@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -1158,10 +1159,12 @@ func (s *Server) maintenanceGate(next http.Handler) http.Handler {
 }
 
 func requiresQuiescenceTracking(r *http.Request) bool {
-	if r.Method == http.MethodPost && r.URL.Path == "/api/v1/backups" {
+	normalizedPath := path.Clean("/" + strings.TrimPrefix(r.URL.Path, "/"))
+	if r.Method == http.MethodPost && normalizedPath == "/api/v1/backups" {
 		return false
 	}
-	if r.URL.Path == "/auth/token" || strings.HasPrefix(r.URL.Path, "/v2/") {
+	if normalizedPath == "/auth/token" || normalizedPath == "/v2" ||
+		strings.HasPrefix(normalizedPath, "/v2/") {
 		return true
 	}
 	return r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions

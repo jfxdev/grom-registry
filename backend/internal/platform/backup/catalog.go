@@ -56,13 +56,21 @@ func List(root string) ([]Summary, error) {
 			continue
 		}
 		path := filepath.Join(root, entry.Name())
-		inspection, err := Inspect(path)
+		marker, err := os.Stat(filepath.Join(path, "COMPLETE"))
+		if err != nil || !marker.Mode().IsRegular() || marker.Size() != 0 {
+			return nil, fmt.Errorf("read completion marker for %q: backup is incomplete", entry.Name())
+		}
+		manifest, _, err := readManifest(path)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("read manifest for %q: %w", entry.Name(), err)
+		}
+		var totalBytes int64
+		for _, component := range manifest.Components {
+			totalBytes += component.Bytes
 		}
 		result = append(result, Summary{
-			BackupID: inspection.Manifest.BackupID, CreatedAt: inspection.Manifest.CreatedAt.Format(time.RFC3339),
-			GromVersion: inspection.Manifest.GromVersion, TotalBytes: inspection.TotalBytes, Path: path,
+			BackupID: manifest.BackupID, CreatedAt: manifest.CreatedAt.Format(time.RFC3339),
+			GromVersion: manifest.GromVersion, TotalBytes: totalBytes, Path: path,
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -164,46 +172,86 @@ func Delete(root, backupID string) (Summary, error) {
 	return summary, nil
 }
 
-func Bundle(root, backupID string, output io.Writer) (string, error) {
+type bundleEntry struct {
+	name string
+	info os.FileInfo
+	file *os.File
+}
+
+type bundleSnapshot struct {
+	filename string
+	entries  []bundleEntry
+}
+
+func prepareBundle(root, backupID string) (*bundleSnapshot, error) {
 	summary, err := findSummary(root, backupID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if _, err := Inspect(summary.Path); err != nil {
-		return "", err
+		return nil, err
 	}
-	writer := tar.NewWriter(output)
 	entries, err := os.ReadDir(summary.Path)
 	if err != nil {
-		return "", fmt.Errorf("list backup set: %w", err)
+		return nil, fmt.Errorf("list backup set: %w", err)
 	}
+	snapshot := &bundleSnapshot{filename: filepath.Base(summary.Path) + ".tar"}
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil || !info.Mode().IsRegular() {
-			return "", fmt.Errorf("backup set contains a non-regular payload")
+			snapshot.close()
+			return nil, fmt.Errorf("backup set contains a non-regular payload")
 		}
-		header, err := tar.FileInfoHeader(info, "")
+		file, err := os.Open(filepath.Join(summary.Path, entry.Name()))
 		if err != nil {
-			return "", err
+			snapshot.close()
+			return nil, err
 		}
-		header.Name = filepath.ToSlash(filepath.Join(filepath.Base(summary.Path), entry.Name()))
+		snapshot.entries = append(snapshot.entries, bundleEntry{name: entry.Name(), info: info, file: file})
+	}
+	return snapshot, nil
+}
+
+func (snapshot *bundleSnapshot) writeTo(output io.Writer) error {
+	writer := tar.NewWriter(output)
+	for _, entry := range snapshot.entries {
+		if _, err := entry.file.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		header, err := tar.FileInfoHeader(entry.info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(filepath.Join(strings.TrimSuffix(snapshot.filename, ".tar"), entry.name))
 		if err := writer.WriteHeader(header); err != nil {
-			return "", err
+			return err
 		}
-		input, err := os.Open(filepath.Join(summary.Path, entry.Name()))
-		if err != nil {
-			return "", err
-		}
-		_, copyErr := io.Copy(writer, input)
-		closeErr := input.Close()
-		if copyErr != nil || closeErr != nil {
-			return "", fmt.Errorf("stream backup payload")
+		if _, err := io.Copy(writer, entry.file); err != nil {
+			return fmt.Errorf("stream backup payload")
 		}
 	}
 	if err := writer.Close(); err != nil {
-		return "", fmt.Errorf("finalize backup bundle: %w", err)
+		return fmt.Errorf("finalize backup bundle: %w", err)
 	}
-	return filepath.Base(summary.Path) + ".tar", nil
+	return nil
+}
+
+func (snapshot *bundleSnapshot) close() {
+	for _, entry := range snapshot.entries {
+		_ = entry.file.Close()
+	}
+}
+
+func Bundle(root, backupID string, output io.Writer) (string, error) {
+	snapshot, err := prepareBundle(root, backupID)
+	if err != nil {
+		return "", err
+	}
+	defer snapshot.close()
+	if err := snapshot.writeTo(output); err != nil {
+		return "", err
+	}
+	return snapshot.filename, nil
 }
 
 func findSummary(root, backupID string) (Summary, error) {

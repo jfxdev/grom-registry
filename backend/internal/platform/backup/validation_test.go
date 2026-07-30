@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,6 +82,18 @@ func TestValidateManifestRejectsEveryContractViolation(t *testing.T) {
 	}
 }
 
+func TestCreateValidatesMetadataBeforeReadingSources(t *testing.T) {
+	for _, options := range []CreateOptions{
+		{DestinationRoot: t.TempDir(), GromVersion: " ", DeploymentProfile: "development"},
+		{DestinationRoot: t.TempDir(), GromVersion: "test", DeploymentProfile: "unknown"},
+	} {
+		if _, _, err := Create(options); err == nil ||
+			strings.Contains(err.Error(), "source paths") || strings.Contains(err.Error(), "archive") {
+			t.Fatalf("expected metadata preflight rejection, got %v", err)
+		}
+	}
+}
+
 func TestReadManifestRejectsMissingOversizedUnknownAndTrailingData(t *testing.T) {
 	if _, _, err := readManifest(t.TempDir()); err == nil || !strings.Contains(err.Error(), "open manifest") {
 		t.Fatalf("expected missing manifest error, got %v", err)
@@ -104,6 +117,36 @@ func TestReadManifestRejectsMissingOversizedUnknownAndTrailingData(t *testing.T)
 				t.Fatal("expected invalid manifest rejection")
 			}
 		})
+	}
+}
+
+func TestListUsesManifestAndSurfacesIncompleteSets(t *testing.T) {
+	fixture := createFixture(t)
+	root := t.TempDir()
+	inspection, backupPath, err := Create(CreateOptions{
+		DestinationRoot: root, GromData: fixture.gromData, SigningCerts: fixture.signing,
+		RegistryData: fixture.registry, DistributionConfig: fixture.config,
+		GromVersion: "test-version", DeploymentProfile: "development",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	componentPath := filepath.Join(backupPath, inspection.Manifest.Components[0].File)
+	if err := os.WriteFile(componentPath, []byte("corrupt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	summaries, err := List(root)
+	if err != nil || len(summaries) != 1 || summaries[0].BackupID != inspection.Manifest.BackupID {
+		t.Fatalf("expected manifest-backed summary for corrupt payload: summaries=%#v error=%v", summaries, err)
+	}
+	if _, err := Inspect(backupPath); err == nil {
+		t.Fatal("expected full inspection to reject the corrupt payload")
+	}
+	if err := os.Remove(filepath.Join(backupPath, "COMPLETE")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := List(root); err == nil || !strings.Contains(err.Error(), "incomplete") {
+		t.Fatalf("expected incomplete set to remain visible as a listing error, got %v", err)
 	}
 }
 
@@ -351,5 +394,5 @@ func testBundle(t *testing.T, entries []bundleTestEntry) []byte {
 }
 
 func errorsIsInvalidCursor(err error) bool {
-	return err == ErrInvalidCursor
+	return errors.Is(err, ErrInvalidCursor)
 }

@@ -869,6 +869,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BackupOperation"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           description: A backup is already running or maintenance cannot begin
           content:

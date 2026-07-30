@@ -52,6 +52,14 @@ describe('UsersPage', () => {
     ])
   })
 
+  it('shows a loading state before users resolve', () => {
+    mocks.listUsers.mockReturnValue(new Promise(() => {}))
+    const wrapper = mountPage()
+
+    expect(wrapper.text()).toContain('Loading users')
+    expect(wrapper.text()).not.toContain('No users yet')
+  })
+
   it('filters users by username or email', async () => {
     const wrapper = mountPage()
     await flushPromises()
