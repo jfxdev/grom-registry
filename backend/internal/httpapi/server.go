@@ -1169,7 +1169,7 @@ func (s *Server) exchangeRegistryToken(w http.ResponseWriter, r *http.Request) {
 	principal, err := s.identity.AuthenticateRegistry(r.Context(), username, rawToken)
 	if err != nil {
 		s.registryLimiter.failure(limiterKey, time.Now())
-		s.recordAudit(r, anonymousPrincipal(), constants.AuditRegistryAuthFailed, constants.AuditResourceAuthentication, "", map[string]any{"reason": "invalid_credentials", "username": username})
+		_ = s.recordAudit(r, anonymousPrincipal(), constants.AuditRegistryAuthFailed, constants.AuditResourceAuthentication, "", map[string]any{"reason": "invalid_credentials", "username": username})
 		w.Header().Set("WWW-Authenticate", `Basic realm="Grom Registry"`)
 		writeError(w, r, http.StatusUnauthorized, "unauthenticated", "Invalid registry credentials")
 		return
