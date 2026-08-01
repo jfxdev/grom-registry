@@ -67,6 +67,27 @@ func (r *Repository) ListUsers(ctx context.Context) ([]identity.User, error) {
 	return result, nil
 }
 
+func (r *Repository) DisableUser(ctx context.Context, id foundation.ID) error {
+	now := time.Now().UTC()
+	return r.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		result, err := tx.NewUpdate().Model((*userModel)(nil)).
+			Set("disabled_at = ?", now).
+			Where("id = ?", id.String()).
+			Where("disabled_at IS NULL").
+			Where("system_admin = FALSE OR (SELECT COUNT(*) FROM users WHERE system_admin = TRUE AND disabled_at IS NULL) > 1").
+			Exec(ctx)
+		if err != nil {
+			return err
+		}
+		affected, _ := result.RowsAffected()
+		if affected == 0 {
+			return sql.ErrNoRows
+		}
+		_, err = tx.NewDelete().Model((*sessionModel)(nil)).Where("user_id = ?", id.String()).Exec(ctx)
+		return err
+	})
+}
+
 func (r *Repository) UpdateUserPassword(ctx context.Context, id foundation.ID, passwordHash string) error {
 	result, err := r.db.NewUpdate().Model((*userModel)(nil)).
 		Set("password_hash = ?", passwordHash).

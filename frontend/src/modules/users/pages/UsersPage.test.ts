@@ -8,14 +8,20 @@ import UsersPage from './UsersPage.vue'
 const mocks = vi.hoisted(() => ({
   createUser: vi.fn(),
   createUserPasswordResetLink: vi.fn(),
+  disableUser: vi.fn(),
   listUsers: vi.fn(),
 }))
 
 vi.mock('../api/users', () => ({
   createUser: mocks.createUser,
   createUserPasswordResetLink: mocks.createUserPasswordResetLink,
+  disableUser: mocks.disableUser,
   listUsers: mocks.listUsers,
   userKeys: { all: ['users'] },
+}))
+
+vi.mock('@/modules/auth/store/session', () => ({
+  useSessionStore: () => ({ user: { id: 'admin-1', systemAdmin: true } }),
 }))
 
 function mountPage() {
@@ -33,6 +39,7 @@ describe('UsersPage', () => {
   beforeEach(() => {
     mocks.createUser.mockReset()
     mocks.createUserPasswordResetLink.mockReset()
+    mocks.disableUser.mockReset()
     mocks.listUsers.mockReset()
     mocks.listUsers.mockResolvedValue([
       {
@@ -83,5 +90,29 @@ describe('UsersPage', () => {
 
     expect(wrapper.text()).toContain('No matching users')
     expect(wrapper.text()).toContain('0 of 2')
+  })
+
+  it('confirms and disables a user', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Disable user sam"]').trigger('click')
+    expect(wrapper.text()).toContain('This revokes the user’s active sessions')
+    mocks.disableUser.mockResolvedValue(undefined)
+    await wrapper.get('form[aria-labelledby="disable-user-title"]').trigger('submit')
+    expect(mocks.disableUser).toHaveBeenCalledWith('user-2')
+  })
+
+  it('does not offer password reset or disable actions for disabled users', async () => {
+    mocks.listUsers.mockResolvedValueOnce([{
+      id: 'user-3', email: 'disabled@example.com', username: 'disabled', systemAdmin: false,
+      createdAt: '2026-07-29T10:00:00Z', disabledAt: '2026-07-30T10:00:00Z',
+    }])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Disabled')
+    expect(wrapper.text()).not.toContain('Reset password')
+    expect(wrapper.find('button[aria-label="Disable user disabled"]').exists()).toBe(false)
   })
 })

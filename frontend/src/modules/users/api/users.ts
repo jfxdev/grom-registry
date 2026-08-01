@@ -14,3 +14,6 @@ export const createUserPasswordResetLink = (userId: string) =>
   apiRequest<{ url: string; expiresAt: string }>(`/api/v1/users/${encodeURIComponent(userId)}/password-reset-link`, {
     method: 'POST',
   })
+
+export const disableUser = (userId: string) =>
+  apiRequest<void>(`/api/v1/users/${encodeURIComponent(userId)}`, { method: 'DELETE' })

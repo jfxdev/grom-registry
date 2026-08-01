@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { APIError } from '@/shared/api/client'
+import { useSessionStore } from '@/modules/auth/store/session'
 import type { User } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
-import { ActionButton, Button } from '@/shared/components/ui/button'
+import { ActionButton, Button, DeleteButton } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { writeClipboardText } from '@/shared/lib/clipboard'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Check, Copy, KeyRound, Plus, Search, ShieldAlert, UserRound, X } from '@lucide/vue'
 import { computed, ref } from 'vue'
-import { createUser, createUserPasswordResetLink, listUsers, userKeys } from '../api/users'
+import { createUser, createUserPasswordResetLink, disableUser, listUsers, userKeys } from '../api/users'
 
 const queryClient = useQueryClient()
+const session = useSessionStore()
 const users = useQuery({ queryKey: userKeys.all, queryFn: listUsers })
 const modalOpen = ref(false)
 const email = ref('')
@@ -24,6 +26,8 @@ const resetExpiresAt = ref('')
 const copied = ref(false)
 const copyError = ref('')
 const searchQuery = ref('')
+const disableTarget = ref<User | null>(null)
+const disableError = ref('')
 const userCount = computed(() => users.data.value?.length ?? 0)
 const filteredUsers = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
@@ -60,6 +64,17 @@ const createResetLink = useMutation({
   },
 })
 
+const disable = useMutation({
+  mutationFn: (userId: string) => disableUser(userId),
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: userKeys.all })
+    disableTarget.value = null
+  },
+  onError: (caught) => {
+    disableError.value = caught instanceof APIError ? caught.message : 'Could not disable the user'
+  },
+})
+
 function openReset(user: User) {
   resetTarget.value = user
   resetLink.value = ''
@@ -75,6 +90,16 @@ function closeReset() {
   resetExpiresAt.value = ''
   copied.value = false
   copyError.value = ''
+}
+
+function openDisable(user: User) {
+  disableTarget.value = user
+  disableError.value = ''
+}
+
+function closeDisable() {
+  if (!disable.isPending.value) disableTarget.value = null
+  disableError.value = ''
 }
 
 async function copyResetLink() {
@@ -150,11 +175,20 @@ async function copyResetLink() {
           </div>
           <p class="text-xs text-muted-foreground">Created {{ new Date(user.createdAt).toLocaleDateString() }}</p>
           <div class="user-actions">
-            <Badge :tone="user.systemAdmin ? 'success' : 'neutral'">{{ user.systemAdmin ? 'System admin' : 'User' }}</Badge>
-            <Button size="sm" variant="outline" @click="openReset(user)"><KeyRound :size="15" /> Reset password</Button>
+            <Badge :tone="user.disabledAt ? 'neutral' : user.systemAdmin ? 'success' : 'neutral'">{{ user.disabledAt ? 'Disabled' : user.systemAdmin ? 'System admin' : 'User' }}</Badge>
+            <Button v-if="!user.disabledAt" size="sm" variant="outline" @click="openReset(user)"><KeyRound :size="15" /> Reset password</Button>
+            <DeleteButton v-if="!user.disabledAt" :disabled="user.id === session.user?.id" :aria-label="`Disable user ${user.username}`" @click="openDisable(user)" />
           </div>
         </div>
       </template>
+    </div>
+
+    <div v-if="disableTarget" class="modal-backdrop" @click.self="closeDisable">
+      <form class="modal form-stack" aria-labelledby="disable-user-title" @submit.prevent="disable.mutate(disableTarget!.id)">
+        <div class="flex items-start justify-between"><div><h2 id="disable-user-title" class="text-lg font-semibold">Disable {{ disableTarget.username }}</h2><p class="mt-1 text-sm text-muted-foreground">This revokes the user’s active sessions and blocks future sign-in.</p></div><Button variant="ghost" size="icon" aria-label="Close disable user" @click="closeDisable"><X :size="18" /></Button></div>
+        <p v-if="disableError" class="error-text" role="alert">{{ disableError }}</p>
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" :disabled="disable.isPending.value" @click="closeDisable">Cancel</Button><Button type="submit" variant="danger" :loading="disable.isPending.value">Disable user</Button></div>
+      </form>
     </div>
 
     <div v-if="modalOpen" class="modal-backdrop" @click.self="modalOpen = false">

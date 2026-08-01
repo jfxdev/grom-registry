@@ -109,7 +109,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 |---|---|
 | `/api/v1/session`, `/api/v1/me`, `/api/v1/me/password`, `/api/v1/password-resets` | Identity session, self-service password management, and public reset completion |
 | `/api/v1/service-accounts`, `/api/v1/service-accounts/{id}/tokens` | Identity |
-| `/api/v1/users`, `/api/v1/users/{id}/password-reset-link` | Identity administration and reveal-once magic reset-link creation |
+| `/api/v1/users`, `/api/v1/users/{id}`, `/api/v1/users/{id}/password-reset-link` | Identity administration, user disabling with session revocation, and reveal-once magic reset-link creation |
 | `/api/v1/projects` | Project listing and installation-admin creation |
 | `/api/v1/projects/{project}` | Project detail and installation-admin deletion of empty projects |
 | `/api/v1/projects/{project}/repositories`, `/api/v1/projects/{project}/repository-tags` | Registry browsing and logical repository creation |

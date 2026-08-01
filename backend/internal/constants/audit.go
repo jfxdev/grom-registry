@@ -1,6 +1,19 @@
 package constants
 
 const (
+	AuditLoginSucceeded               = "identity.login_succeeded"
+	AuditLoginFailed                  = "identity.login_failed"
+	AuditRegistryAuthFailed           = "identity.registry_auth_failed"
+	AuditUserCreated                  = "identity.user_created"
+	AuditUserDisabled                 = "identity.user_disabled"
+	AuditServiceAccountCreated        = "identity.service_account_created"
+	AuditServiceAccountDisabled       = "identity.service_account_disabled"
+	AuditAccessKeyCreated             = "identity.access_key_created"
+	AuditAccessKeyRevoked             = "identity.access_key_revoked"
+	AuditProjectCreated               = "projects.project_created"
+	AuditProjectDeleted               = "projects.project_deleted"
+	AuditMembershipUpserted           = "projects.membership_upserted"
+	AuditMembershipRemoved            = "projects.membership_removed"
 	AuditUserPasswordChanged          = "identity.user_password_changed"
 	AuditUserPasswordResetLinkCreated = "identity.user_password_reset_link_created"
 	AuditUserPasswordResetCompleted   = "identity.user_password_reset_completed"
@@ -26,5 +39,9 @@ const (
 	AuditResourceArtifactDeletion = "artifact_deletion"
 	AuditResourceLifecycleRun     = "lifecycle_run"
 	AuditResourceUser             = "user"
+	AuditResourceAuthentication   = "authentication"
+	AuditResourceServiceAccount   = "service_account"
+	AuditResourceProject          = "project"
+	AuditResourceMembership       = "membership"
 	AuditResourceBackup           = "backup"
 )

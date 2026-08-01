@@ -149,6 +149,10 @@ func (s *Service) FindUser(ctx context.Context, id foundation.ID) (*identity.Use
 	return s.repository.FindUserByID(ctx, id)
 }
 
+func (s *Service) DisableUser(ctx context.Context, id foundation.ID) error {
+	return s.repository.DisableUser(ctx, id)
+}
+
 func (s *Service) ChangePassword(ctx context.Context, userID foundation.ID, currentPassword, newPassword string) error {
 	if len(newPassword) < constants.MinimumPasswordLength {
 		return fmt.Errorf("new password must contain at least %d characters", constants.MinimumPasswordLength)

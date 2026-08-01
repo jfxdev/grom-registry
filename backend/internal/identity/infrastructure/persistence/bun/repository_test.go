@@ -50,6 +50,45 @@ func TestListServiceAccountsCanIncludeDisabledAccounts(t *testing.T) {
 	})
 }
 
+func TestDisableUserRevokesSessionsAtomically(t *testing.T) {
+	ctx := context.Background()
+	db := openSQLiteRepositoryTestDB(t)
+	for _, statement := range []string{
+		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, system_admin BOOLEAN NOT NULL, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
+		`CREATE TABLE sessions (id TEXT PRIMARY KEY, public_id TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL, secret_hash TEXT NOT NULL, created_at TIMESTAMP NOT NULL, expires_at TIMESTAMP NOT NULL)`,
+	} {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repository := New(db)
+	userID := foundation.NewID()
+	if _, err := db.ExecContext(ctx, `INSERT INTO users (id, email, username, password_hash, system_admin, created_at) VALUES (?, ?, ?, ?, ?, ?)`, userID.String(), "user@example.com", "user", "hash", false, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO sessions (id, public_id, user_id, secret_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`, foundation.NewID().String(), "session", userID.String(), "hash", time.Now().UTC(), time.Now().UTC().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repository.DisableUser(ctx, userID); err != nil {
+		t.Fatal(err)
+	}
+	var disabledAt *time.Time
+	if err := db.NewSelect().Table("users").Column("disabled_at").Where("id = ?", userID.String()).Scan(ctx, &disabledAt); err != nil {
+		t.Fatal(err)
+	}
+	if disabledAt == nil {
+		t.Fatal("expected user to be disabled")
+	}
+	count, err := db.NewSelect().Table("sessions").Where("user_id = ?", userID.String()).Count(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected sessions to be revoked, got %d", count)
+	}
+}
+
 func assertListServiceAccountsCanIncludeDisabled(t *testing.T, ctx context.Context, db *bun.DB) {
 	t.Helper()
 	repository := New(db)
