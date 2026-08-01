@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -100,6 +101,73 @@ func TestDisableUserRevokesSessionsAtomically(t *testing.T) {
 	}
 	if err := repository.DisableUser(ctx, adminTwo); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected last administrator protection, got %v", err)
+	}
+}
+
+func TestDisableUserProtectsLastAdministratorConcurrentlyPostgres(t *testing.T) {
+	databaseURL := os.Getenv("GROM_TEST_POSTGRES_URL")
+	if databaseURL == "" {
+		t.Skip("GROM_TEST_POSTGRES_URL is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	db, kind, err := database.Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := database.Migrate(ctx, db, kind, 5*time.Second, slog.Default()); err != nil {
+		t.Fatal(err)
+	}
+
+	repository := New(db)
+	suffix := foundation.NewID().String()
+	adminOne := &identity.User{ID: foundation.NewID(), Email: "admin-one-" + suffix + "@example.com", Username: "admin-one-" + suffix, PasswordHash: "hash", SystemAdmin: true, CreatedAt: time.Now().UTC()}
+	adminTwo := &identity.User{ID: foundation.NewID(), Email: "admin-two-" + suffix + "@example.com", Username: "admin-two-" + suffix, PasswordHash: "hash", SystemAdmin: true, CreatedAt: time.Now().UTC()}
+	for _, admin := range []*identity.User{adminOne, adminTwo} {
+		if err := repository.CreateUser(ctx, admin); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		_, _ = db.NewDelete().Model((*userModel)(nil)).Where("id IN (?)", bun.List([]string{adminOne.ID.String(), adminTwo.ID.String()})).Exec(context.Background())
+	})
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var workers sync.WaitGroup
+	for _, admin := range []*identity.User{adminOne, adminTwo} {
+		workers.Add(1)
+		go func(id foundation.ID) {
+			defer workers.Done()
+			<-start
+			results <- repository.DisableUser(ctx, id)
+		}(admin.ID)
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+
+	var success, rejected int
+	for err := range results {
+		switch {
+		case err == nil:
+			success++
+		case errors.Is(err, sql.ErrNoRows):
+			rejected++
+		default:
+			t.Fatalf("unexpected concurrent disable error: %v", err)
+		}
+	}
+	if success != 1 || rejected != 1 {
+		t.Fatalf("expected one successful disable and one rejected disable, got %d/%d", success, rejected)
+	}
+	active, err := db.NewSelect().Model((*userModel)(nil)).Where("is_system_admin = TRUE").Where("disabled_at IS NULL").Where("id IN (?)", bun.List([]string{adminOne.ID.String(), adminTwo.ID.String()})).Count(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active != 1 {
+		t.Fatalf("expected one active administrator, got %d", active)
 	}
 }
 

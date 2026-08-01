@@ -459,10 +459,7 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "User not found")
 		return
 	}
-	if err := s.recordAudit(r, principalForUser(actor), constants.AuditUserDisabled, constants.AuditResourceUser, targetID, nil); err != nil {
-		s.internalError(w, r, err)
-		return
-	}
+	_ = s.recordAudit(r, principalForUser(actor), constants.AuditUserDisabled, constants.AuditResourceUser, targetID, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

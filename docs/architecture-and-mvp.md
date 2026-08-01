@@ -1572,7 +1572,7 @@ Status vocabulary:
 | 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
 | 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |
 | 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Partial | Add durable audit failure/acceptance coverage |
-| 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Passing | Backend repository and frontend confirmation tests; public HTTP acceptance remains |
+| 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Partial | Backend repository and frontend confirmation tests; public HTTP acceptance remains unproven |
 | 22 | ORAS can push and pull representative generic OCI content | Generic OCI support | Missing | ORAS smoke job before advertising generic OCI support |
 | 23 | An S3-backed installation passes push, pull, restart, and restore checks | S3 support | Missing | Documented S3 compatibility job before advertising S3 support |
 

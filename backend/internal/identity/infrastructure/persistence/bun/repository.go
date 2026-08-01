@@ -9,11 +9,14 @@ import (
 	"github.com/jfxdev/grom/backend/internal/foundation"
 	identity "github.com/jfxdev/grom/backend/internal/identity/domain"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect"
 )
 
 type Repository struct {
 	db *bun.DB
 }
+
+const disableUserAdvisoryLockKey int64 = 0x47524f4d5f41444d
 
 func New(db *bun.DB) *Repository {
 	return &Repository{db: db}
@@ -70,6 +73,11 @@ func (r *Repository) ListUsers(ctx context.Context) ([]identity.User, error) {
 func (r *Repository) DisableUser(ctx context.Context, id foundation.ID) error {
 	now := time.Now().UTC()
 	return r.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if r.db.Dialect().Name() == dialect.PG {
+			if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(?)", disableUserAdvisoryLockKey); err != nil {
+				return err
+			}
+		}
 		result, err := tx.NewUpdate().Model((*userModel)(nil)).
 			Set("disabled_at = ?", now).
 			Where("id = ?", id.String()).

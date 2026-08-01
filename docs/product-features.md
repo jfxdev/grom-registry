@@ -145,8 +145,9 @@ An administrator can:
   installation-administrator privilege;
 - generate a reveal-once password-reset URL for an existing user.
 
-Administrators cannot disable their own account. Disabling a user blocks future
-sign-in and revokes all active sessions immediately.
+Administrators cannot disable their own account or the last active installation
+administrator. Disabling a user blocks future sign-in and revokes all active
+sessions immediately.
 
 The initial password accepted during user creation must contain at least eight
 characters. The user must use at least 12 characters when later changing or

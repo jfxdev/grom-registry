@@ -116,6 +116,17 @@ describe('UsersPage', () => {
     expect(wrapper.find('button[aria-label="Disable user disabled"]').exists()).toBe(false)
   })
 
+  it('disables the action for the signed-in administrator account', async () => {
+    mocks.listUsers.mockResolvedValueOnce([{
+      id: 'admin-1', email: 'admin@example.com', username: 'admin', systemAdmin: true,
+      createdAt: '2026-07-29T10:00:00Z',
+    }])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.get('button[aria-label="Disable user admin"]').attributes('disabled')).toBeDefined()
+  })
+
   it('shows disable errors from the API', async () => {
     mocks.disableUser.mockRejectedValueOnce(new Error('service unavailable'))
     const wrapper = mountPage()
