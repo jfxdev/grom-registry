@@ -232,6 +232,11 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	if revokeResponse.Code != http.StatusNoContent {
 		t.Fatalf("revoke token: expected 204, got %d", revokeResponse.Code)
 	}
+	deleteAccountResponse := httptest.NewRecorder()
+	server.deleteServiceAccount(deleteAccountResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/service-accounts/"+account.ID.String(), nil), admin, map[string]string{"id": account.ID.String()}))
+	if deleteAccountResponse.Code != http.StatusNoContent {
+		t.Fatalf("disable service account: expected 204, got %d", deleteAccountResponse.Code)
+	}
 
 	projectResponse := httptest.NewRecorder()
 	server.createProject(projectResponse, withUser(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/projects", strings.NewReader(`{"name":"Payments","slug":"payments"}`)), admin))
@@ -259,6 +264,17 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	server.deleteProject(deleteProjectResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/projects/payments", nil), admin, map[string]string{"project": project.Slug}))
 	if deleteProjectResponse.Code != http.StatusNoContent {
 		t.Fatalf("delete project: expected 204, got %d: %s", deleteProjectResponse.Code, deleteProjectResponse.Body.String())
+	}
+
+	selfDisableResponse := httptest.NewRecorder()
+	server.deleteUser(selfDisableResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/users/"+admin.ID.String(), nil), admin, map[string]string{"id": admin.ID.String()}))
+	if selfDisableResponse.Code != http.StatusConflict {
+		t.Fatalf("self disable: expected 409, got %d", selfDisableResponse.Code)
+	}
+	missingUserResponse := httptest.NewRecorder()
+	server.deleteUser(missingUserResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/users/missing", nil), admin, map[string]string{"id": "missing"}))
+	if missingUserResponse.Code != http.StatusNotFound {
+		t.Fatalf("missing user: expected 404, got %d", missingUserResponse.Code)
 	}
 
 	deleteUserResponse := httptest.NewRecorder()

@@ -115,4 +115,16 @@ describe('UsersPage', () => {
     expect(wrapper.text()).not.toContain('Reset password')
     expect(wrapper.find('button[aria-label="Disable user disabled"]').exists()).toBe(false)
   })
+
+  it('shows disable errors from the API', async () => {
+    mocks.disableUser.mockRejectedValueOnce(new Error('service unavailable'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Disable user sam"]').trigger('click')
+    await wrapper.get('form[aria-labelledby="disable-user-title"]').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('Could not disable the user')
+  })
 })
