@@ -647,7 +647,7 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_project", err.Error())
 		return
 	}
-	_ = s.recordAudit(r, principalForUser(user), constants.AuditProjectCreated, constants.AuditResourceProject, project.ID, map[string]any{"slug": project.Slug})
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditProjectCreated, constants.AuditResourceProject, foundation.ID(project.Slug), map[string]any{"slug": project.Slug})
 	writeJSON(w, http.StatusCreated, project)
 }
 
