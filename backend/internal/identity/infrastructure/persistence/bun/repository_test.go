@@ -3,6 +3,7 @@ package bunstore
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"os"
 	"testing"
@@ -54,7 +55,7 @@ func TestDisableUserRevokesSessionsAtomically(t *testing.T) {
 	ctx := context.Background()
 	db := openSQLiteRepositoryTestDB(t)
 	for _, statement := range []string{
-		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, system_admin BOOLEAN NOT NULL, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
+		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, is_system_admin BOOLEAN NOT NULL, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
 		`CREATE TABLE sessions (id TEXT PRIMARY KEY, public_id TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL, secret_hash TEXT NOT NULL, created_at TIMESTAMP NOT NULL, expires_at TIMESTAMP NOT NULL)`,
 	} {
 		if _, err := db.ExecContext(ctx, statement); err != nil {
@@ -63,7 +64,7 @@ func TestDisableUserRevokesSessionsAtomically(t *testing.T) {
 	}
 	repository := New(db)
 	userID := foundation.NewID()
-	if _, err := db.ExecContext(ctx, `INSERT INTO users (id, email, username, password_hash, system_admin, created_at) VALUES (?, ?, ?, ?, ?, ?)`, userID.String(), "user@example.com", "user", "hash", false, time.Now().UTC()); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO users (id, email, username, password_hash, is_system_admin, created_at) VALUES (?, ?, ?, ?, ?, ?)`, userID.String(), "user@example.com", "user", "hash", false, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO sessions (id, public_id, user_id, secret_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`, foundation.NewID().String(), "session", userID.String(), "hash", time.Now().UTC(), time.Now().UTC().Add(time.Hour)); err != nil {
@@ -86,6 +87,19 @@ func TestDisableUserRevokesSessionsAtomically(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("expected sessions to be revoked, got %d", count)
+	}
+
+	adminOne, adminTwo := foundation.NewID(), foundation.NewID()
+	for _, adminID := range []foundation.ID{adminOne, adminTwo} {
+		if _, err := db.ExecContext(ctx, `INSERT INTO users (id, email, username, password_hash, is_system_admin, created_at) VALUES (?, ?, ?, ?, ?, ?)`, adminID.String(), adminID.String()+"@example.com", adminID.String(), "hash", true, time.Now().UTC()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repository.DisableUser(ctx, adminOne); err != nil {
+		t.Fatalf("expected one of two administrators to be disableable: %v", err)
+	}
+	if err := repository.DisableUser(ctx, adminTwo); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected last administrator protection, got %v", err)
 	}
 }
 

@@ -333,12 +333,12 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	raw, user, err := s.identity.Login(r.Context(), input.Email, input.Password)
 	if err != nil {
 		s.loginLimiter.failure(limiterKey, time.Now())
-		s.recordAudit(r, foundation.PrincipalRef{Kind: "anonymous", ID: "anonymous"}, constants.AuditLoginFailed, constants.AuditResourceAuthentication, "", map[string]any{"reason": "invalid_credentials"})
+		_ = s.recordAudit(r, anonymousPrincipal(), constants.AuditLoginFailed, constants.AuditResourceAuthentication, "", map[string]any{"reason": "invalid_credentials"})
 		writeError(w, r, http.StatusUnauthorized, "unauthenticated", "Invalid email or password")
 		return
 	}
 	s.loginLimiter.success(limiterKey)
-	s.recordAudit(r, principalForUser(user), constants.AuditLoginSucceeded, constants.AuditResourceUser, user.ID, nil)
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditLoginSucceeded, constants.AuditResourceUser, user.ID, nil)
 	s.setSessionCookie(w, raw)
 	writeJSON(w, http.StatusOK, user)
 }
@@ -432,8 +432,7 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_user", err.Error())
 		return
 	}
-	if err := s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserCreated, constants.AuditResourceUser, user.ID, map[string]any{"systemAdmin": user.SystemAdmin}); err != nil {
-		s.internalError(w, r, err)
+	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditUserCreated, constants.AuditResourceUser, user.ID, map[string]any{"systemAdmin": user.SystemAdmin}) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, user)
@@ -557,8 +556,7 @@ func (s *Server) createServiceAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_service_account", err.Error())
 		return
 	}
-	if err := s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountCreated, constants.AuditResourceServiceAccount, account.ID, nil); err != nil {
-		s.internalError(w, r, err)
+	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountCreated, constants.AuditResourceServiceAccount, account.ID, nil) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, account)
@@ -572,8 +570,7 @@ func (s *Server) deleteServiceAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Service account not found")
 		return
 	}
-	if err := s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountDisabled, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), nil); err != nil {
-		s.internalError(w, r, err)
+	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountDisabled, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), nil) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -609,8 +606,7 @@ func (s *Server) createServiceAccountToken(w http.ResponseWriter, r *http.Reques
 		writeError(w, r, http.StatusBadRequest, "invalid_token", err.Error())
 		return
 	}
-	if err := s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyCreated, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": created.Token.ID, "expiresAt": created.Token.ExpiresAt}); err != nil {
-		s.internalError(w, r, err)
+	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyCreated, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": created.Token.ID, "expiresAt": created.Token.ExpiresAt}) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
@@ -628,8 +624,7 @@ func (s *Server) revokeServiceAccountToken(w http.ResponseWriter, r *http.Reques
 		writeError(w, r, http.StatusNotFound, "not_found", "Token not found")
 		return
 	}
-	if err := s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyRevoked, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": chi.URLParam(r, "tokenId")}); err != nil {
-		s.internalError(w, r, err)
+	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyRevoked, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": chi.URLParam(r, "tokenId")}) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -662,8 +657,7 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_project", err.Error())
 		return
 	}
-	if err := s.recordAudit(r, principalForUser(user), constants.AuditProjectCreated, constants.AuditResourceProject, project.ID, map[string]any{"slug": project.Slug}); err != nil {
-		s.internalError(w, r, err)
+	if !s.recordAuditRequired(w, r, principalForUser(user), constants.AuditProjectCreated, constants.AuditResourceProject, project.ID, map[string]any{"slug": project.Slug}) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, project)
@@ -696,8 +690,7 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.internalError(w, r, err)
 	default:
-		if auditErr := s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditProjectDeleted, constants.AuditResourceProject, foundation.ID(chi.URLParam(r, "project")), nil); auditErr != nil {
-			s.internalError(w, r, auditErr)
+		if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditProjectDeleted, constants.AuditResourceProject, foundation.ID(chi.URLParam(r, "project")), nil) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -734,8 +727,7 @@ func (s *Server) setMembership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	if err := s.recordAudit(r, principalForUser(user), constants.AuditMembershipUpserted, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "role": input.Role, "principalKind": principal.Kind}); err != nil {
-		s.internalError(w, r, err)
+	if !s.recordAuditRequired(w, r, principalForUser(user), constants.AuditMembershipUpserted, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "role": input.Role, "principalKind": principal.Kind}) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
@@ -751,8 +743,7 @@ func (s *Server) deleteMembership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	if err := s.recordAudit(r, principalForUser(user), constants.AuditMembershipRemoved, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "principalKind": principal.Kind}); err != nil {
-		s.internalError(w, r, err)
+	if !s.recordAuditRequired(w, r, principalForUser(user), constants.AuditMembershipRemoved, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "principalKind": principal.Kind}) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -1170,7 +1161,7 @@ func (s *Server) exchangeRegistryToken(w http.ResponseWriter, r *http.Request) {
 	username, rawToken, ok := r.BasicAuth()
 	if !ok {
 		s.registryLimiter.failure(limiterKey, time.Now())
-		s.recordAudit(r, anonymousPrincipal(), constants.AuditRegistryAuthFailed, constants.AuditResourceAuthentication, "", map[string]any{"reason": "missing_basic_auth"})
+		_ = s.recordAudit(r, anonymousPrincipal(), constants.AuditRegistryAuthFailed, constants.AuditResourceAuthentication, "", map[string]any{"reason": "missing_basic_auth"})
 		w.Header().Set("WWW-Authenticate", `Basic realm="Grom Registry"`)
 		writeError(w, r, http.StatusUnauthorized, "unauthenticated", "API token required")
 		return
@@ -1221,6 +1212,14 @@ func (s *Server) recordAudit(r *http.Request, actor foundation.PrincipalRef, act
 		return err
 	}
 	return nil
+}
+
+func (s *Server) recordAuditRequired(w http.ResponseWriter, r *http.Request, actor foundation.PrincipalRef, action, resourceKind string, resourceID foundation.ID, metadata map[string]any) bool {
+	if err := s.recordAudit(r, actor, action, resourceKind, resourceID, metadata); err != nil {
+		s.internalError(w, r, err)
+		return false
+	}
+	return true
 }
 
 func anonymousPrincipal() foundation.PrincipalRef {

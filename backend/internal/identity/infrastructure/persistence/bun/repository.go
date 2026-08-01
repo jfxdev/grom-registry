@@ -74,7 +74,7 @@ func (r *Repository) DisableUser(ctx context.Context, id foundation.ID) error {
 			Set("disabled_at = ?", now).
 			Where("id = ?", id.String()).
 			Where("disabled_at IS NULL").
-			Where("system_admin = FALSE OR (SELECT COUNT(*) FROM users WHERE system_admin = TRUE AND disabled_at IS NULL) > 1").
+			Where("is_system_admin = FALSE OR (SELECT COUNT(*) FROM users WHERE is_system_admin = TRUE AND disabled_at IS NULL) > 1").
 			Exec(ctx)
 		if err != nil {
 			return err
