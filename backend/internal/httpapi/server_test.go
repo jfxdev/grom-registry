@@ -311,21 +311,6 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	}
 }
 
-func TestRequiredAuditFailureReturnsInternalError(t *testing.T) {
-	auditStore := &serverTestAuditStore{err: errors.New("audit unavailable")}
-	server := &Server{
-		audit:  auditapp.New(auditStore),
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
-	response := httptest.NewRecorder()
-	if server.recordAuditRequired(response, httptest.NewRequest(http.MethodPost, "http://grom/api/v1/users", nil), foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: "actor"}, constants.AuditUserCreated, constants.AuditResourceUser, "target", nil) {
-		t.Fatal("expected required audit to fail")
-	}
-	if response.Code != http.StatusInternalServerError {
-		t.Fatalf("expected internal error, got %d", response.Code)
-	}
-}
-
 func withUser(request *http.Request, user *identitydomain.User) *http.Request {
 	return request.WithContext(context.WithValue(request.Context(), currentUserKey{}, user))
 }

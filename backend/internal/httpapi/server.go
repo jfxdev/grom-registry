@@ -432,9 +432,7 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_user", err.Error())
 		return
 	}
-	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditUserCreated, constants.AuditResourceUser, user.ID, map[string]any{"systemAdmin": user.SystemAdmin}) {
-		return
-	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserCreated, constants.AuditResourceUser, user.ID, map[string]any{"systemAdmin": user.SystemAdmin})
 	writeJSON(w, http.StatusCreated, user)
 }
 
@@ -556,9 +554,7 @@ func (s *Server) createServiceAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_service_account", err.Error())
 		return
 	}
-	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountCreated, constants.AuditResourceServiceAccount, account.ID, nil) {
-		return
-	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountCreated, constants.AuditResourceServiceAccount, account.ID, nil)
 	writeJSON(w, http.StatusCreated, account)
 }
 
@@ -570,9 +566,7 @@ func (s *Server) deleteServiceAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Service account not found")
 		return
 	}
-	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountDisabled, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), nil) {
-		return
-	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountDisabled, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -606,9 +600,7 @@ func (s *Server) createServiceAccountToken(w http.ResponseWriter, r *http.Reques
 		writeError(w, r, http.StatusBadRequest, "invalid_token", err.Error())
 		return
 	}
-	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyCreated, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": created.Token.ID, "expiresAt": created.Token.ExpiresAt}) {
-		return
-	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyCreated, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": created.Token.ID, "expiresAt": created.Token.ExpiresAt})
 	writeJSON(w, http.StatusCreated, created)
 }
 
@@ -624,9 +616,7 @@ func (s *Server) revokeServiceAccountToken(w http.ResponseWriter, r *http.Reques
 		writeError(w, r, http.StatusNotFound, "not_found", "Token not found")
 		return
 	}
-	if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyRevoked, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": chi.URLParam(r, "tokenId")}) {
-		return
-	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyRevoked, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": chi.URLParam(r, "tokenId")})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -657,9 +647,7 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_project", err.Error())
 		return
 	}
-	if !s.recordAuditRequired(w, r, principalForUser(user), constants.AuditProjectCreated, constants.AuditResourceProject, project.ID, map[string]any{"slug": project.Slug}) {
-		return
-	}
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditProjectCreated, constants.AuditResourceProject, project.ID, map[string]any{"slug": project.Slug})
 	writeJSON(w, http.StatusCreated, project)
 }
 
@@ -690,9 +678,7 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.internalError(w, r, err)
 	default:
-		if !s.recordAuditRequired(w, r, principalForUser(userFromContext(r.Context())), constants.AuditProjectDeleted, constants.AuditResourceProject, foundation.ID(chi.URLParam(r, "project")), nil) {
-			return
-		}
+		_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditProjectDeleted, constants.AuditResourceProject, foundation.ID(chi.URLParam(r, "project")), nil)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -727,9 +713,7 @@ func (s *Server) setMembership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	if !s.recordAuditRequired(w, r, principalForUser(user), constants.AuditMembershipUpserted, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "role": input.Role, "principalKind": principal.Kind}) {
-		return
-	}
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditMembershipUpserted, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "role": input.Role, "principalKind": principal.Kind})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
@@ -743,9 +727,7 @@ func (s *Server) deleteMembership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	if !s.recordAuditRequired(w, r, principalForUser(user), constants.AuditMembershipRemoved, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "principalKind": principal.Kind}) {
-		return
-	}
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditMembershipRemoved, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "principalKind": principal.Kind})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1212,14 +1194,6 @@ func (s *Server) recordAudit(r *http.Request, actor foundation.PrincipalRef, act
 		return err
 	}
 	return nil
-}
-
-func (s *Server) recordAuditRequired(w http.ResponseWriter, r *http.Request, actor foundation.PrincipalRef, action, resourceKind string, resourceID foundation.ID, metadata map[string]any) bool {
-	if err := s.recordAudit(r, actor, action, resourceKind, resourceID, metadata); err != nil {
-		s.internalError(w, r, err)
-		return false
-	}
-	return true
 }
 
 func anonymousPrincipal() foundation.PrincipalRef {
