@@ -14,6 +14,7 @@ type Repository interface {
 	FindUserByUsername(ctx context.Context, username string) (*User, error)
 	FindUserByID(ctx context.Context, id foundation.ID) (*User, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	DisableUser(ctx context.Context, id foundation.ID) error
 	UpdateUserPassword(ctx context.Context, id foundation.ID, passwordHash string) error
 
 	CreatePasswordReset(ctx context.Context, reset *PasswordReset) error

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -21,16 +22,26 @@ import (
 	auditdomain "github.com/jfxdev/grom/backend/internal/audit/domain"
 	"github.com/jfxdev/grom/backend/internal/constants"
 	"github.com/jfxdev/grom/backend/internal/foundation"
+	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
 	identitydomain "github.com/jfxdev/grom/backend/internal/identity/domain"
+	identitystore "github.com/jfxdev/grom/backend/internal/identity/infrastructure/persistence/bun"
 	platformbackup "github.com/jfxdev/grom/backend/internal/platform/backup"
+	"github.com/jfxdev/grom/backend/internal/platform/database"
 	"github.com/jfxdev/grom/backend/internal/platform/maintenance"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
 	projectdomain "github.com/jfxdev/grom/backend/internal/projects/domain"
+	projectstore "github.com/jfxdev/grom/backend/internal/projects/infrastructure/persistence/bun"
 )
 
 type serverTestProjectRepository struct {
 	projectdomain.Repository
 	project *projectdomain.Project
+}
+
+type serverTestProjectDeletionGuard struct{}
+
+func (serverTestProjectDeletionGuard) ProjectHasRepositories(context.Context, foundation.ID) (bool, error) {
+	return false, nil
 }
 
 type serverTestAuditStore struct {
@@ -140,6 +151,177 @@ func TestOriginGuardAllowsPublicAndForwardedDevelopmentOrigins(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
+	ctx := context.Background()
+	db, kind, err := database.Open(ctx, "sqlite://file:httpapi-audit-test?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := database.Migrate(ctx, db, kind, time.Second, slog.Default()); err != nil {
+		t.Fatal(err)
+	}
+
+	identity := identityapp.New(identitystore.New(db), time.Hour)
+	if err := identity.BootstrapAdmin(ctx, "admin@example.com", "admin", "secret-password"); err != nil {
+		t.Fatal(err)
+	}
+	_, admin, err := identity.Login(ctx, "admin@example.com", "secret-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auditStore := &serverTestAuditStore{}
+	projects := projectapp.New(projectstore.New(db))
+	projects.SetDeletionGuard(serverTestProjectDeletionGuard{})
+	server := &Server{
+		identity: identity, audit: auditapp.New(auditStore), projects: projects,
+		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		loginLimiter:    newAuthenticationFailureLimiter(SecurityOptions{AuthFailureLimit: 10, AuthFailureWindow: time.Minute, AuthBlockDuration: time.Minute}),
+		registryLimiter: newAuthenticationFailureLimiter(SecurityOptions{AuthFailureLimit: 10, AuthFailureWindow: time.Minute, AuthBlockDuration: time.Minute}),
+	}
+
+	failedLogin := httptest.NewRecorder()
+	server.createSession(failedLogin, httptest.NewRequest(http.MethodPost, "http://grom/api/v1/session", strings.NewReader(`{"email":"admin@example.com","password":"wrong"}`)))
+	if failedLogin.Code != http.StatusUnauthorized {
+		t.Fatalf("expected failed login, got %d", failedLogin.Code)
+	}
+	successLogin := httptest.NewRecorder()
+	server.createSession(successLogin, httptest.NewRequest(http.MethodPost, "http://grom/api/v1/session", strings.NewReader(`{"email":"admin@example.com","password":"secret-password"}`)))
+	if successLogin.Code != http.StatusOK {
+		t.Fatalf("expected successful login, got %d", successLogin.Code)
+	}
+
+	createUserResponse := httptest.NewRecorder()
+	server.createUser(createUserResponse, withUser(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/users", strings.NewReader(`{"email":"target@example.com","username":"target","password":"target-password","systemAdmin":false}`)), admin))
+	if createUserResponse.Code != http.StatusCreated {
+		t.Fatalf("create user: expected 201, got %d: %s", createUserResponse.Code, createUserResponse.Body.String())
+	}
+	var target identitydomain.User
+	if err := json.NewDecoder(createUserResponse.Body).Decode(&target); err != nil {
+		t.Fatal(err)
+	}
+	targetSession, _, err := identity.Login(ctx, "target@example.com", "target-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	accountResponse := httptest.NewRecorder()
+	server.createServiceAccount(accountResponse, withUser(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/service-accounts", strings.NewReader(`{"name":"CI","username":"ci","description":""}`)), admin))
+	if accountResponse.Code != http.StatusCreated {
+		t.Fatalf("create service account: expected 201, got %d", accountResponse.Code)
+	}
+	var account identitydomain.ServiceAccount
+	if err := json.NewDecoder(accountResponse.Body).Decode(&account); err != nil {
+		t.Fatal(err)
+	}
+
+	tokenResponse := httptest.NewRecorder()
+	server.createServiceAccountToken(tokenResponse, withUserAndParams(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/service-accounts/"+account.ID.String()+"/tokens", strings.NewReader(`{"name":"pipeline"}`)), admin, map[string]string{"id": account.ID.String()}))
+	if tokenResponse.Code != http.StatusCreated {
+		t.Fatalf("create token: expected 201, got %d: %s", tokenResponse.Code, tokenResponse.Body.String())
+	}
+	var created identityapp.CreatedToken
+	if err := json.NewDecoder(tokenResponse.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+
+	revokeResponse := httptest.NewRecorder()
+	server.revokeServiceAccountToken(revokeResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/service-accounts/x/tokens/y", nil), admin, map[string]string{"id": account.ID.String(), "tokenId": created.Token.ID.String()}))
+	if revokeResponse.Code != http.StatusNoContent {
+		t.Fatalf("revoke token: expected 204, got %d", revokeResponse.Code)
+	}
+	deleteAccountResponse := httptest.NewRecorder()
+	server.deleteServiceAccount(deleteAccountResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/service-accounts/"+account.ID.String(), nil), admin, map[string]string{"id": account.ID.String()}))
+	if deleteAccountResponse.Code != http.StatusNoContent {
+		t.Fatalf("disable service account: expected 204, got %d", deleteAccountResponse.Code)
+	}
+
+	projectResponse := httptest.NewRecorder()
+	server.createProject(projectResponse, withUser(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/projects", strings.NewReader(`{"name":"Payments","slug":"payments"}`)), admin))
+	if projectResponse.Code != http.StatusCreated {
+		t.Fatalf("create project: expected 201, got %d: %s", projectResponse.Code, projectResponse.Body.String())
+	}
+	var project projectdomain.Project
+	if err := json.NewDecoder(projectResponse.Body).Decode(&project); err != nil {
+		t.Fatal(err)
+	}
+
+	memberParams := map[string]string{"project": project.Slug, "principalKind": constants.PrincipalUser, "principalId": target.ID.String()}
+	setMemberResponse := httptest.NewRecorder()
+	server.setMembership(setMemberResponse, withUserAndParams(httptest.NewRequest(http.MethodPut, "http://grom/api/v1/projects/payments/members/user/"+target.ID.String(), strings.NewReader(`{"role":"reader"}`)), admin, memberParams))
+	if setMemberResponse.Code != http.StatusOK {
+		t.Fatalf("set membership: expected 200, got %d: %s", setMemberResponse.Code, setMemberResponse.Body.String())
+	}
+	deleteMemberResponse := httptest.NewRecorder()
+	server.deleteMembership(deleteMemberResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/projects/payments/members/user/"+target.ID.String(), nil), admin, memberParams))
+	if deleteMemberResponse.Code != http.StatusNoContent {
+		t.Fatalf("delete membership: expected 204, got %d", deleteMemberResponse.Code)
+	}
+
+	deleteProjectResponse := httptest.NewRecorder()
+	server.deleteProject(deleteProjectResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/projects/payments", nil), admin, map[string]string{"project": project.Slug}))
+	if deleteProjectResponse.Code != http.StatusNoContent {
+		t.Fatalf("delete project: expected 204, got %d: %s", deleteProjectResponse.Code, deleteProjectResponse.Body.String())
+	}
+
+	selfDisableResponse := httptest.NewRecorder()
+	server.deleteUser(selfDisableResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/users/"+admin.ID.String(), nil), admin, map[string]string{"id": admin.ID.String()}))
+	if selfDisableResponse.Code != http.StatusConflict {
+		t.Fatalf("self disable: expected 409, got %d", selfDisableResponse.Code)
+	}
+	missingUserResponse := httptest.NewRecorder()
+	server.deleteUser(missingUserResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/users/missing", nil), admin, map[string]string{"id": "missing"}))
+	if missingUserResponse.Code != http.StatusNotFound {
+		t.Fatalf("missing user: expected 404, got %d", missingUserResponse.Code)
+	}
+
+	deleteUserResponse := httptest.NewRecorder()
+	deleteUserRequest := withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/users/"+target.ID.String(), nil), admin, map[string]string{"id": target.ID.String()})
+	server.deleteUser(deleteUserResponse, deleteUserRequest)
+	if deleteUserResponse.Code != http.StatusNoContent {
+		t.Fatalf("disable user: expected 204, got %d: %s", deleteUserResponse.Code, deleteUserResponse.Body.String())
+	}
+	if _, err := identity.AuthenticateSession(ctx, targetSession); err == nil {
+		t.Fatal("expected disabled user's active session to be revoked")
+	}
+
+	missingBasicResponse := httptest.NewRecorder()
+	server.exchangeRegistryToken(missingBasicResponse, httptest.NewRequest(http.MethodGet, "http://grom/auth/token", nil))
+	if missingBasicResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("missing basic auth: expected 401, got %d", missingBasicResponse.Code)
+	}
+	invalidBasicResponse := httptest.NewRecorder()
+	invalidBasicRequest := httptest.NewRequest(http.MethodGet, "http://grom/auth/token", nil)
+	invalidBasicRequest.SetBasicAuth("unknown", "invalid")
+	server.exchangeRegistryToken(invalidBasicResponse, invalidBasicRequest)
+	if invalidBasicResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid basic auth: expected 401, got %d", invalidBasicResponse.Code)
+	}
+
+	actions := make(map[string]bool)
+	for _, event := range auditStore.events {
+		actions[event.Action] = true
+	}
+	for _, action := range []string{constants.AuditLoginFailed, constants.AuditLoginSucceeded, constants.AuditUserCreated, constants.AuditUserDisabled, constants.AuditServiceAccountCreated, constants.AuditAccessKeyCreated, constants.AuditAccessKeyRevoked, constants.AuditProjectCreated, constants.AuditProjectDeleted, constants.AuditMembershipUpserted, constants.AuditMembershipRemoved, constants.AuditRegistryAuthFailed} {
+		if !actions[action] {
+			t.Errorf("missing audit action %s", action)
+		}
+	}
+}
+
+func withUser(request *http.Request, user *identitydomain.User) *http.Request {
+	return request.WithContext(context.WithValue(request.Context(), currentUserKey{}, user))
+}
+
+func withUserAndParams(request *http.Request, user *identitydomain.User, params map[string]string) *http.Request {
+	routeContext := chi.NewRouteContext()
+	for key, value := range params {
+		routeContext.URLParams.Add(key, value)
+	}
+	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeContext))
+	return withUser(request, user)
 }
 
 func TestOriginGuardRequiresOriginForSessionCookieMutations(t *testing.T) {

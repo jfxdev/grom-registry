@@ -45,7 +45,7 @@ scanner execution.
 |---|---|---|---|
 | Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, and mandatory backend/frontend/lint/Go-vulnerability CI jobs exist | OpenAPI validation/freshness, explicit SQLite integration CI, image build and remaining dependency/container scanning; PostgreSQL CI before claiming full support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
-| Phase 2: registry browsing and core UI | Partially accepted | Project, repository, membership, user, service-account, policy, deletion and lifecycle flows exist | Manifest detail, essential audit persistence, missing UI management actions, pagination decision and first-push Playwright coverage |
+| Phase 2: registry browsing and core UI | Partially accepted | Project, repository, membership, user, service-account, policy, deletion, lifecycle, and user-disable flows exist | Manifest detail, audit acceptance evidence, remaining UI management actions, pagination decision and first-push Playwright coverage |
 | Phase 3: operational hardening | In progress | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, and UI-driven quiesced backup plus same-image recovery exist | Key rotation, upgrade tests, Docker smoke test and release artifacts; expanded matrices follow advertised capabilities |
 | Phase 4: integrations placeholder | Accepted for MVP | Backend-driven planned catalog and disabled read-only UI exist | ADR is required before active event delivery or scan-result storage, not for the inert placeholder |
 
@@ -377,8 +377,8 @@ Work:
    size, known timestamps, tags, classification, and OCI relationships.
 2. Expose membership role replacement and removal in the UI.
 3. Expose optional access-key expiration during key creation.
-4. Add user disabling with session revocation; keep general user-profile editing
-   post-MVP unless a concrete requirement promotes it.
+4. Keep general user-profile editing post-MVP unless a concrete requirement
+   promotes it.
 5. Add copyable push guidance alongside the existing pull command.
 6. Remove recent-audit overview and basic settings from the default MVP unless
    a concrete first-release use case promotes them back into scope.
@@ -998,6 +998,7 @@ POST   /api/v1/password-resets
 
 GET    /api/v1/users
 POST   /api/v1/users
+DELETE /api/v1/users/{id}
 POST   /api/v1/users/{id}/password-reset-link
 
 GET    /api/v1/service-accounts
@@ -1278,7 +1279,7 @@ MVP page status:
 | Projects list and create project | Implemented | Add Playwright coverage |
 | Project detail with repositories and members | Implemented with gaps | Add membership edit/removal UI and copyable push guidance |
 | Repository detail | Partial | Add digest, media type, size, timestamps, classification, and OCI relationship detail |
-| Users for installation administrators | Implemented with gaps | Add user disabling with session revocation; keep general profile editing post-MVP |
+| Users for installation administrators | Implemented with gaps | Keep general profile editing post-MVP |
 | Service accounts and nested access keys | Implemented with gaps | Add optional key expiration and Playwright reveal-once coverage |
 | Audit log | Post-MVP | Essential event persistence remains required; browsing UI does not block MVP |
 | Integrations | Implemented as read-only roadmap | ADR required only before active integration work |
@@ -1570,8 +1571,8 @@ Status vocabulary:
 | 17 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Partial | Add frontend generated-code freshness and bidirectional route/contract checks |
 | 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
 | 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |
-| 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Partial | Complete step 2 and verify durable events |
-| 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Missing | User-disable API/UI implementation and session-revocation acceptance test |
+| 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Partial | Add durable audit failure/acceptance coverage |
+| 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Partial | Backend repository and frontend confirmation tests; public HTTP acceptance remains unproven |
 | 22 | ORAS can push and pull representative generic OCI content | Generic OCI support | Missing | ORAS smoke job before advertising generic OCI support |
 | 23 | An S3-backed installation passes push, pull, restart, and restore checks | S3 support | Missing | Documented S3 compatibility job before advertising S3 support |
 

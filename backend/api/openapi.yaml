@@ -184,6 +184,27 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/users/{id}:
+    delete:
+      tags: [Identity]
+      operationId: disableUser
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "204":
+          description: User disabled and active sessions revoked
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The current administrator cannot disable their own account or the last installation administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/service-accounts:
     get:
       tags: [Identity]

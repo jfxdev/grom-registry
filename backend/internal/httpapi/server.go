@@ -161,6 +161,7 @@ func (s *Server) routes() chi.Router {
 			protected.Put("/me/password", s.changeCurrentUserPassword)
 			protected.Get("/users", s.listUsers)
 			protected.Post("/users", s.createUser)
+			protected.Delete("/users/{id}", s.deleteUser)
 			protected.Post("/users/{id}/password-reset-link", s.createUserPasswordResetLink)
 
 			protected.Get("/service-accounts", s.listServiceAccounts)
@@ -332,10 +333,12 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	raw, user, err := s.identity.Login(r.Context(), input.Email, input.Password)
 	if err != nil {
 		s.loginLimiter.failure(limiterKey, time.Now())
+		_ = s.recordAudit(r, anonymousPrincipal(), constants.AuditLoginFailed, constants.AuditResourceAuthentication, "", map[string]any{"reason": "invalid_credentials"})
 		writeError(w, r, http.StatusUnauthorized, "unauthenticated", "Invalid email or password")
 		return
 	}
 	s.loginLimiter.success(limiterKey)
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditLoginSucceeded, constants.AuditResourceUser, user.ID, nil)
 	s.setSessionCookie(w, raw)
 	writeJSON(w, http.StatusOK, user)
 }
@@ -429,7 +432,35 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_user", err.Error())
 		return
 	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserCreated, constants.AuditResourceUser, user.ID, map[string]any{"systemAdmin": user.SystemAdmin})
 	writeJSON(w, http.StatusCreated, user)
+}
+
+func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	actor := userFromContext(r.Context())
+	targetID := foundation.ID(chi.URLParam(r, "id"))
+	if targetID == actor.ID {
+		writeError(w, r, http.StatusConflict, "cannot_disable_self", "You cannot disable your own account")
+		return
+	}
+	target, err := s.identity.FindUser(r.Context(), targetID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+		return
+	}
+	if err := s.identity.DisableUser(r.Context(), targetID); err != nil {
+		if target.SystemAdmin {
+			writeError(w, r, http.StatusConflict, "cannot_disable_last_admin", "The last installation administrator cannot be disabled")
+			return
+		}
+		writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+		return
+	}
+	_ = s.recordAudit(r, principalForUser(actor), constants.AuditUserDisabled, constants.AuditResourceUser, targetID, nil)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) createUserPasswordResetLink(w http.ResponseWriter, r *http.Request) {
@@ -520,6 +551,7 @@ func (s *Server) createServiceAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_service_account", err.Error())
 		return
 	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountCreated, constants.AuditResourceServiceAccount, account.ID, nil)
 	writeJSON(w, http.StatusCreated, account)
 }
 
@@ -531,6 +563,7 @@ func (s *Server) deleteServiceAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Service account not found")
 		return
 	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditServiceAccountDisabled, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -564,6 +597,7 @@ func (s *Server) createServiceAccountToken(w http.ResponseWriter, r *http.Reques
 		writeError(w, r, http.StatusBadRequest, "invalid_token", err.Error())
 		return
 	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyCreated, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": created.Token.ID, "expiresAt": created.Token.ExpiresAt})
 	writeJSON(w, http.StatusCreated, created)
 }
 
@@ -579,6 +613,7 @@ func (s *Server) revokeServiceAccountToken(w http.ResponseWriter, r *http.Reques
 		writeError(w, r, http.StatusNotFound, "not_found", "Token not found")
 		return
 	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditAccessKeyRevoked, constants.AuditResourceServiceAccount, foundation.ID(chi.URLParam(r, "id")), map[string]any{"tokenId": chi.URLParam(r, "tokenId")})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -609,6 +644,7 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_project", err.Error())
 		return
 	}
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditProjectCreated, constants.AuditResourceProject, foundation.ID(project.Slug), map[string]any{"slug": project.Slug})
 	writeJSON(w, http.StatusCreated, project)
 }
 
@@ -639,6 +675,7 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.internalError(w, r, err)
 	default:
+		_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditProjectDeleted, constants.AuditResourceProject, foundation.ID(chi.URLParam(r, "project")), nil)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -673,6 +710,7 @@ func (s *Server) setMembership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditMembershipUpserted, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "role": input.Role, "principalKind": principal.Kind})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
@@ -686,6 +724,7 @@ func (s *Server) deleteMembership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditMembershipRemoved, constants.AuditResourceMembership, principal.ID, map[string]any{"project": chi.URLParam(r, "project"), "principalKind": principal.Kind})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1101,6 +1140,7 @@ func (s *Server) exchangeRegistryToken(w http.ResponseWriter, r *http.Request) {
 	username, rawToken, ok := r.BasicAuth()
 	if !ok {
 		s.registryLimiter.failure(limiterKey, time.Now())
+		_ = s.recordAudit(r, anonymousPrincipal(), constants.AuditRegistryAuthFailed, constants.AuditResourceAuthentication, "", map[string]any{"reason": "missing_basic_auth"})
 		w.Header().Set("WWW-Authenticate", `Basic realm="Grom Registry"`)
 		writeError(w, r, http.StatusUnauthorized, "unauthenticated", "API token required")
 		return
@@ -1108,6 +1148,7 @@ func (s *Server) exchangeRegistryToken(w http.ResponseWriter, r *http.Request) {
 	principal, err := s.identity.AuthenticateRegistry(r.Context(), username, rawToken)
 	if err != nil {
 		s.registryLimiter.failure(limiterKey, time.Now())
+		_ = s.recordAudit(r, anonymousPrincipal(), constants.AuditRegistryAuthFailed, constants.AuditResourceAuthentication, "", map[string]any{"reason": "invalid_credentials", "username": username})
 		w.Header().Set("WWW-Authenticate", `Basic realm="Grom Registry"`)
 		writeError(w, r, http.StatusUnauthorized, "unauthenticated", "Invalid registry credentials")
 		return
@@ -1139,6 +1180,21 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), currentUserKey{}, user)))
 	})
+}
+
+func (s *Server) recordAudit(r *http.Request, actor foundation.PrincipalRef, action, resourceKind string, resourceID foundation.ID, metadata map[string]any) error {
+	if s.audit == nil {
+		return nil
+	}
+	if err := s.audit.Record(r.Context(), actor, action, resourceKind, resourceID, metadata); err != nil {
+		s.logger.Error("record audit event", "action", action, "error", err)
+		return err
+	}
+	return nil
+}
+
+func anonymousPrincipal() foundation.PrincipalRef {
+	return foundation.PrincipalRef{Kind: "anonymous", ID: "anonymous"}
 }
 
 func (s *Server) maintenanceGate(next http.Handler) http.Handler {

@@ -108,8 +108,10 @@ never activates a policy or rejects content.
 | `AuditAction` | Value object | Stable event action identifier |
 | `AuditResource` | Value object | Referenced resource kind and ID |
 
-The Audit context records user password changes, administrator reset-link
-creation, completed password resets, lifecycle previews, and manual-execution events.
+The Audit context records authentication outcomes, user and service-account
+administration, access-key changes, project and membership changes, user
+password changes, administrator reset-link creation, completed password resets,
+lifecycle previews, and manual-execution events.
 Detailed per-digest outcomes remain in Registry lifecycle run items.
 Audit also records sanitized `platform.backup_created`,
 `platform.backup_delete_requested`, and `platform.backup_deleted` events, plus

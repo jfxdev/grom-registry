@@ -65,6 +65,7 @@ keys are not web-login credentials.
 An installation administrator can:
 
 - create users, including other installation administrators;
+- disable users, revoking their active web sessions;
 - generate a password-reset link for a user;
 - create and disable service accounts;
 - create, list, and revoke service-account access keys;
@@ -144,12 +145,16 @@ An administrator can:
   installation-administrator privilege;
 - generate a reveal-once password-reset URL for an existing user.
 
+Administrators cannot disable their own account or the last active installation
+administrator. Disabling a user blocks future sign-in and revokes all active
+sessions immediately.
+
 The initial password accepted during user creation must contain at least eight
 characters. The user must use at least 12 characters when later changing or
 resetting it.
 
-User disabling, deletion, email editing, username editing, and administrator
-privilege editing are not currently exposed.
+Deletion, email editing, username editing, and administrator privilege editing
+are not currently exposed.
 
 ### Administrator password reset
 
@@ -481,13 +486,17 @@ The current implementation records:
 - manual artifact deletion start, completion, and failure;
 - lifecycle preview creation;
 - lifecycle run start, per-item outcomes, completion, and failure.
+- successful and failed sign-in attempts;
+- user and service-account creation and disabling;
+- access-key creation and revocation;
+- project creation and deletion;
+- membership creation, replacement, and removal.
 
 Audit events are immutable database records with actor, action, resource, JSON
 metadata, and timestamp.
 
-There is currently no audit-event listing endpoint or audit page. Sign-in,
-user creation, service-account changes, access-key changes, project creation,
-and membership changes are not yet recorded by the implemented audit service.
+There is currently no audit-event listing endpoint or audit page. Events remain
+available only through durable backend persistence in the MVP.
 
 ## 16. Integrations catalog
 
@@ -542,8 +551,8 @@ installation; active-active Grom replicas are not supported.
 | Capability | Web UI | API | Internal behavior |
 |---|---:|---:|---:|
 | Sign-in, sign-out, current profile, password change | Yes | Yes | — |
-| User creation and reset-link generation | Yes | Yes | — |
-| User disable/delete/edit | No | No | No |
+| User creation, disabling, and reset-link generation | Yes | Yes | Session revocation on disable |
+| User delete/edit | No | No | No |
 | Service-account create/list/disable | Yes | Yes | — |
 | Access-key create/list/revoke | Yes | Yes | — |
 | Access-key expiration selection | No | Yes | Enforced |
@@ -569,7 +578,7 @@ installation; active-active Grom replicas are not supported.
 The executable product does not currently provide:
 
 - organizations, teams, or nested authorization groups;
-- user disabling/deletion/editing;
+- user deletion/editing;
 - logical repository deletion;
 - a manifest-detail or audit-log screen;
 - vulnerability scanning or admission policies;
