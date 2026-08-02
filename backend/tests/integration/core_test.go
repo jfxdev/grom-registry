@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -48,6 +49,57 @@ func TestSQLiteCoreFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	runRepositoryPersistenceFlow(t, ctx, db, identityService, admin)
+}
+
+func TestSQLiteRestartPreservesCoreState(t *testing.T) {
+	ctx := context.Background()
+	databasePath := filepath.Join(t.TempDir(), "grom.db")
+	databaseURL := "sqlite://" + databasePath
+
+	db, kind, err := database.Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Migrate(ctx, db, kind, time.Second, slog.Default()); err != nil {
+		t.Fatal(err)
+	}
+	identityService := identityapp.New(identitystore.New(db), time.Hour)
+	if err := identityService.BootstrapAdmin(ctx, "restart@example.com", "restart-admin", "secret-password"); err != nil {
+		t.Fatal(err)
+	}
+	_, admin, err := identityService.Login(ctx, "restart@example.com", "secret-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectService := projectapp.New(projectstore.New(db))
+	project, err := projectService.Create(ctx, foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: admin.ID}, true, "Restart", "restart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, kind, err = database.Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := database.Migrate(ctx, db, kind, time.Second, slog.Default()); err != nil {
+		t.Fatal(err)
+	}
+	identityService = identityapp.New(identitystore.New(db), time.Hour)
+	if _, _, err := identityService.Login(ctx, "restart@example.com", "secret-password"); err != nil {
+		t.Fatalf("admin did not survive restart: %v", err)
+	}
+	projectService = projectapp.New(projectstore.New(db))
+	restored, err := projectService.Find(ctx, project.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.ID != project.ID || restored.Slug != project.Slug {
+		t.Fatalf("project changed across restart: before=%+v after=%+v", project, restored)
+	}
 }
 
 func runRepositoryPersistenceFlow(

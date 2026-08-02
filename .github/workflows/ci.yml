@@ -150,6 +150,12 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Verify generated frontend OpenAPI types
+        working-directory: frontend
+        run: |
+          npm run generate:api
+          git diff --exit-code -- src/shared/api/generated/schema.d.ts
+
       - name: Run frontend lint
         working-directory: frontend
         run: npm run lint
