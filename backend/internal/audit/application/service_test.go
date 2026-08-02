@@ -29,16 +29,21 @@ func TestRecordBuildsSanitizedStructuredEvent(t *testing.T) {
 	store := &testStore{}
 	service := New(store)
 	if err := service.Record(context.Background(), foundation.PrincipalRef{Kind: "user", ID: "actor"}, "test.action", "user", "target", map[string]any{
-		"tokenId": "public-id-only",
-		"reason":  "operator-request",
+		"tokenId":  "public-id-only",
+		"password": "plaintext-password-for-test",
+		"reason":   "operator-request",
+		"nested":   map[string]any{"secret": "nested-secret-for-test"},
+		"items":    []any{map[string]any{"password": "nested-password-for-test"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if store.event == nil || store.event.ID == "" || store.event.CreatedAt.IsZero() {
 		t.Fatalf("event was not fully populated: %#v", store.event)
 	}
-	if strings.Contains(store.event.MetadataJSON, "secret") {
-		t.Fatalf("event metadata contains a secret: %s", store.event.MetadataJSON)
+	for _, credential := range []string{"plaintext-password-for-test", "nested-secret-for-test", "nested-password-for-test"} {
+		if strings.Contains(store.event.MetadataJSON, credential) {
+			t.Fatalf("event metadata contains a plaintext credential: %s", store.event.MetadataJSON)
+		}
 	}
 }
 

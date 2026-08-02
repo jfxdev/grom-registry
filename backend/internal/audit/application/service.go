@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	auditdomain "github.com/jfxdev/grom/backend/internal/audit/domain"
@@ -24,7 +25,7 @@ func (s *Service) Record(
 	resourceID foundation.ID,
 	metadata map[string]any,
 ) error {
-	raw, err := json.Marshal(metadata)
+	raw, err := json.Marshal(sanitizeMetadata(metadata))
 	if err != nil {
 		return err
 	}
@@ -43,7 +44,7 @@ func (s *Service) RecordOnce(
 	resourceID foundation.ID,
 	metadata map[string]any,
 ) error {
-	raw, err := json.Marshal(metadata)
+	raw, err := json.Marshal(sanitizeMetadata(metadata))
 	if err != nil {
 		return err
 	}
@@ -52,4 +53,39 @@ func (s *Service) RecordOnce(
 		Action: action, ResourceKind: resourceKind, ResourceID: resourceID,
 		MetadataJSON: string(raw), CreatedAt: time.Now().UTC(),
 	})
+}
+
+func sanitizeMetadata(metadata map[string]any) map[string]any {
+	cleaned := make(map[string]any, len(metadata))
+	for key, value := range metadata {
+		if sensitiveMetadataKey(key) {
+			continue
+		}
+		cleaned[key] = sanitizeMetadataValue(value)
+	}
+	return cleaned
+}
+
+func sanitizeMetadataValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return sanitizeMetadata(typed)
+	case []any:
+		cleaned := make([]any, len(typed))
+		for index, item := range typed {
+			cleaned[index] = sanitizeMetadataValue(item)
+		}
+		return cleaned
+	default:
+		return value
+	}
+}
+
+func sensitiveMetadataKey(key string) bool {
+	switch strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", "")) {
+	case "password", "secret", "tokensecret", "resettoken", "accesskeysecret", "authorization", "sessionsecret":
+		return true
+	default:
+		return false
+	}
 }

@@ -43,7 +43,7 @@ scanner execution.
 
 | Phase | Status | Current evidence | Remaining exit work |
 |---|---|---|---|
-| Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, and mandatory backend/frontend/lint/Go-vulnerability CI jobs exist | OpenAPI validation/freshness, route/contract checks, production image build and remaining dependency/container scanning; PostgreSQL CI before claiming full support |
+| Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, and mandatory backend/frontend/lint/Go-vulnerability CI jobs exist | Production image build, dependency/container scanning, and PostgreSQL CI before claiming full support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
 | Phase 2: registry browsing and core UI | Partially accepted | Project, repository, membership, user, service-account, policy, deletion, lifecycle, and user-disable flows exist | Manifest detail, audit acceptance evidence, remaining UI management actions, pagination decision and first-push Playwright coverage |
 | Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, and UI-driven quiesced backup plus same-image recovery exist | Migration/restart evidence, key rotation, upgrade tests, Docker smoke test and release artifacts; expanded matrices follow advertised capabilities |
@@ -54,6 +54,31 @@ integration flow, frontend lint, 23 frontend tests, and TypeScript checking.
 `make build` also passed on July 29, 2026. The PostgreSQL integration test
 remains conditional on `GROM_TEST_POSTGRES_URL`; a container smoke test and
 release acceptance run still need to be recorded.
+
+### Update on August 2, 2026
+
+The following completion work is now implemented and covered by automated
+checks:
+
+- OpenAPI validation uses kin-openapi in
+  `backend/internal/httpapi/contract_test.go`.
+- Registered management routes and documented operations are compared in both
+  directions; `/v2/*` and optional documentation routes remain intentionally
+  outside the management contract comparison.
+- The frontend CI job regenerates
+  `frontend/src/shared/api/generated/schema.d.ts` and fails on tracked drift.
+- SQLite migrations use Bun's mark-on-success behavior; failed migrations are
+  not recorded as applied.
+- `backend/internal/platform/database/database_test.go` covers migration
+  failure handling, and `backend/tests/integration/core_test.go` covers
+  SQLite state preservation across a close/reopen restart.
+- Audit service serialization, store failures, SQLite persistence,
+  idempotent restore-style events, and sensitive-metadata assertions are
+  covered by the audit and HTTP tests.
+
+The August 2 verification run passed `make test`, `make test-coverage`, and
+`make build`. Frontend line coverage was 70.3%; the repository Codecov gate
+remains 70% patch coverage with 1% tolerance.
 
 ### Execution order for the self-hosted MVP
 
@@ -182,8 +207,8 @@ Evidence:
 
 ### Completion step 2: complete required audit coverage
 
-**Status: event production is implemented; durable acceptance and failure-path
-coverage remain open.**
+**Status: event production and SQLite persistence acceptance are implemented;
+public end-to-end and all failure-path evidence remain open.**
 
 Primary areas:
 
@@ -207,6 +232,16 @@ Work:
    audit-event listing contract.
 10. Treat the installation-admin audit page as a post-MVP capability unless it
     is explicitly promoted into the release scope.
+
+Evidence:
+
+- `backend/internal/httpapi/server_test.go` covers authentication,
+  user/service-account administration, access-key changes, memberships,
+  project lifecycle, user disabling, and sanitized metadata assertions.
+- `backend/internal/audit/application/service_test.go` covers structured event
+  creation, metadata serialization failures, and store error propagation.
+- `backend/internal/audit/infrastructure/persistence/bun/store_test.go` covers
+  SQLite persistence and idempotent `RecordOnce` behavior.
 
 Acceptance:
 
@@ -239,15 +274,15 @@ changes this workflow.
 
 Work:
 
-1. Add deterministic OpenAPI lint and schema validation.
-2. Add a generation-freshness check for Go and TypeScript output.
-3. Add a route-to-contract test proving every implemented `/api/v1/*` and
+1. Validate the document deterministically with kin-openapi.
+2. Verify generation freshness for Go and TypeScript output.
+3. Run a route-to-contract test proving every implemented `/api/v1/*` and
    `/auth/token` operation is documented.
-4. Add a contract-to-route test proving required operations are registered.
-5. Add implementation/response contract tests for representative success and
+4. Run a contract-to-route test proving required operations are registered.
+5. Keep implementation/response contract tests for representative success and
    error variants.
 6. Make validation, freshness, route coverage, and frontend type checks
-   mandatory in CI.
+   mandatory in CI; the remaining breaking-change check is deferred.
 7. Add breaking-change detection against the main branch when Grom begins
    publishing a compatibility-guaranteed API.
 8. Document the versioning and release-note process before the first
@@ -961,6 +996,18 @@ Migration safety rules:
 - Destructive or long-running data transformations require an explicit release note and a staged expand/migrate/contract strategy.
 - Log migration version, duration, and outcome without logging connection credentials.
 
+Implementation evidence:
+
+- `backend/internal/platform/database/database.go` configures Bun with
+  `WithMarkAppliedOnSuccess(true)`, so a failed migration is not recorded as
+  applied.
+- `backend/internal/platform/database/database_test.go` verifies a migration
+  failure propagates and leaves no applied migration record.
+- `backend/tests/integration/core_test.go` verifies that a SQLite restart
+  preserves the bootstrapped administrator and project state.
+- Process-level readiness and persistent Distribution/blob restart evidence
+  remain release acceptance work.
+
 Current gap: PostgreSQL uses an advisory lock, but SQLite currently uses only an
 in-process mutex. Completion step 7 must add cross-process SQLite coordination
 before the migration-lock requirement is considered accepted.
@@ -1425,10 +1472,10 @@ automatically, and returns an authenticated `/v2/` challenge. The same boot
 migration lifecycle must complete against PostgreSQL in CI before PostgreSQL is
 included in the supported release matrix.
 
-Remaining default-path evidence is owned by completion steps 4–6. Production
-image build/scanning, broader dependency scanning, restart/migration acceptance,
-and release artifacts are not yet accepted. PostgreSQL CI remains a
-capability-specific gate.
+Remaining default-path evidence is owned by completion steps 4, 5, 7, and 8.
+Production image build/scanning, broader dependency scanning,
+restart/migration acceptance, and release artifacts are not yet accepted.
+PostgreSQL CI remains a capability-specific gate.
 
 ### Phase 1: authentication and project authorization
 
@@ -1464,9 +1511,9 @@ registry protocol with Docker.
   screens exist; membership replacement/removal and optional key expiration
   are not exposed in the UI.
 - **Partial:** pull guidance exists; complete copyable push guidance is pending.
-- **Partial:** password, repository-policy, deletion, and lifecycle audit events
-  exist; the complete security-sensitive event set does not. Audit presentation
-  is intentionally post-MVP unless promoted.
+- **Partial:** the complete security-sensitive event set is produced and has
+  SQLite persistence/sanitization coverage; public end-to-end audit acceptance
+  and audit presentation remain intentionally outside the default MVP.
 - **Partial:** useful empty/error states exist in implemented screens;
   pagination requirements and browser-level acceptance remain unresolved.
 
@@ -1480,7 +1527,7 @@ browsing page is post-MVP unless promoted explicitly.
 
 ### Phase 3: operational hardening
 
-**Progress: open.**
+**Progress: partially accepted.**
 
 - **Partial:** named deployment profiles, request-size/time limits,
   authentication rate limits, trusted-proxy enforcement, production
@@ -1495,6 +1542,9 @@ browsing page is post-MVP unless promoted explicitly.
   conformance matrices.
 - **Pending:** release images, checksums, SBOM, and supported deployment
   documentation.
+- **New evidence:** migration failure handling and SQLite restart preservation
+  are covered by database and integration tests; process-level readiness and
+  Distribution/blob restart evidence remain open.
 
 Exit criterion: a tagged release can be installed and upgraded with preserved metadata and blobs.
 
@@ -1560,7 +1610,7 @@ Status vocabulary:
   evidence is absent.
 - **Missing:** the required implementation or delivery mechanism does not exist.
 
-| # | Scenario | Gate | Status on July 29, 2026 | Evidence needed to close |
+| # | Scenario | Gate | Status on August 2, 2026 | Evidence needed to close |
 |---:|---|---|---|---|
 | 1 | An administrator creates projects `alpha` and `beta` | Default MVP | Passing | Registry E2E creates both projects through the public management API |
 | 2 | A service account is Writer in `alpha` and has no membership in `beta` | Default MVP | Passing | Registry E2E persists real projects, principals, and memberships |
@@ -1573,15 +1623,15 @@ Status vocabulary:
 | 9 | Docker Engine can push and pull supported image content | Default MVP | Passing | Mandatory registry E2E job exercises Docker through the public Grom endpoint |
 | 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Partial | Playwright flow after a real push |
 | 11 | Integrations shows backend-driven planned providers with no active configuration | Default MVP | Passing | Existing API/UI tests cover the read-only flow |
-| 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Unverified | Persistent-volume restart test |
+| 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Partial | SQLite metadata restart test exists; add process-level Distribution/blob restart test |
 | 13 | The applicable backend suite passes against PostgreSQL | PostgreSQL support | Partial | Mandatory PostgreSQL CI job with no skip path |
 | 14 | Empty or supported older databases migrate before readiness | Default MVP | Partial | Boot tests for empty and supported previous SQLite versions with readiness probing |
-| 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Unverified | Injected migration-failure boot test |
-| 16 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Partial | OpenAPI validation, bidirectional route/contract test, and docs smoke check |
+| 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Partial | Migration failure and no-applied-record tests exist; add process-level readiness exposure test |
+| 16 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Partial | Contract validation and bidirectional route tests exist; add `/api/docs` smoke check |
 | 17 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Passing | Backend contract tests and frontend generated-code freshness check run in CI |
 | 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
 | 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |
-| 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Partial | Add durable audit persistence, sanitization, and failure-path coverage |
+| 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Partial | Durable SQLite persistence and sanitization tests exist; complete destructive failure-path coverage |
 | 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Partial | Add public HTTP/session acceptance coverage |
 | 22 | ORAS can push and pull representative generic OCI content | Generic OCI support | Missing | ORAS smoke job before advertising generic OCI support |
 | 23 | An S3-backed installation passes push, pull, restart, and restore checks | S3 support | Missing | Documented S3 compatibility job before advertising S3 support |
