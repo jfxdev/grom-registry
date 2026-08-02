@@ -302,6 +302,9 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 
 	actions := make(map[string]bool)
 	for _, event := range auditStore.events {
+		if strings.Contains(event.MetadataJSON, "secret-password") || strings.Contains(event.MetadataJSON, "target-password") {
+			t.Fatalf("audit event contains plaintext credential: %s", event.MetadataJSON)
+		}
 		actions[event.Action] = true
 	}
 	for _, action := range []string{constants.AuditLoginFailed, constants.AuditLoginSucceeded, constants.AuditUserCreated, constants.AuditUserDisabled, constants.AuditServiceAccountCreated, constants.AuditAccessKeyCreated, constants.AuditAccessKeyRevoked, constants.AuditProjectCreated, constants.AuditProjectDeleted, constants.AuditMembershipUpserted, constants.AuditMembershipRemoved, constants.AuditRegistryAuthFailed} {

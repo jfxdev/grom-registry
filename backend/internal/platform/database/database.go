@@ -73,13 +73,24 @@ func Open(ctx context.Context, databaseURL string) (*bun.DB, Kind, error) {
 }
 
 func Migrate(ctx context.Context, db *bun.DB, kind Kind, lockWait time.Duration, logger *slog.Logger) error {
+	return migrateDatabase(ctx, db, kind, lockWait, logger, appmigrations.Collection)
+}
+
+func migrateDatabase(
+	ctx context.Context,
+	db *bun.DB,
+	kind Kind,
+	lockWait time.Duration,
+	logger *slog.Logger,
+	collection *migrate.Migrations,
+) error {
 	unlock, err := migrationLock(ctx, db, kind, lockWait)
 	if err != nil {
 		return err
 	}
 	defer unlock()
 
-	migrator := migrate.NewMigrator(db, appmigrations.Collection)
+	migrator := migrate.NewMigrator(db, collection, migrate.WithMarkAppliedOnSuccess(true))
 	if err := migrator.Init(ctx); err != nil {
 		return fmt.Errorf("initialize migration history: %w", err)
 	}
