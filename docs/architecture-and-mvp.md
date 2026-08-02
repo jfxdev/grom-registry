@@ -208,7 +208,8 @@ Evidence:
 ### Completion step 2: complete required audit coverage
 
 **Status: event production and SQLite persistence acceptance are implemented;
-public end-to-end and all failure-path evidence remain open.**
+public end-to-end and remaining destructive-operation failure-path evidence
+remain open.**
 
 Primary areas:
 
@@ -1623,7 +1624,7 @@ Status vocabulary:
 | 9 | Docker Engine can push and pull supported image content | Default MVP | Passing | Mandatory registry E2E job exercises Docker through the public Grom endpoint |
 | 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Partial | Playwright flow after a real push |
 | 11 | Integrations shows backend-driven planned providers with no active configuration | Default MVP | Passing | Existing API/UI tests cover the read-only flow |
-| 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Partial | SQLite metadata restart test exists; add process-level Distribution/blob restart test |
+| 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Partial | SQLite metadata restart test exists; add process-level restart coverage for users, memberships, and Distribution/blob state |
 | 13 | The applicable backend suite passes against PostgreSQL | PostgreSQL support | Partial | Mandatory PostgreSQL CI job with no skip path |
 | 14 | Empty or supported older databases migrate before readiness | Default MVP | Partial | Boot tests for empty and supported previous SQLite versions with readiness probing |
 | 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Partial | Migration failure and no-applied-record tests exist; add process-level readiness exposure test |

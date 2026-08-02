@@ -25,7 +25,11 @@ func (s *Service) Record(
 	resourceID foundation.ID,
 	metadata map[string]any,
 ) error {
-	raw, err := json.Marshal(sanitizeMetadata(metadata))
+	cleaned, err := sanitizeMetadata(metadata)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(cleaned)
 	if err != nil {
 		return err
 	}
@@ -44,7 +48,11 @@ func (s *Service) RecordOnce(
 	resourceID foundation.ID,
 	metadata map[string]any,
 ) error {
-	raw, err := json.Marshal(sanitizeMetadata(metadata))
+	cleaned, err := sanitizeMetadata(metadata)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(cleaned)
 	if err != nil {
 		return err
 	}
@@ -55,7 +63,19 @@ func (s *Service) RecordOnce(
 	})
 }
 
-func sanitizeMetadata(metadata map[string]any) map[string]any {
+func sanitizeMetadata(metadata map[string]any) (map[string]any, error) {
+	raw, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, err
+	}
+	var normalized map[string]any
+	if err := json.Unmarshal(raw, &normalized); err != nil {
+		return nil, err
+	}
+	return sanitizeNormalizedMetadata(normalized), nil
+}
+
+func sanitizeNormalizedMetadata(metadata map[string]any) map[string]any {
 	cleaned := make(map[string]any, len(metadata))
 	for key, value := range metadata {
 		if sensitiveMetadataKey(key) {
@@ -69,7 +89,7 @@ func sanitizeMetadata(metadata map[string]any) map[string]any {
 func sanitizeMetadataValue(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:
-		return sanitizeMetadata(typed)
+		return sanitizeNormalizedMetadata(typed)
 	case []any:
 		cleaned := make([]any, len(typed))
 		for index, item := range typed {
@@ -83,7 +103,7 @@ func sanitizeMetadataValue(value any) any {
 
 func sensitiveMetadataKey(key string) bool {
 	switch strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", "")) {
-	case "password", "secret", "tokensecret", "resettoken", "accesskeysecret", "authorization", "sessionsecret":
+	case "password", "secret", "token", "accesskey", "tokensecret", "resettoken", "accesskeysecret", "authorization", "sessionsecret":
 		return true
 	default:
 		return false
