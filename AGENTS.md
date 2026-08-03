@@ -20,7 +20,7 @@ Keep this file aligned with the code that actually exists.
 - Generate Go and TypeScript OpenAPI models: `make generate`
 - Run backend and frontend checks: `make test`
 - Generate backend and frontend coverage reports: `make test-coverage`
-- Run the isolated real-Docker registry journey: `make test-registry-e2e`
+- Run the isolated real-Docker registry, session-revocation, and restart-preservation journeys: `make test-registry-e2e`
 - Run the isolated browser-driven administrative first-push journey: `make test-admin-e2e`
 - Run the isolated boot, migration, readiness, and API-documentation journey: `make test-boot-acceptance`
 - Run the isolated destructive backup/restore journey: `make test-backup-restore-e2e`
@@ -54,7 +54,10 @@ Docker daemon permission failures are reported before startup. Distribution
 applies clock-skew tolerance to expired JWTs, so the expiry assertion is bounded
 but can take about one minute. Authenticate E2E principals immediately before
 their scenario because the shared Docker daemon may cache bearer tokens for one
-registry address.
+registry address. The registry journey restarts only the exact isolated Grom and
+Distribution services after a pushed fixture; it must prove public state and
+blob preservation with a fresh Docker credential directory, and must never
+recreate or inspect its volumes directly.
 The mandatory GitHub status checks are `Backend Tests`, `Frontend Tests`,
 `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
 `Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and

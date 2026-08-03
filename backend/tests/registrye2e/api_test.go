@@ -14,6 +14,7 @@ import (
 	"time"
 
 	openapi "github.com/jfxdev/grom/backend/internal/generated/openapi"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 const managementRequestTimeout = 15 * time.Second
@@ -44,13 +45,49 @@ func newManagementClient(t *testing.T, baseURL string) *managementClient {
 
 func (c *managementClient) login(t *testing.T) {
 	t.Helper()
-	var user openapi.User
-	c.doJSON(t, http.MethodPost, "/api/v1/session", openapi.LoginRequest{
-		Email: e2eAdminEmail, Password: e2eAdminPassword,
-	}, &user, http.StatusOK)
+	user := c.loginAs(t, e2eAdminEmail, e2eAdminPassword, http.StatusOK)
 	if !user.SystemAdmin {
 		t.Fatal("bootstrap session is not an installation administrator")
 	}
+}
+
+func (c *managementClient) loginAs(t *testing.T, email, password string, expectedStatus int) openapi.User {
+	t.Helper()
+	var user openapi.User
+	var output any
+	if expectedStatus == http.StatusOK {
+		output = &user
+	}
+	c.doJSON(t, http.MethodPost, "/api/v1/session", openapi.LoginRequest{
+		Email: openapi_types.Email(email), Password: password,
+	}, output, expectedStatus)
+	return user
+}
+
+func (c *managementClient) currentUser(t *testing.T, expectedStatus int) openapi.User {
+	t.Helper()
+	var user openapi.User
+	var output any
+	if expectedStatus == http.StatusOK {
+		output = &user
+	}
+	c.doJSON(t, http.MethodGet, "/api/v1/me", nil, output, expectedStatus)
+	return user
+}
+
+func (c *managementClient) createUser(t *testing.T, email, username, password string) openapi.User {
+	t.Helper()
+	systemAdmin := false
+	var user openapi.User
+	c.doJSON(t, http.MethodPost, "/api/v1/users", openapi.CreateUserRequest{
+		Email: openapi_types.Email(email), Username: username, Password: password, SystemAdmin: &systemAdmin,
+	}, &user, http.StatusCreated)
+	return user
+}
+
+func (c *managementClient) disableUser(t *testing.T, userID string) {
+	t.Helper()
+	c.doJSON(t, http.MethodDelete, "/api/v1/users/"+url.PathEscape(userID), nil, nil, http.StatusNoContent)
 }
 
 func (c *managementClient) createProject(t *testing.T, name, slug string) openapi.Project {
