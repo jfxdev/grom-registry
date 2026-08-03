@@ -62,7 +62,7 @@ deletion cascades only the now-empty project's memberships.
 | `TokenGrant` | Value object | Authorized repository actions encoded in a short-lived JWT |
 | `RepositorySummary` | Read model | Repository data presented in the management API |
 | `ManifestSummary` | Read model | Digest, media type, size, and available metadata |
-| `Repository` | Entity | Project-owned logical OCI repository with creation provenance, a passive inferred content profile, and an optimistic policy-set version |
+| `Repository` | Entity | Project-owned logical OCI repository with creation provenance, a passive inferred content profile, an optimistic policy-set version, and an `archived` state that blocks new pushes while preserving pull access |
 | `Policy` | Child entity | Typed, replaceable repository behavior for protection, immutability, retention, tag naming, or manual deletion |
 | `PolicyPreset` | Read model | Global read-only recommendation used only to populate the repository creation form |
 | `ArtifactDeletionPreview` | Read model | Digest, aliases, OCI relationships, and deletion requirements resolved immediately before deletion |
@@ -99,6 +99,11 @@ Only tagged primary manifests influence a repository profile. Auxiliary referrer
 remain visible in the inventory without changing the profile. Conflicting
 specific primary classifications produce a reviewable `mixed` profile; inference
 never activates a policy or rejects content.
+
+An archived repository remains a logical record until an administrator removes
+it. Removal never deletes OCI content: it requires the repository to be
+archived, absent from the Distribution catalog, and free of non-deleted
+inventory manifests. Both transitions are audited.
 
 ## Audit context
 

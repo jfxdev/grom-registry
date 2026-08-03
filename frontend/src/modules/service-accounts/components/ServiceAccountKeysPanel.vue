@@ -23,16 +23,21 @@ const keys = useQuery({
 })
 const formOpen = ref(false)
 const name = ref('')
+const expiresAt = ref('')
 const error = ref('')
 const revealedSecret = ref('')
 const copied = ref(false)
 const copyError = ref('')
 
 const create = useMutation({
-  mutationFn: () => createServiceAccountToken(props.account.id, { name: name.value }),
+  mutationFn: () => createServiceAccountToken(props.account.id, {
+    name: name.value,
+    expiresAt: expiresAt.value ? new Date(expiresAt.value).toISOString() : null,
+  }),
   onSuccess: async (created) => {
     revealedSecret.value = created.secret
     name.value = ''
+    expiresAt.value = ''
     formOpen.value = false
     error.value = ''
     await queryClient.invalidateQueries({ queryKey: serviceAccountKeys.tokens(props.account.id) })
@@ -87,6 +92,10 @@ function closeSecret() {
         Key name
         <Input v-model="name" required autofocus placeholder="Production pipeline" />
       </label>
+      <label class="field-label">
+        Expiration <span class="text-muted-foreground">(optional)</span>
+        <Input v-model="expiresAt" type="datetime-local" />
+      </label>
       <p v-if="error" class="error-text">{{ error }}</p>
       <div class="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" @click="formOpen = false">Cancel</Button>
@@ -126,7 +135,10 @@ function closeSecret() {
           <p class="mt-1 font-mono text-xs text-muted-foreground">grm_{{ token.publicId }}_••••••••</p>
         </div>
         <div class="key-meta">
-          <Badge :tone="token.revokedAt ? undefined : 'success'">{{ token.revokedAt ? 'Revoked' : 'Active' }}</Badge>
+          <Badge :tone="token.revokedAt || (token.expiresAt && new Date(token.expiresAt) <= new Date()) ? undefined : 'success'">
+            {{ token.revokedAt ? 'Revoked' : token.expiresAt && new Date(token.expiresAt) <= new Date() ? 'Expired' : 'Active' }}
+          </Badge>
+          <span v-if="token.expiresAt" class="text-xs text-muted-foreground">Expires {{ new Date(token.expiresAt).toLocaleString() }}</span>
           <span class="text-xs text-muted-foreground">Last used {{ token.lastUsedAt ? new Date(token.lastUsedAt).toLocaleString() : 'never' }}</span>
           <Button
             v-if="!token.revokedAt"

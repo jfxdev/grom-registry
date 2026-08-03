@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -54,6 +55,11 @@ func (s *TokenService) Issue(ctx context.Context, subject string, principal foun
 		allowed := s.projects.AllowedActions(ctx, principal, name, actions)
 		if containsAction(allowed, constants.RegistryActionPush) && !s.repositoryCanReceivePush(ctx, name) {
 			if err := s.ensureRepositoryForPush(ctx, name, principal); err != nil {
+				if errors.Is(err, ErrRepositoryArchived) {
+					allowed = withoutAction(allowed, constants.RegistryActionPush)
+					access = append(access, Access{Type: resourceType, Name: name, Actions: allowed})
+					continue
+				}
 				return "", 0, time.Time{}, err
 			}
 		}
@@ -71,6 +77,16 @@ func (s *TokenService) Issue(ctx context.Context, subject string, principal foun
 	}
 	token, err := s.signer.Sign(claims)
 	return token, int(s.ttl.Seconds()), now, err
+}
+
+func withoutAction(actions []string, denied string) []string {
+	result := make([]string, 0, len(actions))
+	for _, action := range actions {
+		if action != denied {
+			result = append(result, action)
+		}
+	}
+	return result
 }
 
 func (s *TokenService) ensureRepositoryForPush(

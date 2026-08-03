@@ -5,6 +5,7 @@ import { listUsers, userKeys } from '@/modules/users/api/users'
 import {
   createLifecyclePreview,
   executeLifecycle,
+  listInventory,
   listLifecycleRuns,
   registryKeys,
 } from '@/modules/registry'
@@ -13,6 +14,7 @@ import type {
   ArtifactDeletionPreview,
   LifecyclePreview,
   LifecycleRun,
+  ManifestInventory,
   PrincipalKind,
   ProjectRole,
   Repository,
@@ -29,7 +31,9 @@ import { AlertTriangle, Box, Check, ChevronLeft, Clipboard, PackageOpen, Plus, R
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+	archiveRepository,
   deleteArtifact,
+  deleteMember,
   deleteProject,
   getProject,
   listArtifactDeletions,
@@ -38,6 +42,7 @@ import {
   listTags,
   projectKeys,
   previewArtifactDeletion,
+	removeRepository,
   setMember,
 } from '../api/projects'
 import RepositoryCreateModal from '../components/RepositoryCreateModal.vue'
@@ -58,6 +63,7 @@ const memberId = ref('')
 const memberKind = ref<PrincipalKind>('service_account')
 const memberRole = ref<ProjectRole>('reader')
 const memberError = ref('')
+const membershipToRemove = ref<{ kind: PrincipalKind; id: string } | null>(null)
 const copied = ref('')
 const copyError = ref('')
 const deletionPreview = ref<ArtifactDeletionPreview | null>(null)
@@ -70,6 +76,9 @@ const lifecycleReason = ref('')
 const lifecycleError = ref('')
 const projectDeletionOpen = ref(false)
 const projectDeletionError = ref('')
+const selectedManifest = ref<ManifestInventory | null>(null)
+const repositoryOperationError = ref('')
+const removeRepositoryOpen = ref(false)
 
 const project = useQuery({ queryKey: computed(() => projectKeys.detail(slug.value)), queryFn: () => getProject(slug.value) })
 const repositories = useQuery({ queryKey: computed(() => projectKeys.repositories(slug.value)), queryFn: () => listRepositories(slug.value) })
@@ -99,6 +108,11 @@ const lifecycleHistory = useQuery({
   queryFn: () => listLifecycleRuns(slug.value, selectedRepository.value!.name),
   enabled: computed(() => canManage.value && selectedRepository.value !== null),
 })
+const inventory = useQuery({
+  queryKey: computed(() => registryKeys.inventory(slug.value, selectedRepository.value?.name ?? '')),
+  queryFn: () => listInventory(slug.value, selectedRepository.value!.name),
+  enabled: computed(() => selectedRepository.value !== null),
+})
 
 const removeProject = useMutation({
   mutationFn: () => deleteProject(slug.value),
@@ -121,6 +135,36 @@ const addMember = useMutation({
   onError: (caught) => {
     memberError.value = caught instanceof APIError ? caught.message : 'Could not add this project member'
   },
+})
+const removeMember = useMutation({
+  mutationFn: () => deleteMember(slug.value, membershipToRemove.value!.kind, membershipToRemove.value!.id),
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: projectKeys.members(slug.value) })
+    membershipToRemove.value = null
+    memberError.value = ''
+  },
+  onError: (caught) => {
+    memberError.value = caught instanceof APIError ? caught.message : 'Could not remove this project member'
+  },
+})
+const archive = useMutation({
+  mutationFn: () => archiveRepository(slug.value, selectedRepository.value!.id),
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
+    selectedRepository.value = selectedRepository.value ? { ...selectedRepository.value, status: 'archived' } : null
+    repositoryOperationError.value = ''
+  },
+  onError: (caught) => { repositoryOperationError.value = caught instanceof APIError ? caught.message : 'Could not archive this repository' },
+})
+const removeLogicalRepository = useMutation({
+  mutationFn: () => removeRepository(slug.value, selectedRepository.value!.id),
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
+    selectedRepository.value = null
+    removeRepositoryOpen.value = false
+    repositoryOperationError.value = ''
+  },
+  onError: (caught) => { repositoryOperationError.value = caught instanceof APIError ? caught.message : 'Could not remove this repository' },
 })
 
 const previewDeletion = useMutation({
@@ -192,12 +236,10 @@ const runLifecycle = useMutation({
 })
 
 const availableAccounts = computed(() => {
-  const assigned = new Set(members.data.value?.filter((member) => member.principalKind === 'service_account').map((member) => member.principalId))
-  return accounts.data.value?.filter((account) => !assigned.has(account.id)) ?? []
+  return accounts.data.value ?? []
 })
 const availableUsers = computed(() => {
-  const assigned = new Set(members.data.value?.filter((member) => member.principalKind === 'user').map((member) => member.principalId))
-  return users.data.value?.filter((user) => !assigned.has(user.id)) ?? []
+  return users.data.value ?? []
 })
 const availablePrincipals = computed(() => memberKind.value === 'user' ? availableUsers.value : availableAccounts.value)
 async function policiesSaved(policySet: RepositoryPolicySet) {
@@ -212,16 +254,32 @@ async function policiesSaved(policySet: RepositoryPolicySet) {
   await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
 }
 
-async function copyCommand(repository: string, tag = 'latest') {
-  const command = `docker pull ${window.location.host}/${slug.value}/${repository}:${tag}`
+async function copyCommand(command: string, key: string) {
   const result = await writeClipboardText(command)
   if (result !== 'copied') {
     copyError.value = 'Could not copy the pull command. Select and copy it manually.'
     return
   }
   copyError.value = ''
-  copied.value = repository + tag
+  copied.value = key
   window.setTimeout(() => { copied.value = '' }, 1200)
+}
+
+function pullCommand(repository: string, tag = 'latest') {
+  return `docker pull ${window.location.host}/${slug.value}/${repository}:${tag}`
+}
+
+function pushCommand(repository: string) {
+  const path = `${window.location.host}/${slug.value}/${repository}`
+  return `docker login ${window.location.host}\ndocker tag local-image:tag ${path}:tag\ndocker push ${path}:tag`
+}
+
+function editMember(kind: PrincipalKind, id: string, role: ProjectRole) {
+  memberKind.value = kind
+  memberId.value = id
+  memberRole.value = role
+  memberError.value = ''
+  memberModal.value = true
 }
 
 function openMemberModal() {
@@ -313,6 +371,10 @@ function profileLabel(profile: Repository['profile']) {
           <div><p class="text-sm font-semibold">{{ member.principalKind.replace('_', ' ') }}</p><p class="mt-1 font-mono text-xs text-muted-foreground">{{ member.principalId }}</p></div>
           <p class="text-xs text-muted-foreground">Assigned {{ new Date(member.createdAt).toLocaleDateString() }}</p>
           <Badge>{{ member.role }}</Badge>
+          <div v-if="canManage" class="flex gap-1">
+            <Button variant="ghost" size="sm" @click="editMember(member.principalKind, member.principalId, member.role)">Change role</Button>
+            <Button variant="ghost" size="icon" :aria-label="`Remove ${member.principalKind} member`" @click="membershipToRemove = { kind: member.principalKind, id: member.principalId }"><Trash2 :size="15" /></Button>
+          </div>
         </div>
       </div>
     </section>
@@ -387,6 +449,10 @@ function profileLabel(profile: Repository['profile']) {
             >
               <RefreshCw :size="14" /> {{ reviewLifecycle.isPending.value ? 'Reviewing…' : 'Review lifecycle' }}
             </Button>
+            <Button v-if="canManage && selectedRepository.status !== 'archived'" variant="outline" size="sm" :disabled="archive.isPending.value" @click="archive.mutate()">
+              {{ archive.isPending.value ? 'Archiving…' : 'Archive' }}
+            </Button>
+            <DeleteButton v-else-if="canManage" size="sm" @click="removeRepositoryOpen = true">Remove logical record</DeleteButton>
             <Button variant="ghost" size="icon" @click="selectedRepository = null"><X :size="18" /></Button>
           </div>
         </div>
@@ -395,8 +461,8 @@ function profileLabel(profile: Repository['profile']) {
           <Card v-for="tag in tags.data.value.tags" :key="tag" class="flex items-center justify-between p-3">
             <code class="text-sm text-accent">{{ tag }}</code>
             <div class="flex gap-1">
-              <Button variant="ghost" size="sm" @click="copyCommand(selectedRepository!.name, tag)">
-                <Check v-if="copied === selectedRepository.name + tag" :size="14" /><Clipboard v-else :size="14" /> Copy pull
+              <Button variant="ghost" size="sm" @click="copyCommand(pullCommand(selectedRepository!.name, tag), `pull:${tag}`)">
+                <Check v-if="copied === `pull:${tag}`" :size="14" /><Clipboard v-else :size="14" /> Copy pull
               </Button>
               <Button
                 v-if="canManage"
@@ -411,7 +477,24 @@ function profileLabel(profile: Repository['profile']) {
             </div>
           </Card>
         </div>
+        <div class="rounded-lg border p-3">
+          <p class="text-sm font-semibold">Push this repository</p>
+          <code class="mt-2 block whitespace-pre-wrap break-all text-xs text-accent">{{ pushCommand(selectedRepository.name) }}</code>
+          <Button variant="ghost" size="sm" class="mt-2" @click="copyCommand(pushCommand(selectedRepository!.name), 'push')">
+            <Check v-if="copied === 'push'" :size="14" /><Clipboard v-else :size="14" /> Copy push commands
+          </Button>
+        </div>
+        <div class="operation-history">
+          <h3 class="text-sm font-semibold">Manifest inventory</h3>
+          <p v-if="inventory.isLoading.value" class="text-xs text-muted-foreground">Loading manifest inventory…</p>
+          <p v-else-if="!inventory.data.value?.length" class="text-xs text-muted-foreground">No observed manifests yet.</p>
+          <Card v-for="manifest in inventory.data.value" :key="manifest.id" class="cursor-pointer p-3" role="button" tabindex="0" @click="selectedManifest = manifest" @keydown.enter="selectedManifest = manifest">
+            <div class="flex items-center justify-between gap-3"><code class="truncate text-xs">{{ manifest.digest }}</code><Badge>{{ manifest.observedKind.replaceAll('_', ' ') }}</Badge></div>
+            <p class="mt-1 text-xs text-muted-foreground">{{ manifest.tags.length ? manifest.tags.join(', ') : 'Untagged' }} · {{ manifest.manifestSize.toLocaleString() }} bytes</p>
+          </Card>
+        </div>
         <p v-if="copyError" class="error-text" role="alert">{{ copyError }}</p>
+        <p v-if="repositoryOperationError" class="error-text" role="alert">{{ repositoryOperationError }}</p>
         <p v-if="deletionError && !deletionPreview" class="error-text">{{ deletionError }}</p>
         <p v-if="lifecycleError && !lifecyclePreview" class="error-text">{{ lifecycleError }}</p>
         <div v-if="canManage && (artifactDeletionHistory.data.value?.length || lifecycleHistory.data.value?.length)" class="operation-history">
@@ -432,6 +515,35 @@ function profileLabel(profile: Repository['profile']) {
           </Card>
         </div>
       </section>
+    </Dialog>
+
+    <Dialog v-if="removeRepositoryOpen && selectedRepository" labelled-by="remove-repository-title" @close="removeRepositoryOpen = false">
+      <form class="modal form-stack" aria-labelledby="remove-repository-title" @submit.prevent="removeLogicalRepository.mutate()">
+        <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Destructive action</p><h2 id="remove-repository-title" class="text-lg font-semibold">Remove logical repository</h2></div><Button variant="ghost" size="icon" type="button" aria-label="Close logical repository removal" @click="removeRepositoryOpen = false"><X :size="18" /></Button></div>
+        <div class="deletion-warning"><AlertTriangle :size="18" /><p>This removes Grom's archived repository record only. It never deletes OCI content; remove all manifests first.</p></div>
+        <p v-if="repositoryOperationError" class="error-text" role="alert">{{ repositoryOperationError }}</p>
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="removeRepositoryOpen = false">Cancel</Button><DeleteButton type="submit" :disabled="removeLogicalRepository.isPending.value">{{ removeLogicalRepository.isPending.value ? 'Removing…' : 'Remove record' }}</DeleteButton></div>
+      </form>
+    </Dialog>
+
+    <Dialog v-if="selectedManifest" labelled-by="manifest-details-title" @close="selectedManifest = null">
+      <section class="modal form-stack" aria-labelledby="manifest-details-title">
+        <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Manifest</p><h2 id="manifest-details-title" class="text-lg font-semibold">Manifest details</h2></div><Button variant="ghost" size="icon" aria-label="Close manifest details" @click="selectedManifest = null"><X :size="18" /></Button></div>
+        <div><p class="text-xs text-muted-foreground">Digest</p><code class="mt-1 block break-all text-xs">{{ selectedManifest.digest }}</code></div>
+        <div class="grid grid-cols-2 gap-3 text-sm"><div><p class="text-xs text-muted-foreground">Media type</p><p class="break-all">{{ selectedManifest.mediaType || 'Unknown' }}</p></div><div><p class="text-xs text-muted-foreground">Size</p><p>{{ selectedManifest.manifestSize.toLocaleString() }} bytes</p></div><div><p class="text-xs text-muted-foreground">Observed</p><p>{{ new Date(selectedManifest.firstSeenAt).toLocaleString() }}</p></div><div><p class="text-xs text-muted-foreground">Last seen</p><p>{{ new Date(selectedManifest.lastSeenAt).toLocaleString() }}</p></div></div>
+        <div><p class="text-xs text-muted-foreground">Tags</p><div class="mt-1 flex flex-wrap gap-1"><Badge v-for="tag in selectedManifest.tags" :key="tag">{{ tag }}</Badge><span v-if="!selectedManifest.tags.length" class="text-sm">Untagged</span></div></div>
+        <div class="grid grid-cols-2 gap-3 text-sm"><div><p class="text-xs text-muted-foreground">Classification</p><p>{{ selectedManifest.observedKind.replaceAll('_', ' ') }} · {{ selectedManifest.classificationConfidence }}</p></div><div><p class="text-xs text-muted-foreground">OCI relationship</p><p>{{ selectedManifest.artifactRelationship }}</p></div></div>
+        <div v-if="selectedManifest.subjectDigest"><p class="text-xs text-muted-foreground">Subject digest</p><code class="mt-1 block break-all text-xs">{{ selectedManifest.subjectDigest }}</code></div>
+      </section>
+    </Dialog>
+
+    <Dialog v-if="membershipToRemove" labelled-by="remove-member-title" @close="membershipToRemove = null">
+      <form class="modal form-stack" aria-labelledby="remove-member-title" @submit.prevent="removeMember.mutate()">
+        <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Access change</p><h2 id="remove-member-title" class="text-lg font-semibold">Remove member</h2></div><Button variant="ghost" size="icon" type="button" aria-label="Close member removal" @click="membershipToRemove = null"><X :size="18" /></Button></div>
+        <div class="deletion-warning"><AlertTriangle :size="18" /><p>This principal loses project access on its next registry token exchange.</p></div>
+        <p v-if="memberError" class="error-text" role="alert">{{ memberError }}</p>
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="membershipToRemove = null">Cancel</Button><DeleteButton type="submit" :disabled="removeMember.isPending.value">{{ removeMember.isPending.value ? 'Removing…' : 'Remove member' }}</DeleteButton></div>
+      </form>
     </Dialog>
 
     <RepositoryCreateModal

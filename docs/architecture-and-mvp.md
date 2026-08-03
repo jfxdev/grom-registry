@@ -45,7 +45,7 @@ scanner execution.
 |---|---|---|---|
 | Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, and mandatory backend/frontend/lint/Go-vulnerability CI jobs exist | Production image build, dependency/container scanning, and PostgreSQL CI before claiming full support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
-| Phase 2: registry browsing and core UI | Partially accepted | Project, repository, membership, user, service-account, policy, deletion, lifecycle, and user-disable flows exist | Manifest detail, audit acceptance evidence, remaining UI management actions, pagination decision and first-push Playwright coverage |
+| Phase 2: registry browsing and core UI | Partially accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, and user-disable flows exist | Audit acceptance evidence, pagination decision and complete first-push Playwright coverage |
 | Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, and UI-driven quiesced backup plus same-image recovery exist | Migration/restart evidence, key rotation, upgrade tests, Docker smoke test and release artifacts; expanded matrices follow advertised capabilities |
 | Phase 4: integrations placeholder | Accepted for MVP | Backend-driven planned catalog and disabled read-only UI exist | ADR is required before active event delivery or scan-result storage, not for the inert placeholder |
 
@@ -419,13 +419,13 @@ Evidence:
 
 Work:
 
-1. Add a repository manifest-detail experience showing digest, media type,
-   size, known timestamps, tags, classification, and OCI relationships.
-2. Expose membership role replacement and removal in the UI.
-3. Expose optional access-key expiration during key creation.
+1. Maintain the repository manifest-detail experience showing digest, media
+   type, size, known timestamps, tags, classification, and OCI relationships.
+2. Maintain membership role replacement and removal in the UI.
+3. Maintain optional access-key expiration during key creation.
 4. Keep general user-profile editing post-MVP unless a concrete requirement
    promotes it.
-5. Add copyable push guidance alongside the existing pull command.
+5. Maintain copyable push guidance alongside the existing pull command.
 6. Remove recent-audit overview and basic settings from the default MVP unless
    a concrete first-release use case promotes them back into scope.
 7. Decide where pagination is required based on current unbounded list
@@ -434,8 +434,10 @@ Work:
 9. Add Playwright coverage for sign-in, project creation, membership
    management, reveal-once key handling, first push, repository browsing, safe
    deletion, and lifecycle review.
-10. Define a supported logical-repository removal or archival workflow before
-   claiming project deletion is operationally complete.
+10. Keep the implemented archival/removal workflow: archival blocks push but
+   preserves pull and OCI content; removal requires an archived record with no
+   live inventory and no Distribution catalog entry, and never deletes OCI
+   content.
 
 Acceptance:
 
@@ -443,8 +445,9 @@ Acceptance:
   database access or configuration edits.
 - Every management action promised as MVP is either exposed in the UI or
   explicitly documented as API-only.
-- A project containing repositories has a documented supported lifecycle
-  instead of becoming permanently undeletable through product operations.
+- A project containing repositories has an implemented archival/removal
+  lifecycle instead of becoming permanently undeletable through product
+  operations.
 - Critical browser flows pass in Playwright.
 
 ### Completion step 7: complete operational hardening
@@ -1506,12 +1509,9 @@ registry protocol with Docker.
 
 **Progress: partially accepted.**
 
-- **Partial:** project, repository, and tag screens exist; complete manifest
-  detail does not.
-- **Partial:** users, service accounts, memberships, and token management
-  screens exist; membership replacement/removal and optional key expiration
-  are not exposed in the UI.
-- **Partial:** pull guidance exists; complete copyable push guidance is pending.
+- **Implemented:** project, repository, tag, manifest-detail, memberships,
+  users, service accounts, token management, copyable pull/push guidance, and
+  logical-repository archival/removal screens exist.
 - **Partial:** the complete security-sensitive event set is produced and has
   SQLite persistence/sanitization coverage; public end-to-end audit acceptance
   and audit presentation remain intentionally outside the default MVP.

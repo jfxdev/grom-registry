@@ -7,8 +7,9 @@ const (
 	RegistryService      = "grom-registry"
 	RegistryIssuer       = "grom"
 
-	RepositoryStatusEmpty  = "empty"
-	RepositoryStatusActive = "active"
+	RepositoryStatusEmpty    = "empty"
+	RepositoryStatusActive   = "active"
+	RepositoryStatusArchived = "archived"
 
 	RepositoryCreationManual     = "manual"
 	RepositoryCreationPush       = "push"

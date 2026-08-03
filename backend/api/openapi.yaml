@@ -482,6 +482,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/projects/{project}/repositories/{repositoryId}:
+    delete:
+      tags: [Registry]
+      operationId: deleteProjectRepository
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/RepositoryID"
+      responses:
+        "204":
+          description: Archived empty logical repository removed
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/projects/{project}/repositories/{repositoryId}/archive:
+    post:
+      tags: [Registry]
+      operationId: archiveProjectRepository
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/RepositoryID"
+      responses:
+        "204":
+          description: Logical repository archived; pull remains available and push is blocked
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/projects/{project}/repositories/{repositoryId}/policies:
     get:
       tags: [Registry Policies]
@@ -1030,6 +1066,13 @@ components:
       schema:
         type: string
         format: uuid
+    RepositoryID:
+      name: repositoryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     BadRequest:
       description: Invalid request
@@ -1051,6 +1094,18 @@ components:
             $ref: "#/components/schemas/Error"
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Request conflicts with the current resource state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: Required registry service is unavailable
       content:
         application/json:
           schema:
@@ -1395,7 +1450,7 @@ components:
             type: string
     RepositoryStatus:
       type: string
-      enum: [empty, active]
+      enum: [empty, active, archived]
     RepositoryPolicyType:
       type: string
       enum: [tag_protection, immutability, retention, tag_naming, manual_deletion]

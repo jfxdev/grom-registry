@@ -143,6 +143,7 @@ already downloaded bundle.
 - The first repository path segment is the immutable project authorization boundary.
 - Only installation administrators create projects. When a Writer or Admin registry principal requests push scope inside an existing project, Grom idempotently creates a missing empty logical repository and grants push in the same token so the first push can succeed. Pull never creates repositories. Existing Distribution repositories are reconciled as active repositories without policies.
 - Only installation administrators delete projects. Project deletion is allowed only when no logical repositories remain; never orphan Distribution content or erase repository inventory through project deletion.
+- Repository archival blocks future pushes but preserves pull access and OCI content. Removing an archived logical repository must verify both empty live inventory and absence from Distribution's catalog; it never deletes OCI content and must be audited.
 - Repository behavior policies are isolated through their owning repository and project. Global policy presets are read-only form recommendations and never inherited runtime rules.
 - Repository policy sets are replaceable by project administrators under the repository's optimistic `policyVersion`; never silently overwrite a stale policy set.
 - External registry clients never receive `delete`. Manual artifact deletion resolves and deletes a manifest by digest through the authenticated control plane; blob garbage collection remains a separate operator action.
