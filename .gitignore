@@ -6,6 +6,7 @@ backend/grom
 backend/grom-backup
 frontend/node_modules/
 frontend/dist/
+frontend/test-results/
 backend/internal/webassets/dist/*
 !backend/internal/webassets/dist/.keep
 coverage/

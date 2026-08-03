@@ -43,19 +43,25 @@ export async function pushFirstImage(runtime: Runtime, username: string, secret:
   const target = `${registry}/alpha/app:v1`
   const dockerConfig = await mkdtemp(join(tmpdir(), 'grom-admin-e2e-docker-'))
   const environment = { ...process.env, DOCKER_CONFIG: dockerConfig }
-  await runDocker(runtime.root, environment, undefined, [
-    'build', '--pull=false', '--tag', source,
-    join(runtime.root, 'backend/tests/registrye2e/fixtures/variant-a'),
-  ], '')
-  await runDocker(runtime.root, environment, `${secret}\n`, ['login', '--username', username, '--password-stdin', registry], secret)
-  await runDocker(runtime.root, environment, undefined, ['tag', source, target], secret)
-  await runDocker(runtime.root, environment, undefined, ['push', target], secret)
-  const digestReference = await runDocker(runtime.root, environment, undefined, ['image', 'inspect', '--format', '{{index .RepoDigests 0}}', target], secret)
-  const digest = digestReference.trim().match(/@(sha256:[a-f0-9]{64})$/)?.[1]
-  if (!digest) throw new Error(`could not determine pushed manifest digest for ${target}`)
-  return { digest, cleanup: async () => {
+  const cleanup = async () => {
     await runDocker(runtime.root, environment, undefined, ['image', 'rm', '--force', target], secret).catch(() => undefined)
     await runDocker(runtime.root, environment, undefined, ['image', 'rm', '--force', source], secret).catch(() => undefined)
     await rm(dockerConfig, { recursive: true, force: true })
-  } }
+  }
+  try {
+    await runDocker(runtime.root, environment, undefined, [
+      'build', '--pull=false', '--tag', source,
+      join(runtime.root, 'backend/tests/registrye2e/fixtures/variant-a'),
+    ], '')
+    await runDocker(runtime.root, environment, `${secret}\n`, ['login', '--username', username, '--password-stdin', registry], secret)
+    await runDocker(runtime.root, environment, undefined, ['tag', source, target], secret)
+    await runDocker(runtime.root, environment, undefined, ['push', target], secret)
+    const digestReference = await runDocker(runtime.root, environment, undefined, ['image', 'inspect', '--format', '{{index .RepoDigests 0}}', target], secret)
+    const digest = digestReference.trim().match(/@(sha256:[a-f0-9]{64})$/)?.[1]
+    if (!digest) throw new Error(`could not determine pushed manifest digest for ${target}`)
+    return { digest, cleanup }
+  } catch (error) {
+    await cleanup().catch(() => undefined)
+    throw error
+  }
 }
