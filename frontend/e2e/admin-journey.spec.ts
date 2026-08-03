@@ -25,8 +25,11 @@ test('an administrator completes the first-push journey through the public UI', 
   await page.getByLabel('Username').fill('alpha-writer')
   await page.getByLabel('Description').fill('First-push acceptance test')
   await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('button', { name: /Keys/ }).click()
-  await page.getByRole('button', { name: 'New key' }).click()
+  const newKey = page.getByRole('button', { name: 'New key' })
+  if (!await newKey.isVisible()) {
+    await page.getByRole('button', { name: /Keys/ }).click()
+  }
+  await newKey.click()
   await page.getByLabel('Key name').fill('First push')
   await page.getByRole('button', { name: 'Create key' }).click()
   const secret = await page.locator('.secret-value code').textContent()
