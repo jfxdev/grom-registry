@@ -42,9 +42,15 @@ test('an administrator completes the first-push journey through the public UI', 
   await page.getByRole('button', { name: 'Add service account' }).click()
   const memberDialog = page.getByRole('dialog', { name: 'Add service account' })
   await memberDialog.getByLabel('Principal', { exact: true }).selectOption({ label: 'Alpha writer · alpha-writer' })
-  await memberDialog.getByLabel('Role', { exact: true }).selectOption('writer')
-  await memberDialog.getByRole('button', { name: 'Add member' }).click()
-  await expect(page.getByText('writer')).toBeVisible()
+  await memberDialog.locator('select').last().selectOption('writer')
+  const [memberResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'PUT' && response.url().includes('/members/service_account/')),
+    memberDialog.getByRole('button', { name: 'Add member' }).click(),
+  ])
+  expect(memberResponse.url()).toContain('/api/v1/projects/alpha/members/service_account/')
+  expect(await memberResponse.json()).toEqual({ status: 'saved' })
+  await expect(memberDialog).toBeHidden()
+  await expect(page.locator('.data-row').filter({ hasText: 'service account' }).getByText('writer', { exact: true })).toBeVisible()
 
   const { digest, cleanup } = await pushFirstImage(runtime, 'alpha-writer', secret!)
   try {
