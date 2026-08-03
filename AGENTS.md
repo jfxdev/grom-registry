@@ -22,6 +22,7 @@ Keep this file aligned with the code that actually exists.
 - Generate backend and frontend coverage reports: `make test-coverage`
 - Run the isolated real-Docker registry journey: `make test-registry-e2e`
 - Run the isolated browser-driven administrative first-push journey: `make test-admin-e2e`
+- Run the isolated boot, migration, readiness, and API-documentation journey: `make test-boot-acceptance`
 - Run the isolated destructive backup/restore journey: `make test-backup-restore-e2e`
 - Exercise the low-level offline backup compatibility tool: `make backup BACKUP_DIR=/absolute/path`
 - Inspect a backup with the development tool: `make backup-inspect BACKUP_PATH=/absolute/path/to/backup`
@@ -56,8 +57,9 @@ their scenario because the shared Docker daemon may cache bearer tokens for one
 registry address.
 The mandatory GitHub status checks are `Backend Tests`, `Frontend Tests`,
 `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
-`Admin Journey E2E (Docker)`, and `Backup Restore E2E`, defined under
-`.github/workflows`. Keep these job names stable and require all seven in the
+`Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and
+`Backup Restore E2E`, defined under `.github/workflows`. Keep these job names
+stable and require all eight in the
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
