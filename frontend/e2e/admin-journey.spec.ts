@@ -43,8 +43,10 @@ test('an administrator completes the first-push journey through the public UI', 
   await page.getByRole('button', { name: /Members/ }).click()
   await page.getByRole('button', { name: 'Add service account' }).click()
   const memberDialog = page.getByRole('dialog', { name: 'Add service account' })
-  await memberDialog.getByLabel('Principal', { exact: true }).selectOption({ label: 'Alpha writer · alpha-writer' })
-  await memberDialog.locator('select').last().selectOption('writer')
+  const memberSelects = memberDialog.locator('select')
+  await expect(memberSelects).toHaveCount(3)
+  await memberSelects.nth(1).selectOption({ label: 'Alpha writer · alpha-writer' })
+  await memberSelects.nth(2).selectOption('writer')
   const [memberResponse] = await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'PUT' && response.url().includes('/members/service_account/')),
     memberDialog.getByRole('button', { name: 'Add member' }).click(),
@@ -56,6 +58,7 @@ test('an administrator completes the first-push journey through the public UI', 
 
   const { digest, cleanup } = await pushFirstImage(runtime, 'alpha-writer', secret!)
   try {
+    await page.reload()
     await page.getByRole('button', { name: /Repositories/ }).click()
     await expect(page.getByRole('button', { name: /app/ })).toBeVisible()
     await page.getByRole('button', { name: /app/ }).click()
