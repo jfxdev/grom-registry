@@ -2,6 +2,7 @@
 
 import { APIError } from '@/shared/api/client'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectPage from './ProjectPage.vue'
@@ -100,6 +101,16 @@ function mountPage() {
   })
 }
 
+function renderPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  return render(ProjectPage, {
+    global: {
+      plugins: [[VueQueryPlugin, { queryClient }]],
+      stubs: { RouterLink: { template: '<a><slot /></a>' } },
+    },
+  })
+}
+
 function buttonWithText(wrapper: ReturnType<typeof mountPage>, text: string) {
   const button = wrapper.findAll('button').find((candidate) => candidate.text().includes(text))
   if (!button) throw new Error(`Button not found: ${text}`)
@@ -108,6 +119,7 @@ function buttonWithText(wrapper: ReturnType<typeof mountPage>, text: string) {
 
 describe('ProjectPage membership management', () => {
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
   })
 
@@ -233,19 +245,17 @@ describe('ProjectPage membership management', () => {
       startedAt: '2026-07-29T00:00:00Z', completedAt: null, items: [],
     }])
 
-    const wrapper = mountPage()
-    await flushPromises()
-    await buttonWithText(wrapper, 'payments/api').trigger('click')
-    await flushPromises()
+    renderPage()
+    await fireEvent.click(await screen.findByRole('button', { name: /payments\/api/ }))
 
-    expect(wrapper.text()).toContain('Different primary artifact types')
-    expect(wrapper.text()).toContain('created by push')
-    expect(wrapper.text()).toContain('Deletion history')
-    expect(wrapper.text()).toContain('No reason')
-    await wrapper.get('[role="button"][tabindex="0"]').trigger('click')
-    expect(wrapper.text()).toContain('Manifest details')
-    expect(wrapper.text()).toContain('Untagged')
-    expect(wrapper.text()).toContain('sha256:subject')
+    expect(await screen.findByText(/Different primary artifact types/)).toBeTruthy()
+    expect(screen.getByText(/created by push/)).toBeTruthy()
+    expect(await screen.findByText('Deletion history')).toBeTruthy()
+    expect(await screen.findByText(/No reason/)).toBeTruthy()
+    await fireEvent.click(await screen.findByRole('button', { name: /sha256:abc/ }))
+    expect(screen.getByRole('dialog', { name: 'Manifest details' })).toBeTruthy()
+    expect(screen.getByText('Untagged')).toBeTruthy()
+    expect(screen.getByText('sha256:subject')).toBeTruthy()
   })
 
   it('archives an active repository and removes an archived repository', async () => {
@@ -255,23 +265,19 @@ describe('ProjectPage membership management', () => {
       profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
     }
     mocks.listRepositories.mockResolvedValue([activeRepository])
-    const wrapper = mountPage()
-    await flushPromises()
-    await buttonWithText(wrapper, 'payments/api').trigger('click')
-    await flushPromises()
-    await buttonWithText(wrapper, 'Archive').trigger('click')
-    await flushPromises()
-    expect(mocks.archiveRepository).toHaveBeenCalledWith('payments', 'repository-1')
+    renderPage()
+    await fireEvent.click(await screen.findByRole('button', { name: /payments\/api/ }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    await waitFor(() => expect(mocks.archiveRepository).toHaveBeenCalledWith('payments', 'repository-1'))
 
     mocks.listRepositories.mockResolvedValue([{ ...activeRepository, status: 'archived' }])
-    const archived = mountPage()
-    await flushPromises()
-    await buttonWithText(archived, 'payments/api').trigger('click')
-    await flushPromises()
-    await buttonWithText(archived, 'Remove logical record').trigger('click')
-    await archived.get('form[aria-labelledby="remove-repository-title"]').trigger('submit')
-    await flushPromises()
-    expect(mocks.removeRepository).toHaveBeenCalledWith('payments', 'repository-1')
+    cleanup()
+    renderPage()
+    await fireEvent.click(await screen.findByRole('button', { name: /payments\/api/ }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove logical record' }))
+    const dialog = screen.getByRole('dialog', { name: 'Remove logical repository' })
+    await fireEvent.submit(within(dialog).getByRole('button', { name: 'Remove record' }).closest('form')!)
+    await waitFor(() => expect(mocks.removeRepository).toHaveBeenCalledWith('payments', 'repository-1'))
   })
 
   it('reviews and executes an eligible lifecycle run', async () => {
@@ -294,20 +300,17 @@ describe('ProjectPage membership management', () => {
       startedAt: '2026-07-29T00:00:00Z', completedAt: '2026-07-29T00:01:00Z',
       items: [{ id: 'item-1', digest: 'sha256:eligible', status: 'deleted', message: '' }, { id: 'item-2', digest: 'sha256:retained', status: 'skipped', message: 'retained' }],
     })
-    const wrapper = mountPage()
-    await flushPromises()
-    await buttonWithText(wrapper, 'payments/api').trigger('click')
-    await flushPromises()
-    await buttonWithText(wrapper, 'Review lifecycle').trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('sha256:blocked')
-    expect(wrapper.text()).toContain('Untagged')
-    const reason = wrapper.get('textarea')
-    await reason.setValue('retention')
-    await buttonWithText(wrapper, 'Delete 1 eligible').trigger('click')
-    await flushPromises()
-    expect(mocks.executeLifecycle).toHaveBeenCalledWith('payments', 'preview-1', 'retention')
-    expect(wrapper.text()).toContain('1 deleted,')
+    renderPage()
+    await fireEvent.click(await screen.findByRole('button', { name: /payments\/api/ }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Review lifecycle' }))
+    await waitFor(() => expect(mocks.createLifecyclePreview).toHaveBeenCalledWith('payments', 'api'))
+    expect(await screen.findByText(/sha256:blocked/)).toBeTruthy()
+    expect(screen.getAllByText('Untagged')).not.toHaveLength(0)
+    const dialog = screen.getByText('Lifecycle dry-run').closest('dialog')!
+    await fireEvent.update(within(dialog).getByLabelText('Execution reason'), 'retention')
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete 1 eligible' }))
+    await waitFor(() => expect(mocks.executeLifecycle).toHaveBeenCalledWith('payments', 'preview-1', 'retention'))
+    expect(await screen.findByText(/1 deleted,/)).toBeTruthy()
   })
 
   it('shows blocked artifact-deletion details and requires a policy reason', async () => {
@@ -321,16 +324,13 @@ describe('ProjectPage membership management', () => {
       repository: 'api', digest: 'sha256:stable', affectedTags: [], requiresReason: true,
       blockedReasons: ['The manifest has referrers'], relatedArtifacts: ['sha256:signature'],
     })
-    const wrapper = mountPage()
-    await flushPromises()
-    await buttonWithText(wrapper, 'payments/api').trigger('click')
-    await flushPromises()
-    await wrapper.get('button[aria-label="Delete stable"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('The manifest has referrers')
-    expect(wrapper.text()).toContain('sha256:signature')
-    expect(wrapper.text()).toContain('Untagged manifest')
-    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    renderPage()
+    await fireEvent.click(await screen.findByRole('button', { name: /payments\/api/ }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Delete stable' }))
+    expect(await screen.findByText('The manifest has referrers')).toBeTruthy()
+    expect(screen.getByText('sha256:signature')).toBeTruthy()
+    expect(screen.getByText('Untagged manifest')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Delete artifact' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('manages existing members and surfaces removal errors', async () => {
@@ -339,27 +339,29 @@ describe('ProjectPage membership management', () => {
     }])
     mocks.listUsers.mockResolvedValue([{ id: 'user-2', email: 'user@example.com', username: 'writer', systemAdmin: false, createdAt: '2026-07-29T00:00:00Z' }])
     mocks.deleteMember.mockRejectedValue(new APIError(409, 'conflict', 'Member removal denied'))
-    const wrapper = mountPage()
-    await flushPromises()
-    await buttonWithText(wrapper, 'Members').trigger('click')
-    await buttonWithText(wrapper, 'Change role').trigger('click')
-    expect((wrapper.get('select').element as HTMLSelectElement).value).toBe('user')
-    await buttonWithText(wrapper, 'Cancel').trigger('click')
-    await wrapper.get('button[aria-label="Remove user member"]').trigger('click')
-    await wrapper.get('form[aria-labelledby="remove-member-title"]').trigger('submit')
-    await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toContain('Member removal denied')
+    renderPage()
+    await fireEvent.click(await screen.findByRole('button', { name: 'Members' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Change role' }))
+    const memberDialog = screen.getByRole('dialog', { name: 'Add service account' })
+    await fireEvent.update(within(memberDialog).getByLabelText('Role'), 'admin')
+    await fireEvent.submit(within(memberDialog).getByRole('button', { name: 'Add member' }).closest('form')!)
+    await waitFor(() => expect(mocks.setMember).toHaveBeenCalledWith('payments', 'user', 'user-2', 'admin'))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add service account' })).toBeNull())
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove user member' }))
+    const removalDialog = screen.getByRole('dialog', { name: 'Remove member' })
+    await fireEvent.submit(within(removalDialog).getByRole('button', { name: 'Remove member' }).closest('form')!)
+    await waitFor(() => expect(mocks.deleteMember).toHaveBeenCalledWith('payments', 'user', 'user-2'))
+    expect((await screen.findByText(/Member removal denied/)).textContent).toContain('Member removal denied')
   })
 
   it('shows a project-deletion error without leaving the confirmation dialog', async () => {
     mocks.deleteProject.mockRejectedValue(new APIError(409, 'project_not_empty', 'Project still contains repositories'))
-    const wrapper = mountPage()
-    await flushPromises()
-    await buttonWithText(wrapper, 'Delete project').trigger('click')
-    await wrapper.get('form[aria-labelledby="delete-project-title"]').trigger('submit')
-    await flushPromises()
+    renderPage()
+    await fireEvent.click(await screen.findByRole('button', { name: 'Delete project' }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete project' })
+    await fireEvent.submit(within(dialog).getByRole('button', { name: 'Delete project' }).closest('form')!)
 
-    expect(wrapper.get('.error-text').text()).toContain('Project still contains repositories')
-    expect(wrapper.find('form[aria-labelledby="delete-project-title"]').exists()).toBe(true)
+    expect(await screen.findByText('Project still contains repositories')).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Delete project' })).toBeTruthy()
   })
 })
