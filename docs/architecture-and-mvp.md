@@ -1334,8 +1334,9 @@ Current gaps:
 - Playwright covers mocked invalid sign-in and the real public-stack flow for
   project creation, service-account key reveal, Writer membership, first push,
   repository browsing, inventory, and manifest detail. The local acceptance
-  command passed on August 3, 2026; its new GitHub Actions check is awaiting
-  its first run.
+  command and the `Admin Journey E2E (Docker)` GitHub Actions check passed on
+  August 3, 2026; the recorded CI evidence is
+  [PR #6](https://github.com/jfxdev/grom-registry/pull/6).
 - Generated API drift is checked in CI for both Go and TypeScript outputs.
 - The full responsive and accessibility acceptance matrix is tracked in
   `visual-implementation-plan.md`.
@@ -1531,10 +1532,11 @@ registry protocol with Docker.
 
 Exit criterion: a new administrator can create a project, add a service account, push an image, and inspect it without using the database or editing configuration.
 
-The complete first-push browser journey passed locally on August 3, 2026 via
-`make test-admin-e2e`, exercising the public Grom and Distribution stack. Its
-separate CI workflow is implemented but has not yet reported an acceptance run.
-Broader browser coverage and the settings decision remain in completion step 6.
+The complete first-push browser journey passed locally and in the separate
+`Admin Journey E2E (Docker)` GitHub Actions workflow on August 3, 2026 via
+`make test-admin-e2e`, exercising the public Grom and Distribution stack. The
+CI evidence is [PR #6](https://github.com/jfxdev/grom-registry/pull/6). Broader
+browser coverage and the settings decision remain in completion step 6.
 Essential audit persistence remains in step 2; an audit browsing page is
 post-MVP unless promoted explicitly.
 
@@ -1634,13 +1636,13 @@ Status vocabulary:
 | 7 | Removing a membership prevents access while the key remains valid | Default MVP | Passing | Registry E2E removes membership and verifies the next scoped token loses access |
 | 8 | A short-lived registry JWT expires without invalidating the long-lived key | Default MVP | Passing | Registry E2E bounds expiry rejection and performs a successful fresh exchange |
 | 9 | Docker Engine can push and pull supported image content | Default MVP | Passing | Mandatory registry E2E job exercises Docker through the public Grom endpoint |
-| 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Partial | `make test-admin-e2e` and `Admin Journey E2E (Docker)` are implemented; record successful local and CI evidence before marking passing |
+| 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Passing | `make test-admin-e2e` passed locally and the mandatory `Admin Journey E2E (Docker)` workflow passed in [PR #6](https://github.com/jfxdev/grom-registry/pull/6) |
 | 11 | Integrations shows backend-driven planned providers with no active configuration | Default MVP | Passing | Existing API/UI tests cover the read-only flow |
 | 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Partial | SQLite metadata restart test exists; add process-level restart coverage for users, memberships, and Distribution/blob state |
 | 13 | The applicable backend suite passes against PostgreSQL | PostgreSQL support | Partial | Mandatory PostgreSQL CI job with no skip path |
-| 14 | Empty or supported older databases migrate before readiness | Default MVP | Partial | Planned: boot acceptance tests for empty and supported previous SQLite state with public readiness probing |
-| 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Partial | Planned: process-level failing-migration fixture that proves no public readiness, API, or registry exposure |
-| 16 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Partial | Planned: public `/api/docs` smoke check in the boot acceptance suite |
+| 14 | Empty or supported older databases migrate before readiness | Default MVP | Partial | `make test-boot-acceptance` passed locally; record the mandatory CI run before marking passing |
+| 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Partial | `make test-boot-acceptance` passed locally with a failing real-migration fixture; record the mandatory CI run before marking passing |
+| 16 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Partial | `make test-boot-acceptance` passed locally for `/api/openapi.yaml` and `/api/docs`; record the mandatory CI run before marking passing |
 | 17 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Passing | Backend contract tests and frontend generated-code freshness check run in CI |
 | 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
 | 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |

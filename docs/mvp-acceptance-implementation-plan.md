@@ -2,8 +2,11 @@
 
 ## Purpose and scope
 
-**Status: Work package A implemented and passed locally on August 3, 2026; CI
-acceptance evidence remains to be recorded. Work package B remains planned.**
+**Status: Work package A implemented and accepted locally and in CI on August
+3, 2026; its recorded CI evidence is
+[PR #6](https://github.com/jfxdev/grom-registry/pull/6). Work package B remains
+implemented and passed locally on August 3, 2026; it awaits CI acceptance
+evidence.**
 
 This plan closes the next two default-MVP acceptance gaps from
 [`architecture-and-mvp.md`](architecture-and-mvp.md):
@@ -78,16 +81,17 @@ configuration edits, a private Distribution port, or mocked API responses.
   selector.
 - Implemented: the `Admin Journey E2E (Docker)` workflow runs the command as a
   separately named mandatory check, and `AGENTS.md`, `docs/code-map.md`, and
-  the MVP acceptance matrix identify the command and workflow. Its first CI
-  run exposed a test race and must pass after the correction before acceptance
-  evidence is recorded.
+  the MVP acceptance matrix identify the command and workflow. After the test
+  race was corrected, the workflow passed in
+  [PR #6](https://github.com/jfxdev/grom-registry/pull/6).
 
 ### Acceptance and evidence
 
 The harness is implemented as `make test-admin-e2e` and its CI workflow exposes
-the stable check `Admin Journey E2E (Docker)`. The command passed locally on
-August 3, 2026. Record the first successful CI run before changing MVP scenario
-10 from **Partial** to **Passing**.
+the stable check `Admin Journey E2E (Docker)`. The command passed locally and
+the mandatory CI check passed on August 3, 2026 in
+[PR #6](https://github.com/jfxdev/grom-registry/pull/6). MVP scenario 10 is
+therefore **Passing**.
 
 ## Work package B: default-installation boot and contract smoke checks
 
@@ -112,11 +116,13 @@ The acceptance suite must run against the public Grom port and test:
 
 ### Implementation design
 
-- Add an opt-in boot-acceptance package or harness next to the existing
-  public-stack E2E suites. It must use a unique Compose project and temporary
-  volumes, with bounded waits and diagnostics on failure. The existing Go
-  `registrye2e` stack helper is the preferred starting point because it already
-  implements these Compose safety boundaries.
+- Implemented: `backend/tests/bootacceptance` starts isolated Compose projects
+  with bounded waits, diagnostics, and exact-project cleanup. It verifies empty
+  SQLite boot, a supported prior schema, a failed real migration that never
+  exposes the public surface, and the installed documentation endpoints.
+- The suite's prior-state fixtures are created only within the test process;
+  they are copied into the isolated named volume before normal Grom startup.
+  No production configuration activates a migration failure.
 - Seed a supported previous SQLite fixture only through a reviewed migration
   fixture or an archived, versioned database artifact. Do not mutate live
   schemas ad hoc in the test.
@@ -125,13 +131,14 @@ The acceptance suite must run against the public Grom port and test:
   deployment configuration.
 - Probe public HTTP only after process launch. Do not replace this suite with
   direct calls to the migration runner or an in-process HTTP handler.
-- Add a `make test-boot-acceptance` target and a separate CI workflow/job once
-  stable. Keep the tests targeted enough to finish within the existing Docker
-  acceptance budget.
+- Implemented: `make test-boot-acceptance` and the separate `Boot Acceptance
+  E2E (Docker)` workflow run the suite. Keep the tests targeted enough to finish
+  within the existing Docker acceptance budget.
 
 ### Acceptance and evidence
 
-When these scenarios pass in the dedicated command and CI, mark MVP scenarios
+`make test-boot-acceptance` passed locally on August 3, 2026. Record the first
+successful `Boot Acceptance E2E (Docker)` CI run before marking MVP scenarios
 14, 15, and 16 **Passing**. Scenario 12 remains separate: it requires a
 deliberate full Compose restart proving Distribution/blob preservation.
 
@@ -140,8 +147,8 @@ deliberate full Compose restart proving Distribution/blob preservation.
 1. Completed: implement the public-stack Playwright configuration and isolated
    harness.
 2. Completed: add and stabilize the browser administration/first-push scenario.
-3. Next: add the empty-volume and `/api/docs` boot smoke checks.
-4. Add previous-version and failing-migration fixtures, then their public
+3. Completed: add the empty-volume and `/api/docs` boot smoke checks.
+4. Completed: add previous-version and failing-migration fixtures with public
    readiness assertions.
-5. Wire the boot-acceptance command into CI, then refresh the architecture
-   acceptance table with dated evidence.
+5. Completed: wire the boot-acceptance command into CI. Run it locally and in
+   CI, then refresh the architecture acceptance table with dated evidence.
