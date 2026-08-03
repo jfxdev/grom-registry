@@ -1,23 +1,28 @@
 # Grom
 
 [![codecov](https://codecov.io/gh/jfxdev/grom-registry/graph/badge.svg?token=5NOmSFnvkT)](https://codecov.io/gh/jfxdev/grom-registry)
+[![CI](https://github.com/jfxdev/grom-registry/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/ci.yml)
+[![Registry E2E](https://github.com/jfxdev/grom-registry/actions/workflows/registry-e2e.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/registry-e2e.yml)
+[![Admin Journey E2E](https://github.com/jfxdev/grom-registry/actions/workflows/admin-journey-e2e.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/admin-journey-e2e.yml)
+[![Boot Acceptance E2E](https://github.com/jfxdev/grom-registry/actions/workflows/boot-acceptance-e2e.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/boot-acceptance-e2e.yml)
+[![Backup Restore E2E](https://github.com/jfxdev/grom-registry/actions/workflows/backup-restore-e2e.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/backup-restore-e2e.yml)
 
-Lightweight OCI registry with project-scoped access control.
+Grom is a lightweight, self-hosted OCI registry for individuals and small
+teams. It pairs CNCF Distribution with a secure control plane and a simple web
+interface for managing projects, access, images, and recovery.
 
-## What is included
+## Features
 
-- CNCF Distribution v3 as the OCI/Docker data plane.
-- Go control plane and streaming registry gateway.
-- SQLite by default, with PostgreSQL support through Bun.
-- Automatic versioned migrations during boot.
-- Project-scoped Reader, Writer, and Admin roles.
-- Human users, service accounts with reveal-once access keys, and short-lived registry JWTs.
-- Vue 3 management interface using the shadcn-vue component system.
-- Contract-first OpenAPI documentation at `/api/docs`.
-- OCI manifest inventory with retention dry-runs and audited manual lifecycle execution.
-- Passive repository-profile inference for container images, Terraform modules, SBOMs, and generic OCI content.
-- Installation-admin backup UI and same-image, loopback-only disaster-recovery UI.
-- Read-only integrations roadmap.
+- Project-scoped Docker and OCI registry access with Reader, Writer, and Admin roles.
+- Human users, service accounts, reveal-once access keys, and short-lived JWTs.
+- Streaming gateway in front of unmodified CNCF Distribution v3.
+- Web management interface for projects, memberships, repositories, manifests, and policies.
+- Automatic versioned database migrations with SQLite as the default storage.
+- OpenAPI contract and interactive API documentation at `/api/docs`.
+- OCI manifest inventory, passive artifact classification, retention previews, and audited manual lifecycle actions.
+- Built-in backup creation, download, and loopback-only disaster recovery for the default installation.
+- Explicit development, permissive, and strict deployment profiles.
+- Read-only integrations catalog for planned future capabilities.
 
 ## Quick start
 
@@ -117,11 +122,34 @@ make test-registry-e2e
 
 # Run the browser-driven administrative first-push journey (requires Docker and Playwright Chromium)
 make test-admin-e2e
+
+# Run public boot, migration, readiness, and API-documentation acceptance checks
+make test-boot-acceptance
+
+# Run the destructive backup and restore recovery journey
+make test-backup-restore-e2e
 ```
 
 This opt-in check requires Docker Engine and Docker Compose. It uses an
 isolated Compose project on a random loopback port and removes its temporary
 containers, volumes, credentials, and image tags when it finishes.
+
+### Test coverage summary
+
+- `make test` runs the backend unit and integration suite plus frontend lint,
+  component tests, and type checking.
+- `make test-registry-e2e` proves Docker push/pull authorization, scoped access,
+  key revocation, JWT renewal, policy enforcement, and inventory observation
+  through Grom's public endpoint.
+- `make test-admin-e2e` proves the browser workflow from administrator sign-in
+  through project setup, reveal-once access-key handling, first push, and
+  repository/manifest browsing.
+- `make test-boot-acceptance` proves an empty installation boots, supported
+  SQLite state migrates before readiness, failed migrations expose no public
+  endpoint, and the packaged OpenAPI documentation is available.
+- `make test-backup-restore-e2e` proves a UI-created backup can restore a lost
+  default installation, preserve registry content, invalidate old sessions, and
+  accept new registry activity.
 
 Installation administrators create and download recovery points from
 **Backup & recovery** in the web interface. If the installation volumes are
