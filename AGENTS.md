@@ -55,7 +55,7 @@ but can take about one minute. Authenticate E2E principals immediately before
 their scenario because the shared Docker daemon may cache bearer tokens for one
 registry address.
 The mandatory GitHub status checks are `Backend Tests`, `Frontend Tests`,
-`Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`, and
+`Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
 `Admin Journey E2E (Docker)`, and `Backup Restore E2E`, defined under
 `.github/workflows`. Keep these job names stable and require all seven in the
 `main` branch ruleset; the workflows also handle merge queues through

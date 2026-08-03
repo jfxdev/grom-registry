@@ -1,0 +1,109 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - link "Grom" [ref=e7] [cursor=pointer]:
+          - /url: /projects
+          - generic [ref=e8]:
+            - img [ref=e9]
+            - generic [ref=e11]: Grom
+        - generic [ref=e12]: Registry
+      - button "Browse projects" [ref=e14] [cursor=pointer]:
+        - img [ref=e15]
+        - text: Browse projects
+      - navigation [ref=e25]:
+        - paragraph [ref=e26]: Platform
+        - link "Projects" [ref=e27] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e28]
+          - generic [ref=e38]: Projects
+          - img [ref=e39]
+        - link "Users" [ref=e41] [cursor=pointer]:
+          - /url: /users
+          - img [ref=e42]
+          - generic [ref=e47]: Users
+          - img [ref=e48]
+        - link "Service accounts" [ref=e50] [cursor=pointer]:
+          - /url: /service-accounts
+          - img [ref=e51]
+          - generic [ref=e54]: Service accounts
+          - img [ref=e55]
+        - link "Integrations" [ref=e57] [cursor=pointer]:
+          - /url: /integrations
+          - img [ref=e58]
+          - generic [ref=e62]: Integrations
+          - img [ref=e63]
+        - link "Backup & recovery" [ref=e65] [cursor=pointer]:
+          - /url: /backups
+          - img [ref=e66]
+          - generic [ref=e72]: Backup & recovery
+          - img [ref=e73]
+    - generic [ref=e75]:
+      - paragraph [ref=e76]: Account
+      - link "AD admin-e2e admin-e2e@grom.local" [ref=e77] [cursor=pointer]:
+        - /url: /profile
+        - generic [ref=e78]: AD
+        - generic [ref=e79]:
+          - paragraph [ref=e80]: admin-e2e
+          - paragraph [ref=e81]: admin-e2e@grom.local
+        - img [ref=e82]
+      - button "Sign out" [ref=e84] [cursor=pointer]:
+        - img [ref=e85]
+        - text: Sign out
+  - generic [ref=e88]:
+    - banner [ref=e89]:
+      - generic [ref=e90]:
+        - img [ref=e91]
+        - generic [ref=e94]: Grom Registry
+        - img [ref=e95]
+        - generic [ref=e97]: Service accounts
+      - link "admin-e2e Administrator AD" [ref=e98] [cursor=pointer]:
+        - /url: /profile
+        - generic [ref=e99]:
+          - strong [ref=e100]: admin-e2e
+          - generic [ref=e101]: Administrator
+        - generic [ref=e102]: AD
+        - img [ref=e103]
+    - main [ref=e105]:
+      - generic [ref=e106]:
+        - generic [ref=e107]:
+          - generic [ref=e108]:
+            - paragraph [ref=e109]: Automation identities
+            - heading "Service accounts" [level=1] [ref=e110]
+            - paragraph [ref=e111]: Create stable identities for CI and deployment systems, then assign them to projects.
+          - button "New account" [ref=e112] [cursor=pointer]:
+            - img [ref=e113]
+            - text: New account
+        - generic [ref=e114]:
+          - generic [ref=e115]:
+            - generic [ref=e116]:
+              - heading "All service accounts" [level=2] [ref=e117]
+              - paragraph [ref=e118]: Automation identities used by registry clients.
+            - generic [ref=e119]:
+              - combobox "Filter service accounts by status" [ref=e120]:
+                - option "Active" [selected]
+                - option "Disabled"
+                - option "All statuses"
+              - generic [ref=e121]:
+                - img
+                - searchbox "Search service accounts" [ref=e123]
+              - generic [ref=e124]: 1 total
+          - generic [ref=e126]:
+            - generic [ref=e127]:
+              - img [ref=e129]
+              - generic [ref=e132]:
+                - paragraph [ref=e133]: Alpha writer
+                - paragraph [ref=e134]: alpha-writer
+            - paragraph [ref=e135]: First-push acceptance test
+            - generic [ref=e136]:
+              - generic [ref=e137]: Active
+              - button "Keys" [active] [ref=e138] [cursor=pointer]:
+                - img [ref=e139]
+                - text: Keys
+                - img [ref=e142]
+              - button "Disable service account Alpha writer" [ref=e144] [cursor=pointer]:
+                - img [ref=e145]
+```

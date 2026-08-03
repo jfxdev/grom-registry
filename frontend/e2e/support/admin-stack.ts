@@ -97,8 +97,11 @@ export default async function globalSetup() {
     throw error
   }
   return async () => {
-    await run(root, environment, ...compose, 'down', '--volumes', '--remove-orphans')
-    await rm(runtimeDirectory, { recursive: true, force: true })
+    try {
+      await run(root, environment, ...compose, 'down', '--volumes', '--remove-orphans')
+    } finally {
+      await rm(runtimeDirectory, { recursive: true, force: true })
+    }
   }
 }
 

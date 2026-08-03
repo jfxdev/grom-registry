@@ -51,17 +51,17 @@ configuration edits, a private Distribution port, or mocked API responses.
 
 ### Implementation design
 
-- Add a Playwright global setup/teardown pair under `frontend/e2e/` for the
+- Implemented: a Playwright global setup/teardown pair under `frontend/e2e/` for the
   public-stack mode. It will reserve a loopback port, start a uniquely named
   Compose project from `deploy/compose/docker-compose.yml`, wait for public
   readiness, write the public URL to a per-run runtime file read by the tests,
   and tear down that exact project. This keeps browser actions in Playwright
   while avoiding a second Go test harness that would have to launch Node.
-- Extend Playwright configuration with `GROM_RUN_ADMIN_E2E=1`. That mode
+- Implemented: Playwright configuration recognizes `GROM_RUN_ADMIN_E2E=1`. That mode
   disables Vite's `webServer`, installs the global setup/teardown, and requires
   the public URL supplied by setup. The ordinary mocked suite continues to
   start Vite and keeps its current base URL.
-- Add a dedicated opt-in command, `make test-admin-e2e`, that invokes the
+- Implemented: the dedicated opt-in command `make test-admin-e2e` invokes the
   public-stack mode. Compose builds the root `Dockerfile`, whose build embeds
   the frontend distribution in Grom; the browser therefore validates the same
   frontend that the container serves.
@@ -76,9 +76,11 @@ configuration edits, a private Distribution port, or mocked API responses.
 - Make selectors accessible and stable by using roles, labels, and visible
   names. Add `data-testid` only where semantics cannot provide a stable
   selector.
-- Add the new command to CI as a separately named mandatory check after the
-  harness is reliable. Update `AGENTS.md`, `docs/code-map.md`, and the MVP
-  acceptance matrix in the implementation change.
+- Implemented: the `Admin Journey E2E (Docker)` workflow runs the command as a
+  separately named mandatory check, and `AGENTS.md`, `docs/code-map.md`, and
+  the MVP acceptance matrix identify the command and workflow. Its first CI
+  run exposed a test race and must pass after the correction before acceptance
+  evidence is recorded.
 
 ### Acceptance and evidence
 
@@ -106,7 +108,7 @@ The acceptance suite must run against the public Grom port and test:
 | Empty SQLite volume | Migrations complete, `/readyz` becomes successful, and a bootstrap administrator can sign in. |
 | Supported previous SQLite state | Migrations complete before readiness and preserved users, projects, and memberships remain readable after boot. |
 | Failed migration fixture | The process exits or remains unready; `/readyz`, management API, and `/v2/` must not become available. Migration history must not record the failed version. |
-| Documentation surface | `/api/openapi.yaml` returns the versioned contract and `/api/docs` returns the interactive documentation page. |
+| Documentation surface | `/api/openapi.yaml` returns the versioned contract, the existing bidirectional registered-route/OpenAPI validation proves every management and authentication operation is included, and `/api/docs` returns the interactive documentation page. |
 
 ### Implementation design
 
@@ -135,11 +137,11 @@ deliberate full Compose restart proving Distribution/blob preservation.
 
 ## Execution order
 
-1. Implement the public-stack Playwright configuration and isolated harness.
-2. Add the browser administration/first-push scenario and make it stable under
-   repeated local execution.
-3. Add the empty-volume and `/api/docs` boot smoke checks.
+1. Completed: implement the public-stack Playwright configuration and isolated
+   harness.
+2. Completed: add and stabilize the browser administration/first-push scenario.
+3. Next: add the empty-volume and `/api/docs` boot smoke checks.
 4. Add previous-version and failing-migration fixtures, then their public
    readiness assertions.
-5. Wire both commands into CI, update required-check guidance, and refresh the
-   architecture acceptance table with dated evidence.
+5. Wire the boot-acceptance command into CI, then refresh the architecture
+   acceptance table with dated evidence.

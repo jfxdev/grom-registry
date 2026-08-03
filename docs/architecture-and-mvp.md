@@ -1623,7 +1623,7 @@ Status vocabulary:
   evidence is absent.
 - **Missing:** the required implementation or delivery mechanism does not exist.
 
-| # | Scenario | Gate | Status on August 2, 2026 | Evidence needed to close |
+| # | Scenario | Gate | Status on August 3, 2026 | Evidence needed to close |
 |---:|---|---|---|---|
 | 1 | An administrator creates projects `alpha` and `beta` | Default MVP | Passing | Registry E2E creates both projects through the public management API |
 | 2 | A service account is Writer in `alpha` and has no membership in `beta` | Default MVP | Passing | Registry E2E persists real projects, principals, and memberships |

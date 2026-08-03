@@ -1,15 +1,13 @@
 import { expect, test } from '@playwright/test'
+import { ADMIN_E2E_ADMIN } from './support/admin-stack'
 import { pushFirstImage } from './support/docker'
 import { readRuntime } from './support/runtime'
-
-const adminEmail = 'admin-e2e@grom.local'
-const adminPassword = 'admin-e2e-password'
 
 test('an administrator completes the first-push journey through the public UI', async ({ page }) => {
   const runtime = await readRuntime()
   await page.goto(`${runtime.publicURL}/signin`)
-  await page.getByLabel('Email').fill(adminEmail)
-  await page.getByRole('textbox', { name: 'Password' }).fill(adminPassword)
+  await page.getByLabel('Email').fill(ADMIN_E2E_ADMIN.email)
+  await page.getByRole('textbox', { name: 'Password' }).fill(ADMIN_E2E_ADMIN.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
 
@@ -45,7 +43,7 @@ test('an administrator completes the first-push journey through the public UI', 
   await memberDialog.getByRole('button', { name: 'Add member' }).click()
   await expect(page.getByText('writer')).toBeVisible()
 
-  const cleanup = await pushFirstImage(runtime, 'alpha-writer', secret!)
+  const { digest, cleanup } = await pushFirstImage(runtime, 'alpha-writer', secret!)
   try {
     await page.getByRole('button', { name: /Repositories/ }).click()
     await expect(page.getByRole('button', { name: /app/ })).toBeVisible()
@@ -53,7 +51,9 @@ test('an administrator completes the first-push journey through the public UI', 
     await expect(page.getByText('v1', { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Manifest inventory' })).toBeVisible()
     await page.locator('.operation-history [role="button"]').first().click()
-    await expect(page.getByRole('dialog', { name: 'Manifest details' })).toContainText('v1')
+    const manifestDialog = page.getByRole('dialog', { name: 'Manifest details' })
+    await expect(manifestDialog).toContainText('v1')
+    await expect(manifestDialog).toContainText(digest)
   } finally {
     await cleanup()
   }

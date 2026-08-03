@@ -21,6 +21,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `.github/workflows/ci.yml` | Mandatory Go formatting/tests, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and separate backend/frontend Codecov coverage and JUnit test-result uploads |
 | `codecov.yml` | Explicit 70% patch-coverage gate and narrow generated-code/static-asset exclusions |
 | `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry acceptance check for pull requests, main, and merge queues |
+| `.github/workflows/admin-journey-e2e.yml` | Mandatory browser-driven administrative first-push acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/backup-restore-e2e.yml` | Real-Docker volume-loss and recovery acceptance check |
 | `docs/` | Architecture, domain inventory, operations, decisions, and visual identity |
 | `AGENTS.md` | Current operational instructions for coding agents |
@@ -36,7 +37,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/backup-and-disaster-recovery-implementation-plan.md` | Implemented default SQLite/local-storage backup, empty-volume restore, and recovery acceptance design |
 | `docs/backup-and-disaster-recovery.md` | Operator backup, restore, encrypted retention, drill, and troubleshooting procedure |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
-| `docs/mvp-acceptance-implementation-plan.md` | Planned public-browser first-push journey and boot/readiness/API-docs acceptance work |
+| `docs/mvp-acceptance-implementation-plan.md` | Implemented public-browser first-push journey plus planned boot/readiness/API-docs acceptance work |
 | `docs/visual-identity.md` | Approved visual direction, responsive rules, and UI acceptance criteria |
 | `docs/visual-implementation-plan.md` | Detailed frontend delivery phases, interaction behavior, and validation plan |
 | `docs/assets/visual-identity/` | Visual concept references used by the identity guide |
