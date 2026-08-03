@@ -59,7 +59,7 @@
         - img [ref=e91]
         - generic [ref=e94]: Grom Registry
         - img [ref=e95]
-        - generic [ref=e97]: Service accounts
+        - generic [ref=e97]: Project
       - link "admin-e2e Administrator AD" [ref=e98] [cursor=pointer]:
         - /url: /profile
         - generic [ref=e99]:
@@ -69,41 +69,54 @@
         - img [ref=e103]
     - main [ref=e105]:
       - generic [ref=e106]:
-        - generic [ref=e107]:
-          - generic [ref=e108]:
-            - paragraph [ref=e109]: Automation identities
-            - heading "Service accounts" [level=1] [ref=e110]
-            - paragraph [ref=e111]: Create stable identities for CI and deployment systems, then assign them to projects.
-          - button "New account" [ref=e112] [cursor=pointer]:
-            - img [ref=e113]
-            - text: New account
-        - generic [ref=e114]:
+        - link "Projects" [ref=e107] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e108]
+          - text: Projects
+        - generic [ref=e110]:
+          - generic [ref=e111]:
+            - paragraph [ref=e112]: Project namespace
+            - heading "alpha" [level=1] [ref=e113]
+            - paragraph [ref=e114]: 127.0.0.1:52131/alpha/
           - generic [ref=e115]:
-            - generic [ref=e116]:
-              - heading "All service accounts" [level=2] [ref=e117]
-              - paragraph [ref=e118]: Automation identities used by registry clients.
-            - generic [ref=e119]:
-              - combobox "Filter service accounts by status" [ref=e120]:
-                - option "Active" [selected]
-                - option "Disabled"
-                - option "All statuses"
-              - generic [ref=e121]:
-                - img
-                - searchbox "Search service accounts" [ref=e123]
-              - generic [ref=e124]: 1 total
-          - generic [ref=e126]:
-            - generic [ref=e127]:
-              - img [ref=e129]
-              - generic [ref=e132]:
-                - paragraph [ref=e133]: Alpha writer
-                - paragraph [ref=e134]: alpha-writer
-            - paragraph [ref=e135]: First-push acceptance test
-            - generic [ref=e136]:
-              - generic [ref=e137]: Active
-              - button "Keys" [active] [ref=e138] [cursor=pointer]:
-                - img [ref=e139]
-                - text: Keys
-                - img [ref=e142]
-              - button "Disable service account Alpha writer" [ref=e144] [cursor=pointer]:
-                - img [ref=e145]
+            - generic [ref=e116]: Active
+            - button "Delete project" [ref=e117] [cursor=pointer]:
+              - img [ref=e118]
+              - generic [ref=e121]: Delete project
+        - generic [ref=e122]:
+          - button "Repositories" [ref=e123] [cursor=pointer]:
+            - img [ref=e124]
+            - text: Repositories
+          - button "Members" [ref=e128] [cursor=pointer]:
+            - img [ref=e129]
+            - text: Members
+        - button "Add service account" [ref=e136] [cursor=pointer]:
+          - img [ref=e137]
+          - text: Add service account
+        - dialog "Add service account" [ref=e139]:
+          - form "Add service account" [ref=e140]:
+            - generic [ref=e141]:
+              - generic [ref=e142]:
+                - heading "Add service account" [level=2] [ref=e143]
+                - paragraph [ref=e144]: Membership controls token access immediately.
+              - button [active] [ref=e145] [cursor=pointer]:
+                - img [ref=e146]
+            - generic [ref=e149]:
+              - text: Principal type
+              - combobox "Principal type" [ref=e150]:
+                - option "Service account" [selected]
+                - option "User"
+            - generic [ref=e151]:
+              - text: Principal
+              - combobox "Principal" [ref=e152]:
+                - option "Alpha writer · alpha-writer" [selected]
+            - generic [ref=e153]:
+              - text: Role
+              - combobox "Role" [ref=e154]:
+                - option "Reader · pull" [selected]
+                - option "Writer · pull and push"
+                - option "Admin · manage project"
+            - generic [ref=e155]:
+              - button "Cancel" [ref=e156] [cursor=pointer]
+              - button "Add member" [ref=e157] [cursor=pointer]
 ```

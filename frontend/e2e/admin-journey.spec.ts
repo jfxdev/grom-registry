@@ -23,13 +23,16 @@ test('an administrator completes the first-push journey through the public UI', 
   await page.getByLabel('Username').fill('alpha-writer')
   await page.getByLabel('Description').fill('First-push acceptance test')
   await page.getByRole('button', { name: 'Create' }).click()
-  const newKey = page.getByRole('button', { name: 'New key' })
-  if (!await newKey.isVisible()) {
-    await page.getByRole('button', { name: /Keys/ }).click()
+  const account = page.locator('.account-item', { hasText: 'alpha-writer' })
+  await expect(account).toBeVisible()
+  const keysPanel = account.locator('.keys-panel')
+  if (!await keysPanel.isVisible()) {
+    await account.getByRole('button', { name: 'Keys' }).click()
   }
-  await newKey.click()
-  await page.getByLabel('Key name').fill('First push')
-  await page.getByRole('button', { name: 'Create key' }).click()
+  await expect(keysPanel).toBeVisible()
+  await keysPanel.getByRole('button', { name: 'New key' }).click()
+  await keysPanel.getByLabel('Key name').fill('First push')
+  await keysPanel.getByRole('button', { name: 'Create key' }).click()
   const secret = await page.locator('.secret-value code').textContent()
   expect(secret).toBeTruthy()
   await page.getByRole('button', { name: 'Close revealed key' }).click()
@@ -38,8 +41,8 @@ test('an administrator completes the first-push journey through the public UI', 
   await page.getByRole('button', { name: /Members/ }).click()
   await page.getByRole('button', { name: 'Add service account' }).click()
   const memberDialog = page.getByRole('dialog', { name: 'Add service account' })
-  await memberDialog.locator('label').filter({ hasText: 'Principal' }).locator('select').selectOption({ label: 'Alpha writer · alpha-writer' })
-  await memberDialog.locator('label').filter({ hasText: 'Role' }).locator('select').selectOption('writer')
+  await memberDialog.getByLabel('Principal', { exact: true }).selectOption({ label: 'Alpha writer · alpha-writer' })
+  await memberDialog.getByLabel('Role', { exact: true }).selectOption('writer')
   await memberDialog.getByRole('button', { name: 'Add member' }).click()
   await expect(page.getByText('writer')).toBeVisible()
 
