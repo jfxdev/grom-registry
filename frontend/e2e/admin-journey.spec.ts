@@ -13,7 +13,8 @@ test('an administrator completes the first-push journey through the public UI', 
 
   await page.getByRole('button', { name: 'New project' }).click()
   await page.getByLabel('Name').fill('Alpha')
-  await page.getByLabel('Slug').fill('alpha')
+  await page.getByLabel('Name').press('Tab')
+  await expect(page.getByLabel('Slug')).toHaveValue('alpha')
   await page.getByRole('button', { name: 'Create project' }).click()
   await expect(page.getByRole('link', { name: /Alpha/ })).toBeVisible()
 
@@ -38,6 +39,7 @@ test('an administrator completes the first-push journey through the public UI', 
   await page.getByRole('button', { name: 'Close revealed key' }).click()
 
   await page.goto(`${runtime.publicURL}/projects/alpha`)
+  await expect(page.getByRole('heading', { name: 'Alpha', exact: true })).toBeVisible()
   await page.getByRole('button', { name: /Members/ }).click()
   await page.getByRole('button', { name: 'Add service account' }).click()
   const memberDialog = page.getByRole('dialog', { name: 'Add service account' })
