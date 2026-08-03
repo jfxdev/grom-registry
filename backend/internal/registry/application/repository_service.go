@@ -137,10 +137,24 @@ func (s *RepositoryService) List(
 	discovered []string,
 	catalogAvailable bool,
 ) ([]registrydomain.Repository, error) {
+	repositories, err := s.store.ListRepositories(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	existing := make(map[string]struct{}, len(repositories))
+	for _, repository := range repositories {
+		existing[repository.Name] = struct{}{}
+	}
+	active := make(map[string]struct{}, len(discovered))
+	discoveredNew := false
 	if catalogAvailable {
 		for _, rawName := range discovered {
 			name := strings.TrimSpace(rawName)
 			if !repositoryNamePattern.MatchString(name) {
+				continue
+			}
+			active[name] = struct{}{}
+			if _, found := existing[name]; found {
 				continue
 			}
 			now := time.Now().UTC()
@@ -153,15 +167,15 @@ func (s *RepositoryService) List(
 			}); err != nil {
 				return nil, err
 			}
+			existing[name] = struct{}{}
+			discoveredNew = true
 		}
 	}
-	repositories, err := s.store.ListRepositories(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	active := make(map[string]struct{}, len(discovered))
-	for _, name := range discovered {
-		active[name] = struct{}{}
+	if discoveredNew {
+		repositories, err = s.store.ListRepositories(ctx, projectID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for i := range repositories {
 		_, isActive := active[repositories[i].Name]
