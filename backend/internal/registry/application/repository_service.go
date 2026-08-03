@@ -251,7 +251,13 @@ func (s *RepositoryService) ProjectHasRepositories(ctx context.Context, projectI
 
 func (s *RepositoryService) Archive(ctx context.Context, projectID, repositoryID foundation.ID, actor foundation.PrincipalRef) error {
 	repository, err := s.store.FindRepositoryByID(ctx, repositoryID)
-	if err != nil || repository.ProjectID != projectID {
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		return err
+	}
+	if repository.ProjectID != projectID {
 		return sql.ErrNoRows
 	}
 	if repository.Status == constants.RepositoryStatusArchived {

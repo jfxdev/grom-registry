@@ -11,7 +11,7 @@ test('sign-in reports an invalid credential without navigating', async ({ page }
   await page.route('**/api/v1/me', (route) => route.fulfill({ status: 401, json: { code: 'unauthenticated', message: 'Unauthenticated' } }))
   await page.goto('/signin')
   await page.getByLabel('Email').fill('admin@example.com')
-  await page.getByRole('textbox', { name: 'Password' }).fill('wrong-password')
+  await page.getByLabel('Password').fill('wrong-password')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.getByRole('alert')).toHaveText(/Invalid email or password/)
   await expect(page).toHaveURL(/\/signin$/)

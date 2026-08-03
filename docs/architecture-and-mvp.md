@@ -434,10 +434,9 @@ Work:
 9. Add Playwright coverage for sign-in, project creation, membership
    management, reveal-once key handling, first push, repository browsing, safe
    deletion, and lifecycle review.
-10. Keep the implemented archival/removal workflow: archival blocks push but
-   preserves pull and OCI content; removal requires an archived record with no
-   live inventory and no Distribution catalog entry, and never deletes OCI
-   content.
+10. Keep archival blocking push while preserving pull and OCI content. Do not
+   claim a race-safe logical-removal guarantee until catalog and inventory
+   preconditions are revalidated inside one serialized removal operation.
 
 Acceptance:
 
@@ -1521,10 +1520,10 @@ registry protocol with Docker.
 Exit criterion: a new administrator can create a project, add a service account, push an image, and inspect it without using the database or editing configuration.
 
 The management flows and registry metadata reads exist, but the complete
-first-push browser journey has no Playwright/Distribution evidence. Manifest
-detail, several management actions, and the settings decision remain in
-completion step 6. Essential audit persistence remains in step 2; an audit
-browsing page is post-MVP unless promoted explicitly.
+first-push browser journey has no Playwright/Distribution evidence. Only that
+browser evidence and the settings decision remain in completion step 6.
+Essential audit persistence remains in step 2; an audit browsing page is
+post-MVP unless promoted explicitly.
 
 ### Phase 3: operational hardening
 

@@ -809,7 +809,15 @@ func (s *Server) removeRepository(w http.ResponseWriter, r *http.Request) {
 	}
 	repositoryID := foundation.ID(chi.URLParam(r, "repositoryId"))
 	repository, err := s.repositories.FindByID(r.Context(), repositoryID)
-	if err != nil || repository.ProjectID != project.ID {
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if repository.ProjectID != project.ID {
 		writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
 		return
 	}

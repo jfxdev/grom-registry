@@ -257,7 +257,7 @@ async function policiesSaved(policySet: RepositoryPolicySet) {
 async function copyCommand(command: string, key: string) {
   const result = await writeClipboardText(command)
   if (result !== 'copied') {
-    copyError.value = 'Could not copy the pull command. Select and copy it manually.'
+    copyError.value = 'Could not copy the command. Select and copy it manually.'
     return
   }
   copyError.value = ''
@@ -286,6 +286,7 @@ function openMemberModal() {
   if (!canManage.value) return
   memberKind.value = 'service_account'
   memberId.value = availableAccounts.value[0]?.id ?? ''
+	memberRole.value = 'reader'
   memberError.value = ''
   memberModal.value = true
 }
@@ -373,7 +374,7 @@ function profileLabel(profile: Repository['profile']) {
           <Badge>{{ member.role }}</Badge>
           <div v-if="canManage" class="flex gap-1">
             <Button variant="ghost" size="sm" @click="editMember(member.principalKind, member.principalId, member.role)">Change role</Button>
-            <Button variant="ghost" size="icon" :aria-label="`Remove ${member.principalKind} member`" @click="membershipToRemove = { kind: member.principalKind, id: member.principalId }"><Trash2 :size="15" /></Button>
+            <Button variant="ghost" size="icon" :aria-label="`Remove ${member.principalKind} member`" @click="memberError = ''; membershipToRemove = { kind: member.principalKind, id: member.principalId }"><Trash2 :size="15" /></Button>
           </div>
         </div>
       </div>
@@ -452,7 +453,7 @@ function profileLabel(profile: Repository['profile']) {
             <Button v-if="canManage && selectedRepository.status !== 'archived'" variant="outline" size="sm" :disabled="archive.isPending.value" @click="archive.mutate()">
               {{ archive.isPending.value ? 'Archiving…' : 'Archive' }}
             </Button>
-            <DeleteButton v-else-if="canManage" size="sm" @click="removeRepositoryOpen = true">Remove logical record</DeleteButton>
+            <DeleteButton v-else-if="canManage" size="sm" @click="repositoryOperationError = ''; removeRepositoryOpen = true">Remove logical record</DeleteButton>
             <Button variant="ghost" size="icon" @click="selectedRepository = null"><X :size="18" /></Button>
           </div>
         </div>

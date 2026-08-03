@@ -102,8 +102,8 @@ never activates a policy or rejects content.
 
 An archived repository remains a logical record until an administrator removes
 it. Removal never deletes OCI content: it requires the repository to be
-archived, absent from the Distribution catalog, and free of non-deleted
-inventory manifests. Both transitions are audited.
+archived, absent from the Distribution catalog, and free of live inventory
+manifests (states other than deleted or missing). Both transitions are audited.
 
 ## Audit context
 

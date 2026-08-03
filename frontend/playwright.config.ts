@@ -1,6 +1,11 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const port = Number(process.env.GROM_PLAYWRIGHT_PORT ?? '4173')
+const configuredPort = process.env.GROM_PLAYWRIGHT_PORT
+const port = configuredPort === undefined ? 4173 : Number(configuredPort)
+
+if (configuredPort === '' || !Number.isInteger(port) || port < 1 || port > 65535) {
+  throw new Error('GROM_PLAYWRIGHT_PORT must be an integer between 1 and 65535')
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -14,7 +19,7 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: `npm run dev -- --host 127.0.0.1 --port ${port}`,
+    command: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
     port,
     reuseExistingServer: !process.env.CI,
   },

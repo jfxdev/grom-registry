@@ -18,10 +18,19 @@ const mocks = vi.hoisted(() => ({
   listRepositories: vi.fn(),
   listMembers: vi.fn(),
   listArtifactDeletions: vi.fn(),
+  listInventory: vi.fn(),
   listLifecycleRuns: vi.fn(),
   listTags: vi.fn(),
   listServiceAccounts: vi.fn(),
   listUsers: vi.fn(),
+  archiveRepository: vi.fn(),
+  removeRepository: vi.fn(),
+  deleteMember: vi.fn(),
+  deleteProject: vi.fn(),
+  previewArtifactDeletion: vi.fn(),
+  deleteArtifact: vi.fn(),
+  createLifecyclePreview: vi.fn(),
+  executeLifecycle: vi.fn(),
   setMember: vi.fn(),
 }))
 
@@ -43,8 +52,9 @@ vi.mock('@/modules/users/api/users', () => ({
 }))
 
 vi.mock('@/modules/registry', () => ({
-  createLifecyclePreview: vi.fn(),
-  executeLifecycle: vi.fn(),
+  createLifecyclePreview: mocks.createLifecyclePreview,
+  executeLifecycle: mocks.executeLifecycle,
+  listInventory: mocks.listInventory,
   listLifecycleRuns: mocks.listLifecycleRuns,
   registryKeys: {
     inventory: (project: string, repository: string) => ['registry', project, repository, 'inventory'],
@@ -53,14 +63,17 @@ vi.mock('@/modules/registry', () => ({
 }))
 
 vi.mock('../api/projects', () => ({
-  deleteArtifact: vi.fn(),
-  deleteProject: vi.fn(),
+  archiveRepository: mocks.archiveRepository,
+  deleteArtifact: mocks.deleteArtifact,
+  deleteMember: mocks.deleteMember,
+  deleteProject: mocks.deleteProject,
   getProject: mocks.getProject,
   listArtifactDeletions: mocks.listArtifactDeletions,
   listMembers: mocks.listMembers,
   listRepositories: mocks.listRepositories,
   listTags: mocks.listTags,
-  previewArtifactDeletion: vi.fn(),
+  previewArtifactDeletion: mocks.previewArtifactDeletion,
+	removeRepository: mocks.removeRepository,
   setMember: mocks.setMember,
   projectKeys: {
     all: ['projects'],
@@ -104,21 +117,35 @@ describe('ProjectPage membership management', () => {
     mocks.listRepositories.mockReset()
     mocks.listMembers.mockReset()
     mocks.listArtifactDeletions.mockReset()
+    mocks.listInventory.mockReset()
     mocks.listLifecycleRuns.mockReset()
     mocks.listTags.mockReset()
     mocks.listServiceAccounts.mockReset()
     mocks.listUsers.mockReset()
     mocks.setMember.mockReset()
+    mocks.archiveRepository.mockReset()
+    mocks.removeRepository.mockReset()
+    mocks.deleteMember.mockReset()
+    mocks.deleteProject.mockReset()
+    mocks.previewArtifactDeletion.mockReset()
+    mocks.deleteArtifact.mockReset()
+    mocks.createLifecyclePreview.mockReset()
+    mocks.executeLifecycle.mockReset()
     mocks.getProject.mockResolvedValue({ id: 'project-1', slug: 'payments', name: 'Payments' })
     mocks.listRepositories.mockResolvedValue([])
     mocks.listMembers.mockResolvedValue([])
     mocks.listArtifactDeletions.mockResolvedValue([])
+    mocks.listInventory.mockResolvedValue([])
     mocks.listLifecycleRuns.mockResolvedValue([])
     mocks.listTags.mockResolvedValue({ name: 'payments/api', tags: [] })
     mocks.listServiceAccounts.mockResolvedValue([{
       id: 'service-1', name: 'CI', username: 'ci', description: '', createdAt: '2026-07-29T00:00:00Z',
     }])
     mocks.listUsers.mockResolvedValue([])
+    mocks.archiveRepository.mockResolvedValue(undefined)
+    mocks.removeRepository.mockResolvedValue(undefined)
+    mocks.deleteMember.mockResolvedValue(undefined)
+    mocks.deleteProject.mockResolvedValue(undefined)
   })
 
   it('hides member-add actions from non-managers', async () => {
@@ -154,7 +181,7 @@ describe('ProjectPage membership management', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain('Member assignment denied')
   })
 
-  it('shows feedback when the pull command cannot be copied', async () => {
+  it('shows feedback when a command cannot be copied', async () => {
     vi.stubGlobal('navigator', {})
     mocks.listRepositories.mockResolvedValue([{
       id: 'repository-1',
@@ -181,7 +208,158 @@ describe('ProjectPage membership management', () => {
     await buttonWithText(wrapper, 'Copy pull').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text()).toContain('Could not copy the pull command')
+    expect(wrapper.get('[role="alert"]').text()).toContain('Could not copy the command')
     expect(wrapper.text()).not.toContain('Copied')
+  })
+
+  it('renders repository history and manifest details for an administrator', async () => {
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'push', profile: 'mixed', profileSource: 'inferred', profileConfidence: 'low',
+      profileNeedsReview: true, policyVersion: 2, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.listTags.mockResolvedValue({ name: 'payments/api', tags: ['stable'] })
+    mocks.listInventory.mockResolvedValue([{
+      id: 'manifest-1', digest: 'sha256:abc', mediaType: '', artifactType: '', subjectDigest: 'sha256:subject',
+      observedKind: 'container_image', artifactRelationship: 'referrer', classificationSource: 'inferred', classificationConfidence: 'high',
+      manifestSize: 42, state: 'active', firstSeenAt: '2026-07-29T00:00:00Z', lastSeenAt: '2026-07-30T00:00:00Z', tags: [],
+    }])
+    mocks.listArtifactDeletions.mockResolvedValue([{
+      id: 'deletion-1', repository: 'api', digest: 'sha256:old', affectedTags: [], reason: '', status: 'failed',
+      message: 'blocked', startedAt: '2026-07-29T00:00:00Z', completedAt: null,
+    }])
+    mocks.listLifecycleRuns.mockResolvedValue([{
+      id: 'run-1', repository: 'api', previewId: 'preview-1', reason: 'clean up', status: 'failed',
+      startedAt: '2026-07-29T00:00:00Z', completedAt: null, items: [],
+    }])
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await buttonWithText(wrapper, 'payments/api').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Different primary artifact types')
+    expect(wrapper.text()).toContain('created by push')
+    expect(wrapper.text()).toContain('Deletion history')
+    expect(wrapper.text()).toContain('No reason')
+    await wrapper.get('[role="button"][tabindex="0"]').trigger('click')
+    expect(wrapper.text()).toContain('Manifest details')
+    expect(wrapper.text()).toContain('Untagged')
+    expect(wrapper.text()).toContain('sha256:subject')
+  })
+
+  it('archives an active repository and removes an archived repository', async () => {
+    const activeRepository = {
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'manual', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }
+    mocks.listRepositories.mockResolvedValue([activeRepository])
+    const wrapper = mountPage()
+    await flushPromises()
+    await buttonWithText(wrapper, 'payments/api').trigger('click')
+    await flushPromises()
+    await buttonWithText(wrapper, 'Archive').trigger('click')
+    await flushPromises()
+    expect(mocks.archiveRepository).toHaveBeenCalledWith('payments', 'repository-1')
+
+    mocks.listRepositories.mockResolvedValue([{ ...activeRepository, status: 'archived' }])
+    const archived = mountPage()
+    await flushPromises()
+    await buttonWithText(archived, 'payments/api').trigger('click')
+    await flushPromises()
+    await buttonWithText(archived, 'Remove logical record').trigger('click')
+    await archived.get('form[aria-labelledby="remove-repository-title"]').trigger('submit')
+    await flushPromises()
+    expect(mocks.removeRepository).toHaveBeenCalledWith('payments', 'repository-1')
+  })
+
+  it('reviews and executes an eligible lifecycle run', async () => {
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'manual', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.createLifecyclePreview.mockResolvedValue({
+      id: 'preview-1', repository: 'api', inventoryAt: '2026-07-29T00:00:00Z', policyVersion: 1, evaluatorVersion: 1,
+      eligibleCount: 1, retainedCount: 1, blockedCount: 1,
+      items: [
+        { id: 'item-1', digest: 'sha256:eligible', decision: 'eligible', tags: ['old'], reasons: ['expired'] },
+        { id: 'item-2', digest: 'sha256:retained', decision: 'retained', tags: [], reasons: ['keep'] },
+        { id: 'item-3', digest: 'sha256:blocked', decision: 'blocked', tags: [], reasons: ['referrer'] },
+      ],
+    })
+    mocks.executeLifecycle.mockResolvedValue({
+      id: 'run-1', repository: 'api', previewId: 'preview-1', reason: 'retention', status: 'completed',
+      startedAt: '2026-07-29T00:00:00Z', completedAt: '2026-07-29T00:01:00Z',
+      items: [{ id: 'item-1', digest: 'sha256:eligible', status: 'deleted', message: '' }, { id: 'item-2', digest: 'sha256:retained', status: 'skipped', message: 'retained' }],
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    await buttonWithText(wrapper, 'payments/api').trigger('click')
+    await flushPromises()
+    await buttonWithText(wrapper, 'Review lifecycle').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('sha256:blocked')
+    expect(wrapper.text()).toContain('Untagged')
+    const reason = wrapper.get('textarea')
+    await reason.setValue('retention')
+    await buttonWithText(wrapper, 'Delete 1 eligible').trigger('click')
+    await flushPromises()
+    expect(mocks.executeLifecycle).toHaveBeenCalledWith('payments', 'preview-1', 'retention')
+    expect(wrapper.text()).toContain('1 deleted,')
+  })
+
+  it('shows blocked artifact-deletion details and requires a policy reason', async () => {
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'manual', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.listTags.mockResolvedValue({ name: 'payments/api', tags: ['stable'] })
+    mocks.previewArtifactDeletion.mockResolvedValue({
+      repository: 'api', digest: 'sha256:stable', affectedTags: [], requiresReason: true,
+      blockedReasons: ['The manifest has referrers'], relatedArtifacts: ['sha256:signature'],
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    await buttonWithText(wrapper, 'payments/api').trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-label="Delete stable"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('The manifest has referrers')
+    expect(wrapper.text()).toContain('sha256:signature')
+    expect(wrapper.text()).toContain('Untagged manifest')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('manages existing members and surfaces removal errors', async () => {
+    mocks.listMembers.mockResolvedValue([{
+      principalKind: 'user', principalId: 'user-2', role: 'writer', createdAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.listUsers.mockResolvedValue([{ id: 'user-2', email: 'user@example.com', username: 'writer', systemAdmin: false, createdAt: '2026-07-29T00:00:00Z' }])
+    mocks.deleteMember.mockRejectedValue(new APIError(409, 'conflict', 'Member removal denied'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await buttonWithText(wrapper, 'Members').trigger('click')
+    await buttonWithText(wrapper, 'Change role').trigger('click')
+    expect((wrapper.get('select').element as HTMLSelectElement).value).toBe('user')
+    await buttonWithText(wrapper, 'Cancel').trigger('click')
+    await wrapper.get('button[aria-label="Remove user member"]').trigger('click')
+    await wrapper.get('form[aria-labelledby="remove-member-title"]').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('Member removal denied')
+  })
+
+  it('shows a project-deletion error without leaving the confirmation dialog', async () => {
+    mocks.deleteProject.mockRejectedValue(new APIError(409, 'project_not_empty', 'Project still contains repositories'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await buttonWithText(wrapper, 'Delete project').trigger('click')
+    await wrapper.get('form[aria-labelledby="delete-project-title"]').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('.error-text').text()).toContain('Project still contains repositories')
+    expect(wrapper.find('form[aria-labelledby="delete-project-title"]').exists()).toBe(true)
   })
 })

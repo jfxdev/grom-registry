@@ -224,11 +224,11 @@ show the configured expiry and distinguish expired keys from revoked keys.
   the empty project and its memberships.
 
 Project administrators can archive a logical repository, which blocks new
-pushes while retaining pull access and existing OCI content. After all manifests
-have been explicitly removed and the repository is absent from Distribution's
-catalog, they can remove the archived logical record. This never deletes OCI
-content. The project then becomes eligible for installation-administrator
-deletion when no logical repositories remain.
+pushes while retaining pull access and existing OCI content. The current removal
+route checks that the archived record has no live inventory and no Distribution
+catalog entry; its checks are not yet serialized against concurrent registry
+changes, so it is not described as race-safe. The project becomes eligible for
+installation-administrator deletion when no logical repositories remain.
 
 ### Memberships
 

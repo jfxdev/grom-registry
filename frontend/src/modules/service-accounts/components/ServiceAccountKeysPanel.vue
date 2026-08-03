@@ -7,7 +7,7 @@ import { Input } from '@/shared/components/ui/input'
 import { writeClipboardText } from '@/shared/lib/clipboard'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Check, Copy, KeyRound, Plus, ShieldAlert, Trash2, X } from '@lucide/vue'
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import {
   createServiceAccountToken,
   listServiceAccountTokens,
@@ -28,6 +28,10 @@ const error = ref('')
 const revealedSecret = ref('')
 const copied = ref(false)
 const copyError = ref('')
+const currentTime = ref(Date.now())
+const currentTimeTimer = window.setInterval(() => { currentTime.value = Date.now() }, 60_000)
+
+onUnmounted(() => window.clearInterval(currentTimeTimer))
 
 const create = useMutation({
   mutationFn: () => createServiceAccountToken(props.account.id, {
@@ -135,8 +139,8 @@ function closeSecret() {
           <p class="mt-1 font-mono text-xs text-muted-foreground">grm_{{ token.publicId }}_••••••••</p>
         </div>
         <div class="key-meta">
-          <Badge :tone="token.revokedAt || (token.expiresAt && new Date(token.expiresAt) <= new Date()) ? undefined : 'success'">
-            {{ token.revokedAt ? 'Revoked' : token.expiresAt && new Date(token.expiresAt) <= new Date() ? 'Expired' : 'Active' }}
+          <Badge :tone="token.revokedAt || (token.expiresAt && new Date(token.expiresAt).getTime() <= currentTime) ? undefined : 'success'">
+            {{ token.revokedAt ? 'Revoked' : token.expiresAt && new Date(token.expiresAt).getTime() <= currentTime ? 'Expired' : 'Active' }}
           </Badge>
           <span v-if="token.expiresAt" class="text-xs text-muted-foreground">Expires {{ new Date(token.expiresAt).toLocaleString() }}</span>
           <span class="text-xs text-muted-foreground">Last used {{ token.lastUsedAt ? new Date(token.lastUsedAt).toLocaleString() : 'never' }}</span>
