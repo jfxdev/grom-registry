@@ -19,6 +19,9 @@ import (
 var repositoryNamePattern = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$`)
 
 var ErrRepositoryExists = errors.New("repository already exists")
+var ErrRepositoryArchived = errors.New("repository is archived")
+var ErrRepositoryNotArchived = errors.New("repository must be archived before removal")
+var ErrRepositoryNotEmpty = errors.New("repository still contains manifest inventory")
 
 type RepositoryService struct {
 	store         registrydomain.Store
@@ -111,6 +114,9 @@ func (s *RepositoryService) EnsureFromPush(
 		ProfileConfidence: constants.ClassificationConfidenceNone,
 		Policies:          []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now,
 	})
+	if err == nil && !created && repository.Status == constants.RepositoryStatusArchived {
+		return repository, false, ErrRepositoryArchived
+	}
 	if err != nil || !created || s.audit == nil {
 		return repository, created, err
 	}
@@ -131,10 +137,24 @@ func (s *RepositoryService) List(
 	discovered []string,
 	catalogAvailable bool,
 ) ([]registrydomain.Repository, error) {
+	repositories, err := s.store.ListRepositories(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	existing := make(map[string]struct{}, len(repositories))
+	for _, repository := range repositories {
+		existing[repository.Name] = struct{}{}
+	}
+	active := make(map[string]struct{}, len(discovered))
+	discoveredNew := false
 	if catalogAvailable {
 		for _, rawName := range discovered {
 			name := strings.TrimSpace(rawName)
 			if !repositoryNamePattern.MatchString(name) {
+				continue
+			}
+			active[name] = struct{}{}
+			if _, found := existing[name]; found {
 				continue
 			}
 			now := time.Now().UTC()
@@ -147,15 +167,15 @@ func (s *RepositoryService) List(
 			}); err != nil {
 				return nil, err
 			}
+			existing[name] = struct{}{}
+			discoveredNew = true
 		}
 	}
-	repositories, err := s.store.ListRepositories(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	active := make(map[string]struct{}, len(discovered))
-	for _, name := range discovered {
-		active[name] = struct{}{}
+	if discoveredNew {
+		repositories, err = s.store.ListRepositories(ctx, projectID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for i := range repositories {
 		_, isActive := active[repositories[i].Name]
@@ -163,7 +183,7 @@ func (s *RepositoryService) List(
 		if isActive {
 			expectedStatus = constants.RepositoryStatusActive
 		}
-		if catalogAvailable && repositories[i].Status != expectedStatus {
+		if catalogAvailable && repositories[i].Status != constants.RepositoryStatusArchived && repositories[i].Status != expectedStatus {
 			if err := s.store.SetRepositoryStatus(ctx, repositories[i].ID, expectedStatus); err != nil {
 				return nil, err
 			}
@@ -243,14 +263,60 @@ func (s *RepositoryService) ProjectHasRepositories(ctx context.Context, projectI
 	return s.store.ProjectHasRepositories(ctx, projectID)
 }
 
+func (s *RepositoryService) Archive(ctx context.Context, projectID, repositoryID foundation.ID, actor foundation.PrincipalRef) error {
+	repository, err := s.store.FindRepositoryByID(ctx, repositoryID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		return err
+	}
+	if repository.ProjectID != projectID {
+		return sql.ErrNoRows
+	}
+	if repository.Status == constants.RepositoryStatusArchived {
+		return nil
+	}
+	if err := s.store.SetRepositoryStatus(ctx, repositoryID, constants.RepositoryStatusArchived); err != nil {
+		return err
+	}
+	if s.audit != nil {
+		return s.audit.Record(ctx, actor, constants.AuditRepositoryArchived, constants.AuditResourceRepository, repositoryID, map[string]any{"name": repository.Name})
+	}
+	return nil
+}
+
+func (s *RepositoryService) Remove(ctx context.Context, projectID, repositoryID foundation.ID, actor foundation.PrincipalRef) error {
+	repository, err := s.store.FindRepositoryByID(ctx, repositoryID)
+	if err != nil || repository.ProjectID != projectID {
+		return sql.ErrNoRows
+	}
+	if repository.Status != constants.RepositoryStatusArchived {
+		return ErrRepositoryNotArchived
+	}
+	hasLiveManifests, err := s.store.RepositoryHasLiveManifests(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+	if hasLiveManifests {
+		return ErrRepositoryNotEmpty
+	}
+	if s.audit != nil {
+		if err := s.audit.Record(ctx, actor, constants.AuditRepositoryRemoved, constants.AuditResourceRepository, repositoryID, map[string]any{"name": repository.Name}); err != nil {
+			return err
+		}
+	}
+	return s.store.DeleteRepository(ctx, repositoryID)
+}
+
 func (s *RepositoryService) CanReceivePush(
 	ctx context.Context,
 	projectID foundation.ID,
 	projectSlug string,
 	name string,
 ) bool {
-	if s.Exists(ctx, projectID, name) {
-		return true
+	if repository, err := s.store.FindRepository(ctx, projectID, name); err == nil {
+		return repository.Status != constants.RepositoryStatusArchived
 	}
 	if s.existingProbe == nil {
 		return false

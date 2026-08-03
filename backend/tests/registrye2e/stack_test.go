@@ -73,14 +73,8 @@ func startTestStack(t *testing.T) *testStack {
 	// Cleanup is registered before Compose starts so partial startup is covered.
 	t.Cleanup(func() {
 		if t.Failed() {
-			logsCtx, logsCancel := context.WithTimeout(context.Background(), cleanupTimeout)
-			output, logErr := stack.compose(logsCtx, "logs", "--no-color", "--tail", "160", "grom", "distribution")
-			logsCancel()
-			if logErr != nil {
-				t.Logf("bounded Compose diagnostics unavailable: %v", logErr)
-			} else {
-				t.Logf("bounded Compose diagnostics:\n%s", bounded(output))
-			}
+			stack.logDiagnostics(t, "grom")
+			stack.logDiagnostics(t, "distribution")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
@@ -97,6 +91,18 @@ func startTestStack(t *testing.T) *testStack {
 	}
 	waitForPublicStack(t, stack.publicURL)
 	return stack
+}
+
+func (s *testStack) logDiagnostics(t *testing.T, service string) {
+	t.Helper()
+	logsCtx, logsCancel := context.WithTimeout(context.Background(), cleanupTimeout)
+	defer logsCancel()
+	output, err := s.compose(logsCtx, "logs", "--no-color", "--tail", "160", service)
+	if err != nil {
+		t.Logf("bounded %s diagnostics unavailable: %v", service, err)
+		return
+	}
+	t.Logf("bounded %s diagnostics:\n%s", service, bounded(output))
 }
 
 func requireDocker(t *testing.T) {

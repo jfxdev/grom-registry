@@ -41,12 +41,24 @@ export const setMember = (slug: string, kind: PrincipalKind, id: string, role: P
     method: 'PUT',
     body: JSON.stringify({ role }),
   })
+export const deleteMember = (slug: string, kind: PrincipalKind, id: string) =>
+  apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}/members/${kind}/${id}`, {
+    method: 'DELETE',
+  })
 export const listRepositories = (slug: string) =>
   apiRequest<Repository[]>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories`)
 export const createRepository = (slug: string, input: CreateRepositoryRequest) =>
   apiRequest<Repository>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories`, {
     method: 'POST',
     body: JSON.stringify(input),
+  })
+export const archiveRepository = (slug: string, repositoryId: string) =>
+  apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}/archive`, {
+    method: 'POST',
+  })
+export const removeRepository = (slug: string, repositoryId: string) =>
+  apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}`, {
+    method: 'DELETE',
   })
 export const listPolicyPresets = () =>
   apiRequest<PolicyPreset[]>('/api/v1/registry-policy-presets')

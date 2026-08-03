@@ -180,6 +180,8 @@ func (s *Server) routes() chi.Router {
 			protected.Delete("/projects/{project}/members/{principalKind}/{principalId}", s.deleteMembership)
 			protected.Get("/projects/{project}/repositories", s.listRepositories)
 			protected.Post("/projects/{project}/repositories", s.createRepository)
+			protected.Post("/projects/{project}/repositories/{repositoryId}/archive", s.archiveRepository)
+			protected.Delete("/projects/{project}/repositories/{repositoryId}", s.removeRepository)
 			protected.Get("/projects/{project}/repositories/{repositoryId}/policies", s.getRepositoryPolicies)
 			protected.Put("/projects/{project}/repositories/{repositoryId}/policies", s.replaceRepositoryPolicies)
 			protected.Get("/projects/{project}/repository-tags", s.listTags)
@@ -782,6 +784,68 @@ func (s *Server) createRepository(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, repository)
+}
+
+func (s *Server) archiveRepository(w http.ResponseWriter, r *http.Request) {
+	project, actor, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	if err := s.repositories.Archive(r.Context(), project.ID, foundation.ID(chi.URLParam(r, "repositoryId")), actor); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+			return
+		}
+		s.internalError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) removeRepository(w http.ResponseWriter, r *http.Request) {
+	project, actor, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	repositoryID := foundation.ID(chi.URLParam(r, "repositoryId"))
+	repository, err := s.repositories.FindByID(r.Context(), repositoryID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if repository.ProjectID != project.ID {
+		writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+		return
+	}
+	discovered, err := s.distributionClient.ListProjectRepositories(r.Context(), project.Slug)
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, "registry_unavailable", "Registry catalog must be available before removing a repository")
+		return
+	}
+	for _, name := range discovered {
+		if name == repository.Name {
+			writeError(w, r, http.StatusConflict, "repository_not_empty", "Remove all manifests before removing the logical repository")
+			return
+		}
+	}
+	if err := s.repositories.Remove(r.Context(), project.ID, repositoryID, actor); err != nil {
+		switch {
+		case errors.Is(err, registryapp.ErrRepositoryNotArchived):
+			writeError(w, r, http.StatusConflict, "repository_not_archived", err.Error())
+		case errors.Is(err, registryapp.ErrRepositoryNotEmpty):
+			writeError(w, r, http.StatusConflict, "repository_not_empty", err.Error())
+		case errors.Is(err, sql.ErrNoRows):
+			writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+		default:
+			s.internalError(w, r, err)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) listRegistryPolicyPresets(w http.ResponseWriter, _ *http.Request) {

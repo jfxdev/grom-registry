@@ -123,7 +123,7 @@ func (s *Store) UpsertDiscoveredRepository(ctx context.Context, repository *regi
 	model := fromRepository(repository)
 	_, err := s.db.NewInsert().Model(model).
 		On("CONFLICT (project_id, name) DO UPDATE").
-		Set("status = EXCLUDED.status").
+		Set("status = CASE WHEN registry_repositories.status = ? THEN registry_repositories.status ELSE EXCLUDED.status END", constants.RepositoryStatusArchived).
 		Set("updated_at = EXCLUDED.updated_at").Exec(ctx)
 	return err
 }
@@ -133,6 +133,18 @@ func (s *Store) SetRepositoryStatus(ctx context.Context, repositoryID foundation
 		Set("status = ?", status).
 		Set("updated_at = ?", time.Now().UTC()).
 		Where("id = ?", repositoryID.String()).Exec(ctx)
+	return err
+}
+
+func (s *Store) RepositoryHasLiveManifests(ctx context.Context, repositoryID foundation.ID) (bool, error) {
+	return s.db.NewSelect().Model((*manifestModel)(nil)).
+		Where("repository_id = ?", repositoryID.String()).
+		Where("state NOT IN (?, ?)", constants.InventoryStateDeleted, constants.InventoryStateMissing).
+		Exists(ctx)
+}
+
+func (s *Store) DeleteRepository(ctx context.Context, repositoryID foundation.ID) error {
+	_, err := s.db.NewDelete().Model((*repositoryModel)(nil)).Where("id = ?", repositoryID.String()).Exec(ctx)
 	return err
 }
 

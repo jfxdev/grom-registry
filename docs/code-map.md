@@ -113,6 +113,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `/api/v1/projects` | Project listing and installation-admin creation |
 | `/api/v1/projects/{project}` | Project detail and installation-admin deletion of empty projects |
 | `/api/v1/projects/{project}/repositories`, `/api/v1/projects/{project}/repository-tags` | Registry browsing and logical repository creation |
+| `/api/v1/projects/{project}/repositories/{repositoryId}/archive`, `/api/v1/projects/{project}/repositories/{repositoryId}` | Project-admin archival and logical-repository removal; removal currently checks empty inventory and the Distribution catalog but is not yet serialized against concurrent registry changes |
 | `/api/v1/projects/{project}/repositories/{repositoryId}/policies` | Optimistically versioned repository-policy reads and replacement |
 | `/api/v1/registry-policy-presets` | Global read-only repository-policy recommendations |
 | `/api/v1/projects/{project}/artifact-deletion-previews`, `/api/v1/projects/{project}/artifact-deletions` | Safe manifest deletion through the control plane |

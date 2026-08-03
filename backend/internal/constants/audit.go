@@ -31,6 +31,8 @@ const (
 	AuditLifecycleRunFailed        = "registry.lifecycle_run_failed"
 	AuditRepositoryCreatedFromPush = "registry.repository_created_from_push"
 	AuditRepositoryPoliciesUpdated = "registry.repository_policies_updated"
+	AuditRepositoryArchived        = "registry.repository_archived"
+	AuditRepositoryRemoved         = "registry.repository_removed"
 	AuditArtifactDeletionStarted   = "registry.artifact_deletion_started"
 	AuditArtifactDeletionCompleted = "registry.artifact_deletion_completed"
 	AuditArtifactDeletionFailed    = "registry.artifact_deletion_failed"

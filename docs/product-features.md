@@ -203,8 +203,8 @@ from normal lists after the operation completes.
 - Registry authentication updates the key's last-used time.
 - A key cannot be listed or revoked through a different service account.
 
-The API supports an optional key expiration timestamp. The current UI creates
-keys without asking for an expiration date.
+The API and current UI support an optional key expiration timestamp; key lists
+show the configured expiry and distinguish expired keys from revoked keys.
 
 ## 7. Projects and memberships
 
@@ -223,9 +223,12 @@ keys without asking for an expiration date.
 - Deletion is rejected while any logical repository remains and removes only
   the empty project and its memberships.
 
-There is currently no logical-repository deletion endpoint or UI flow.
-Consequently, once a project contains a logical repository, the product cannot
-yet return it to a deletable state through a supported management operation.
+Project administrators can archive a logical repository, which blocks new
+pushes while retaining pull access and existing OCI content. The current removal
+route checks that the archived record has no live inventory and no Distribution
+catalog entry; its checks are not yet serialized against concurrent registry
+changes, so it is not described as race-safe. The project becomes eligible for
+installation-administrator deletion when no logical repositories remain.
 
 ### Memberships
 
@@ -237,10 +240,10 @@ yet return it to a deletable state through a supported management operation.
 - The backend validates that the principal exists.
 - The API can remove a membership.
 
-The current UI can add a membership and choose its role. It does not yet expose
-membership removal or in-place role editing. Non-installation project Admins can
-select service accounts in the UI; selecting human users currently depends on
-the installation-admin-only user catalog.
+The current UI can add a membership, replace its role, and remove it with an
+explicit access-change confirmation. Non-installation project Admins can select
+service accounts in the UI; selecting human users currently depends on the
+installation-admin-only user catalog.
 
 ## 8. Registry authentication and gateway
 

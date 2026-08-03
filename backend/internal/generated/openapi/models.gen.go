@@ -449,14 +449,17 @@ func (e RepositoryProfile) Valid() bool {
 
 // Defines values for RepositoryStatus.
 const (
-	RepositoryStatusActive RepositoryStatus = "active"
-	RepositoryStatusEmpty  RepositoryStatus = "empty"
+	RepositoryStatusActive   RepositoryStatus = "active"
+	RepositoryStatusArchived RepositoryStatus = "archived"
+	RepositoryStatusEmpty    RepositoryStatus = "empty"
 )
 
 // Valid indicates whether the value is a known member of the RepositoryStatus enum.
 func (e RepositoryStatus) Valid() bool {
 	switch e {
 	case RepositoryStatusActive:
+		return true
+	case RepositoryStatusArchived:
 		return true
 	case RepositoryStatusEmpty:
 		return true
@@ -931,14 +934,23 @@ type PrincipalID = openapi_types.UUID
 // ProjectSlugParameter defines model for Project.
 type ProjectSlugParameter = string
 
+// RepositoryID defines model for RepositoryID.
+type RepositoryID = openapi_types.UUID
+
 // BadRequest defines model for BadRequest.
 type BadRequest = Error
+
+// Conflict defines model for Conflict.
+type Conflict = Error
 
 // Forbidden defines model for Forbidden.
 type Forbidden = Error
 
 // NotFound defines model for NotFound.
 type NotFound = Error
+
+// ServiceUnavailable defines model for ServiceUnavailable.
+type ServiceUnavailable = Error
 
 // TooManyRequests defines model for TooManyRequests.
 type TooManyRequests = Error
