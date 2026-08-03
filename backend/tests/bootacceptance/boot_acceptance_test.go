@@ -3,6 +3,7 @@ package bootacceptance
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,7 +33,14 @@ const (
 	bootAdminEmail    = "boot-acceptance@grom.local"
 	bootAdminPassword = "boot-acceptance-password"
 	maxDiagnostic     = 16 << 10
+	publicHTTPTimeout = 2 * time.Second
 )
+
+// supportedPriorSchema is the reviewed SQLite schema at migration 202607260001,
+// the oldest release state supported by this acceptance journey.
+//
+//go:embed fixtures/sqlite-202607260001.sql
+var supportedPriorSchema string
 
 func TestBootAcceptance(t *testing.T) {
 	if os.Getenv("GROM_RUN_BOOT_ACCEPTANCE") != "1" {
@@ -217,11 +225,16 @@ func createSQLiteFixture(t *testing.T, kind fixtureKind) string {
 	if err != nil {
 		t.Fatalf("open fixture database: %v", err)
 	}
-	if err := database.Migrate(ctx, db, databaseKind, time.Second, slog.Default()); err != nil {
-		_ = db.Close()
-		t.Fatalf("migrate fixture database: %v", err)
-	}
 	if kind == fixturePreviousVersion {
+		for _, statement := range strings.Split(supportedPriorSchema, ";") {
+			if statement = strings.TrimSpace(statement); statement == "" {
+				continue
+			}
+			if _, err := db.ExecContext(ctx, statement); err != nil {
+				_ = db.Close()
+				t.Fatalf("initialize supported prior schema fixture: %v", err)
+			}
+		}
 		identityService := identityapp.New(identitystore.New(db), time.Hour)
 		if err := identityService.BootstrapAdmin(ctx, "legacy@grom.local", "legacy-admin", "legacy-password"); err != nil {
 			_ = db.Close()
@@ -237,15 +250,14 @@ func createSQLiteFixture(t *testing.T, kind fixtureKind) string {
 			_ = db.Close()
 			t.Fatalf("seed legacy project: %v", err)
 		}
-	}
-	if _, err := db.ExecContext(ctx, `DELETE FROM bun_migrations WHERE name = '202607270006'`); err != nil {
-		_ = db.Close()
-		t.Fatalf("remove current migration record: %v", err)
-	}
-	if kind == fixturePreviousVersion {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE registry_repositories DROP COLUMN creation_source`); err != nil {
+	} else {
+		if err := database.Migrate(ctx, db, databaseKind, time.Second, slog.Default()); err != nil {
 			_ = db.Close()
-			t.Fatalf("restore supported prior schema fixture: %v", err)
+			t.Fatalf("migrate failing-migration fixture database: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `DELETE FROM bun_migrations WHERE name = '202607270006'`); err != nil {
+			_ = db.Close()
+			t.Fatalf("remove current migration record: %v", err)
 		}
 	}
 	if err := db.Close(); err != nil {
@@ -256,7 +268,7 @@ func createSQLiteFixture(t *testing.T, kind fixtureKind) string {
 
 func waitReady(t *testing.T, publicURL string) {
 	t.Helper()
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := &http.Client{Timeout: publicHTTPTimeout}
 	deadline := time.Now().Add(90 * time.Second)
 	var last string
 	for time.Now().Before(deadline) {
@@ -276,7 +288,7 @@ func waitReady(t *testing.T, publicURL string) {
 
 func assertNeverPublic(t *testing.T, publicURL string) {
 	t.Helper()
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := &http.Client{Timeout: publicHTTPTimeout}
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
 		for _, path := range []string{"/readyz", "/api/v1/me", "/v2/"} {
@@ -297,7 +309,8 @@ func login(t *testing.T, baseURL, email, password string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := http.Post(baseURL+"/api/v1/session", "application/json", strings.NewReader(string(payload)))
+	client := &http.Client{Timeout: publicHTTPTimeout}
+	response, err := client.Post(baseURL+"/api/v1/session", "application/json", strings.NewReader(string(payload)))
 	if err != nil {
 		t.Fatalf("sign in through public API: %v", err)
 	}
@@ -310,7 +323,7 @@ func login(t *testing.T, baseURL, email, password string) {
 func assertDocumentation(t *testing.T, baseURL string) {
 	t.Helper()
 	for path, expected := range map[string]string{"/api/openapi.yaml": "openapi: 3.0", "/api/docs": "api-reference"} {
-		response, err := http.Get(baseURL + path)
+		response, err := (&http.Client{Timeout: publicHTTPTimeout}).Get(baseURL + path)
 		if err != nil {
 			t.Fatalf("request %s: %v", path, err)
 		}
@@ -327,7 +340,7 @@ func assertDocumentation(t *testing.T, baseURL string) {
 
 func assertRegistryChallenge(t *testing.T, baseURL string) {
 	t.Helper()
-	response, err := http.Get(baseURL + "/v2/")
+	response, err := (&http.Client{Timeout: publicHTTPTimeout}).Get(baseURL + "/v2/")
 	if err != nil {
 		t.Fatalf("request registry challenge: %v", err)
 	}
@@ -344,7 +357,7 @@ func assertProjectVisible(t *testing.T, baseURL, slug string) {
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Jar: mustCookieJar(t)}
+	client := &http.Client{Jar: mustCookieJar(t), Timeout: publicHTTPTimeout}
 	loginResponse, err := client.Do(request)
 	if err != nil {
 		t.Fatalf("create project-query session: %v", err)

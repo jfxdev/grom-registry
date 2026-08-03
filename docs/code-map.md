@@ -142,7 +142,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `backend/internal/registry/infrastructure/persistence/bun/lifecycle.go` | Inventory, preview, run, and execution-lock persistence |
 | `backend/internal/audit/` | Immutable lifecycle audit event recording |
 | `backend/tests/registrye2e/` | Opt-in public-endpoint journey, isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
-| `backend/tests/bootacceptance/` | Opt-in public boot, migration, readiness, and API-documentation acceptance journey through an isolated Compose stack |
+| `backend/tests/bootacceptance/` | Opt-in public boot, migration, readiness, and API-documentation acceptance journey through an isolated Compose stack; includes the reviewed prior-schema fixture and a separate real-migration failure fixture |
 | `backend/tests/backuprestoree2e/` | Opt-in destructive volume-loss recovery journey through public Grom and Docker endpoints |
 | `frontend/e2e/` | Playwright mocked sign-in smoke and isolated public-stack administrative first-push journey |
 | `frontend/src/modules/registry/` | Inventory and lifecycle API integration |

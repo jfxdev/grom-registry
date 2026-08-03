@@ -97,11 +97,11 @@ therefore **Passing**.
 
 ### Current baseline
 
-Database-level tests prove that a failed SQLite migration is not marked as
-applied, and an integration test proves metadata survives a close/reopen. The
-registry E2E waits on public `/readyz`. These tests do not yet prove the full
-startup boundary: migration states, process readiness exposure, and `/api/docs`
-on an installed stack.
+Before this work package, database-level tests proved that a failed SQLite
+migration was not marked as applied, an integration test proved metadata
+survived a close/reopen, and registry E2E waited on public `/readyz`. The boot
+acceptance suite now proves the full startup boundary locally; CI evidence is
+the remaining acceptance gap.
 
 ### Scenarios
 
@@ -120,15 +120,14 @@ The acceptance suite must run against the public Grom port and test:
   with bounded waits, diagnostics, and exact-project cleanup. It verifies empty
   SQLite boot, a supported prior schema, a failed real migration that never
   exposes the public surface, and the installed documentation endpoints.
-- The suite's prior-state fixtures are created only within the test process;
-  they are copied into the isolated named volume before normal Grom startup.
-  No production configuration activates a migration failure.
-- Seed a supported previous SQLite fixture only through a reviewed migration
-  fixture or an archived, versioned database artifact. Do not mutate live
-  schemas ad hoc in the test.
-- Introduce a narrowly scoped test-only failing-migration fixture through the
-  database bootstrap seam. It must be impossible to activate from a production
-  deployment configuration.
+- The supported-upgrade fixture is the reviewed, versioned
+  `fixtures/sqlite-202607260001.sql` schema. The test creates it only in a
+  temporary directory, seeds the historical user/project/membership state, and
+  copies it into the isolated named volume before normal Grom startup.
+- The separate failing-migration fixture starts from the current schema, marks
+  migration `202607270006` pending while retaining its added column, and
+  therefore makes the real production migration fail deterministically. No
+  production configuration activates this fixture or changes migration logic.
 - Probe public HTTP only after process launch. Do not replace this suite with
   direct calls to the migration runner or an in-process HTTP handler.
 - Implemented: `make test-boot-acceptance` and the separate `Boot Acceptance

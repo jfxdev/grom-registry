@@ -43,7 +43,7 @@ scanner execution.
 
 | Phase | Status | Current evidence | Remaining exit work |
 |---|---|---|---|
-| Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, and mandatory backend/frontend/lint/Go-vulnerability CI jobs exist | Production image build, dependency/container scanning, and PostgreSQL CI before claiming full support |
+| Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, and a locally accepted public boot/migration/docs journey exist | Production image build, dependency/container scanning, PostgreSQL CI, and recorded boot-journey CI evidence before claiming full support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
 | Phase 2: registry browsing and core UI | Partially accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, and user-disable flows exist | Audit acceptance evidence, pagination decision and complete first-push Playwright coverage |
 | Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, and UI-driven quiesced backup plus same-image recovery exist | Migration/restart evidence, key rotation, upgrade tests, Docker smoke test and release artifacts; expanded matrices follow advertised capabilities |
@@ -301,8 +301,9 @@ Acceptance:
 ### Completion step 4: establish the mandatory CI matrix
 
 **Status: partially implemented. Mandatory backend, frontend, golangci-lint,
-govulncheck, and real-Docker registry jobs are implemented; the remaining
-matrix items below are still open.**
+govulncheck, registry, administrative-browser, backup/restore, and boot
+acceptance jobs are implemented; the first boot-acceptance CI evidence and the
+remaining matrix items below are still open.**
 
 Work:
 
@@ -352,10 +353,14 @@ Current evidence:
   manual dispatch using Docker Engine and Compose on `ubuntu-latest`.
 - The job invokes `make test-registry-e2e`, whose explicit opt-in prevents the
   registry package from being counted as a successful skip.
-- The `main` branch ruleset must require `Backend Tests`, `Frontend Tests`,
-  `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`, and
-  `Backup Restore E2E` in repository
-  settings; branch-protection state is not stored in workflow YAML.
+- `.github/workflows/boot-acceptance-e2e.yml` runs the stable `Boot Acceptance
+  E2E (Docker)` check on pull requests, `main`, merge queues, and manual
+  dispatch. `make test-boot-acceptance` passed locally on August 3, 2026; its
+  first successful CI execution remains acceptance evidence to record.
+- The active `main` branch ruleset is configured to require `Backend Tests`, `Frontend Tests`,
+  `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
+  `Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and
+  `Backup Restore E2E`; branch-protection state is not stored in workflow YAML.
 - Backend tests validate the OpenAPI document and compare all registered
   management routes with the contract in both directions. The frontend job
   regenerates TypeScript API types and fails on tracked drift.
@@ -1475,9 +1480,10 @@ Grom instances are supported.
   interactive docs exist. Breaking-change detection remains deferred.
 - **Implemented:** CI enforces Go formatting and tests, SQLite integration,
   frontend lint/tests/typechecking/build, golangci-lint, govulncheck, and the
-  isolated real-Docker registry journey. Backend and frontend unit coverage
-  reports are uploaded separately to Codecov, with an explicit 70% patch
-  coverage target.
+  isolated real-Docker registry, administrative-browser, boot-acceptance, and
+  backup/restore journeys. The boot journey has local evidence and awaits its
+  first recorded CI execution. Backend and frontend unit coverage reports are
+  uploaded separately to Codecov, with an explicit 70% patch coverage target.
 - **Pending:** production image build and scanning, broader dependency/container
   scanning, and PostgreSQL CI before PostgreSQL is advertised as fully
   supported.
@@ -1557,9 +1563,11 @@ post-MVP unless promoted explicitly.
   conformance matrices.
 - **Pending:** release images, checksums, SBOM, and supported deployment
   documentation.
-- **New evidence:** migration failure handling and SQLite restart preservation
-  are covered by database and integration tests; process-level readiness and
-  Distribution/blob restart evidence remain open.
+- **New evidence:** the local boot-acceptance journey proves empty-volume and
+  prior-schema migration before public readiness, public OpenAPI/docs serving,
+  and failed-migration non-exposure with unmarked migration history. Its
+  mandatory CI run remains to be recorded. Distribution/blob restart evidence
+  remains open.
 
 Exit criterion: a tagged release can be installed and upgraded with preserved metadata and blobs.
 
