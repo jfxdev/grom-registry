@@ -2,11 +2,10 @@
 
 ## Purpose and scope
 
-**Status: Work package A implemented and accepted locally and in CI on August
-3, 2026; its recorded CI evidence is
-[PR #6](https://github.com/jfxdev/grom-registry/pull/6). Work package B remains
-implemented and passed locally on August 3, 2026; it awaits CI acceptance
-evidence.**
+**Status: Work packages A and B are implemented and accepted locally and in CI
+on August 3, 2026. Their recorded CI evidence is
+[PR #6](https://github.com/jfxdev/grom-registry/pull/6) for A and
+[PR #16](https://github.com/jfxdev/grom-registry/pull/16) for B.**
 
 This plan closes the next two default-MVP acceptance gaps from
 [`architecture-and-mvp.md`](architecture-and-mvp.md):
@@ -15,6 +14,13 @@ This plan closes the next two default-MVP acceptance gaps from
    Distribution metadata; and
 2. public boot, readiness, and API-documentation smoke checks for the default
    SQLite/local-storage installation.
+
+It also plans two remaining public acceptance checks: immediate user-session
+revocation after administrative disablement, and full Grom plus Distribution
+restart preservation. Both work packages are test-only: existing product
+implementation and lower-level tests already cover their behavior, and
+production code changes are out of scope unless public acceptance reveals a
+defect.
 
 It does not expand the product scope. PostgreSQL, S3, ORAS, audit presentation,
 and release publication remain separate capability or release-engineering work.
@@ -137,10 +143,111 @@ The acceptance suite must run against the public Grom port and test:
 
 ### Acceptance and evidence
 
-`make test-boot-acceptance` passed locally on August 3, 2026. Record the first
-successful `Boot Acceptance E2E (Docker)` CI run before marking MVP scenarios
-14, 15, and 16 **Passing**. Scenario 12 remains separate: it requires a
-deliberate full Compose restart proving Distribution/blob preservation.
+`make test-boot-acceptance` passed locally and the mandatory `Boot Acceptance
+E2E (Docker)` CI check passed on August 3, 2026 in
+[PR #16](https://github.com/jfxdev/grom-registry/pull/16). MVP scenarios 14,
+15, and 16 are therefore **Passing**. Scenario 12 remains separate: it
+requires a deliberate full Compose restart proving Distribution/blob
+preservation.
+
+## Work package C: administrative user disablement revokes a live session
+
+**Status: implemented and accepted locally on August 3, 2026; mandatory CI
+evidence remains required before MVP scenario 21 is marked Passing.**
+
+### Current baseline
+
+`backend/internal/httpapi/server_test.go` proves that `DELETE /api/v1/users/{id}`
+invalidates the target user's active session. The missing MVP evidence is the
+same behavior through an isolated installed stack and a real public session
+cookie; it is not a missing product capability.
+
+### Target journey
+
+Run the following test-only scenario through the public Grom endpoint:
+
+1. Start the existing isolated registry E2E Compose stack.
+2. Sign in as the bootstrap installation administrator and create a non-admin
+   human user.
+3. Use an independent HTTP cookie jar to sign in as that user and confirm
+   `GET /api/v1/me` returns `200 OK`.
+4. Use the administrator session to call `DELETE /api/v1/users/{id}` and
+   require `204 No Content`.
+5. Reuse the target user's original cookie against `GET /api/v1/me` and require
+   `401 Unauthorized`.
+6. Attempt a fresh sign-in with the disabled user's credentials and require
+   `401 Unauthorized`.
+
+### Implementation design
+
+- Add `TestUserDisableRevokesActiveSession` to `backend/tests/registrye2e` so
+  it runs under the existing mandatory `Registry E2E (Docker)` check; do not
+  add a new workflow or required status check for this short public HTTP case.
+- Extend the existing management-test client only with helpers to create a
+  human user, create an independent authenticated client, and disable a user.
+- Keep the target non-administrative so the test does not depend on the
+  self-disable and last-installation-administrator protections.
+- Do not use Playwright: independent HTTP cookie jars directly prove the
+  session-revocation security boundary and avoid duplicating browser coverage.
+- Do not change OpenAPI or production code unless the test exposes a defect;
+  any such correction becomes a separate implementation response with the
+  normal contract-first review.
+
+### Acceptance and evidence
+
+The scenario is **Passing** only when `Registry E2E (Docker)` succeeds in CI
+with both the stale-cookie rejection and the disabled-user sign-in rejection.
+It closes MVP scenario 21. It must not log the user's password or session
+cookie in diagnostics.
+
+## Work package D: full-stack restart preserves registry state and blobs
+
+**Status: implemented and accepted locally on August 3, 2026; mandatory CI
+evidence remains required before MVP scenario 12 is marked Passing.**
+
+### Current baseline
+
+The SQLite integration test verifies a close/reopen of metadata state, but it
+cannot prove persistence through the installed Grom and Distribution processes
+or preservation of Distribution blob storage. This work package adds that
+public, Docker-backed boundary without changing product behavior.
+
+### Target journey
+
+1. Start the existing isolated registry E2E Compose stack.
+2. Create project `restart-alpha`, a Writer service account, and its access
+   key through the public management API.
+3. Push the deterministic local `scratch` fixture as `restart-alpha/app:v1`,
+   then wait until repository, tag, and manifest inventory reads observe it.
+4. Run `docker compose restart grom distribution` for the exact isolated
+   project; do not recreate containers or volumes.
+5. Wait for `/readyz` and `/v2/` through the public Grom endpoint.
+6. Use fresh administrative and Docker clients to prove the administrator can
+   sign in, the Writer still has push authority, and repository/tag/inventory
+   metadata still includes `v1`.
+7. Remove the local `v1` tag, pull it from the registry to prove preserved
+   manifests and blobs, then push `restart-alpha/app:v2` and observe both tags
+   in the public inventory.
+
+### Implementation design
+
+- `TestRestartPreservesPublicState` lives in `backend/tests/registrye2e` and
+  runs in the existing mandatory `Registry E2E (Docker)` check. A separate
+  stack per test retains isolated volumes and bounded failure diagnostics while
+  avoiding a duplicate Compose harness and an additional required workflow.
+- The test performs an explicit Compose `restart` only after the initial push;
+  the test cleanup remains the sole owner of `down --volumes` for that exact
+  project.
+- A fresh Docker credential directory is used after restart. This avoids
+  treating a cached bearer credential as evidence that the persisted Writer
+  membership still authorizes a new registry exchange.
+- No database, named volume, or private Distribution endpoint is read directly.
+
+### Acceptance and evidence
+
+The scenario is **Passing** only when the mandatory `Registry E2E (Docker)`
+check succeeds in CI with the restarted-stack pull of `v1` and push of `v2`.
+It closes MVP scenario 12.
 
 ## Execution order
 
@@ -150,5 +257,11 @@ deliberate full Compose restart proving Distribution/blob preservation.
 3. Completed: add the empty-volume and `/api/docs` boot smoke checks.
 4. Completed: add previous-version and failing-migration fixtures with public
    readiness assertions.
-5. Completed: wire the boot-acceptance command into CI. Run it locally and in
-   CI, then refresh the architecture acceptance table with dated evidence.
+5. Completed: wire the boot-acceptance command into CI, accept its successful
+   run, and refresh the architecture acceptance table with dated evidence.
+6. Implemented locally: add the public, test-only user-disable/session-
+   revocation scenario to the registry E2E harness; record its mandatory CI
+   evidence before closing scenario 21.
+7. Implemented locally: add the full-stack restart preservation scenario to
+   the registry E2E harness; record its mandatory CI evidence before closing
+   scenario 12.

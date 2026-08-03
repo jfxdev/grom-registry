@@ -20,7 +20,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `deploy/distribution/` | CNCF Distribution configuration |
 | `.github/workflows/ci.yml` | Mandatory Go formatting/tests, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and separate backend/frontend Codecov coverage and JUnit test-result uploads |
 | `codecov.yml` | Explicit 70% patch-coverage gate and narrow generated-code/static-asset exclusions |
-| `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry acceptance check for pull requests, main, and merge queues |
+| `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry authorization, restart-preservation, and session-revocation acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/admin-journey-e2e.yml` | Mandatory browser-driven administrative first-push acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/boot-acceptance-e2e.yml` | Mandatory real-Docker default-installation boot, migration, readiness, and API-documentation acceptance check |
 | `.github/workflows/backup-restore-e2e.yml` | Real-Docker volume-loss and recovery acceptance check |
@@ -141,7 +141,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `backend/internal/registry/infrastructure/distribution/gateway.go` | Public `/v2` reverse proxy, forwarding headers, manifest policy enforcement, and push observation |
 | `backend/internal/registry/infrastructure/persistence/bun/lifecycle.go` | Inventory, preview, run, and execution-lock persistence |
 | `backend/internal/audit/` | Immutable lifecycle audit event recording |
-| `backend/tests/registrye2e/` | Opt-in public-endpoint journey, isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
+| `backend/tests/registrye2e/` | Opt-in public-endpoint registry authorization, user-session revocation, and full-stack restart-preservation journeys; isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
 | `backend/tests/bootacceptance/` | Opt-in public boot, migration, readiness, and API-documentation acceptance journey through an isolated Compose stack; includes the reviewed prior-schema fixture and a separate real-migration failure fixture |
 | `backend/tests/backuprestoree2e/` | Opt-in destructive volume-loss recovery journey through public Grom and Docker endpoints |
 | `frontend/e2e/` | Playwright mocked sign-in smoke and isolated public-stack administrative first-push journey |
@@ -154,7 +154,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `make generate` | Regenerate Go and TypeScript models from OpenAPI |
 | `make test` | Run backend tests, frontend lint, tests, and type checks |
 | `make test-coverage` | Generate Go and frontend LCOV coverage reports used by Codecov |
-| `make test-registry-e2e` | Run the isolated real-Docker authorization, policy, JWT, and inventory journey |
+| `make test-registry-e2e` | Run the isolated real-Docker authorization, policy, JWT, inventory, session-revocation, and restart-preservation journeys |
 | `make test-admin-e2e` | Run the isolated real-browser project, access-key, first-push, and inventory journey |
 | `make test-boot-acceptance` | Run the isolated default-installation boot, migration, readiness, and API-documentation journey |
 | `make test-backup-restore-e2e` | Destroy and restore an isolated default installation and verify old and new registry activity |

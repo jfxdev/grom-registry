@@ -15,6 +15,85 @@ import (
 
 const commandTimeout = 2 * time.Minute
 
+func TestRestartPreservesPublicState(t *testing.T) {
+	if os.Getenv("GROM_RUN_REGISTRY_E2E") != "1" {
+		t.Skip("set GROM_RUN_REGISTRY_E2E=1 or run make test-registry-e2e")
+	}
+
+	stack := startTestStack(t)
+	admin := newManagementClient(t, stack.publicURL)
+	admin.login(t)
+	admin.createProject(t, "Restart Alpha", "restart-alpha")
+	writer := admin.createServicePrincipal(t, "Restart writer", "restart-writer")
+	admin.setMembership(t, "restart-alpha", writer, openapi.Writer)
+
+	localTags := make([]string, 0, 8)
+	t.Cleanup(func() { cleanupLocalTags(t, stack.root, localTags) })
+	variantA, variantB := buildFixtureImages(t, stack, &localTags)
+	writerDocker := newDockerClient(t, stack, writer, &localTags)
+	writerDocker.login(t, writer.username)
+	v1 := writerDocker.tag(t, variantA, "restart-alpha/app", "v1")
+	writerDocker.push(t, v1)
+	waitForRestartObservation(t, admin, []string{"v1"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	output, err := stack.compose(ctx, "restart", "grom", "distribution")
+	cancel()
+	if err != nil {
+		t.Fatalf("restart isolated Grom and Distribution services: %v\n%s", err, bounded(output))
+	}
+	waitForPublicStack(t, stack.publicURL)
+
+	postRestartAdmin := newManagementClient(t, stack.publicURL)
+	postRestartAdmin.login(t)
+	waitForRestartObservation(t, postRestartAdmin, []string{"v1"})
+
+	postRestartWriter := newDockerClient(t, stack, writer, &localTags)
+	postRestartWriter.login(t, writer.username)
+	removeLocalTag(t, stack.root, v1)
+	postRestartWriter.pull(t, v1)
+
+	v2 := postRestartWriter.tag(t, variantB, "restart-alpha/app", "v2")
+	postRestartWriter.push(t, v2)
+	waitForRestartObservation(t, postRestartAdmin, []string{"v1", "v2"})
+}
+
+func TestUserDisableRevokesActiveSession(t *testing.T) {
+	if os.Getenv("GROM_RUN_REGISTRY_E2E") != "1" {
+		t.Skip("set GROM_RUN_REGISTRY_E2E=1 or run make test-registry-e2e")
+	}
+
+	stack := startTestStack(t)
+	admin := newManagementClient(t, stack.publicURL)
+	admin.login(t)
+
+	const (
+		targetEmail    = "disabled-user@grom.local"
+		targetUsername = "disabled-user"
+		targetPassword = "disabled-user-password"
+	)
+	target := admin.createUser(t, targetEmail, targetUsername, targetPassword)
+	if target.SystemAdmin {
+		t.Fatal("target user must not be an installation administrator")
+	}
+
+	targetSession := newManagementClient(t, stack.publicURL)
+	loggedIn := targetSession.loginAs(t, targetEmail, targetPassword, http.StatusOK)
+	if loggedIn.Id != target.Id {
+		t.Fatalf("target login returned user %s, expected %s", loggedIn.Id, target.Id)
+	}
+	active := targetSession.currentUser(t, http.StatusOK)
+	if active.Id != target.Id {
+		t.Fatalf("active session returned user %s, expected %s", active.Id, target.Id)
+	}
+
+	admin.disableUser(t, target.Id.String())
+	targetSession.currentUser(t, http.StatusUnauthorized)
+
+	newSession := newManagementClient(t, stack.publicURL)
+	newSession.loginAs(t, targetEmail, targetPassword, http.StatusUnauthorized)
+}
+
 func TestRegistryJourney(t *testing.T) {
 	if os.Getenv("GROM_RUN_REGISTRY_E2E") != "1" {
 		t.Skip("set GROM_RUN_REGISTRY_E2E=1 or run make test-registry-e2e")
@@ -326,6 +405,58 @@ func observationComplete(
 		}
 	}
 	return repositoryOK && tagOK && inventoryOK
+}
+
+func waitForRestartObservation(t *testing.T, api *managementClient, expectedTags []string) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		repositories := api.repositories(t, "restart-alpha")
+		tags := api.tags(t, "restart-alpha", "app")
+		inventory := api.inventory(t, "restart-alpha", "app")
+		if restartObservationComplete(repositories, tags, inventory, expectedTags) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("restart observation did not converge: repositories=%#v tags=%#v inventory=%#v",
+				repositories, tags, inventory)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+func restartObservationComplete(
+	repositories []openapi.Repository,
+	tags openapi.TagList,
+	inventory []openapi.ManifestInventory,
+	expectedTags []string,
+) bool {
+	repositoryOK := false
+	for _, repository := range repositories {
+		if repository.Name == "app" && repository.Status == openapi.RepositoryStatusActive {
+			repositoryOK = true
+			break
+		}
+	}
+	if !repositoryOK || (tags.Name != "restart-alpha/app" && tags.Name != "app") {
+		return false
+	}
+	for _, expectedTag := range expectedTags {
+		if !contains(tags.Tags, expectedTag) {
+			return false
+		}
+		inventoryTagObserved := false
+		for _, manifest := range inventory {
+			if manifest.Digest != "" && contains(manifest.Tags, expectedTag) {
+				inventoryTagObserved = true
+				break
+			}
+		}
+		if !inventoryTagObserved {
+			return false
+		}
+	}
+	return true
 }
 
 func contains(values []string, target string) bool {
