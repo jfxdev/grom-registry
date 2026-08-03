@@ -114,6 +114,9 @@ Run the real Docker registry acceptance journey with:
 
 ```bash
 make test-registry-e2e
+
+# Run the browser-driven administrative first-push journey (requires Docker and Playwright Chromium)
+make test-admin-e2e
 ```
 
 This opt-in check requires Docker Engine and Docker Compose. It uses an

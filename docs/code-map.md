@@ -21,6 +21,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `.github/workflows/ci.yml` | Mandatory Go formatting/tests, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and separate backend/frontend Codecov coverage and JUnit test-result uploads |
 | `codecov.yml` | Explicit 70% patch-coverage gate and narrow generated-code/static-asset exclusions |
 | `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry acceptance check for pull requests, main, and merge queues |
+| `.github/workflows/admin-journey-e2e.yml` | Mandatory browser-driven administrative first-push acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/backup-restore-e2e.yml` | Real-Docker volume-loss and recovery acceptance check |
 | `docs/` | Architecture, domain inventory, operations, decisions, and visual identity |
 | `AGENTS.md` | Current operational instructions for coding agents |
@@ -36,6 +37,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/backup-and-disaster-recovery-implementation-plan.md` | Implemented default SQLite/local-storage backup, empty-volume restore, and recovery acceptance design |
 | `docs/backup-and-disaster-recovery.md` | Operator backup, restore, encrypted retention, drill, and troubleshooting procedure |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
+| `docs/mvp-acceptance-implementation-plan.md` | Implemented public-browser first-push journey plus planned boot/readiness/API-docs acceptance work |
 | `docs/visual-identity.md` | Approved visual direction, responsive rules, and UI acceptance criteria |
 | `docs/visual-implementation-plan.md` | Detailed frontend delivery phases, interaction behavior, and validation plan |
 | `docs/assets/visual-identity/` | Visual concept references used by the identity guide |
@@ -140,6 +142,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `backend/internal/audit/` | Immutable lifecycle audit event recording |
 | `backend/tests/registrye2e/` | Opt-in public-endpoint journey, isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
 | `backend/tests/backuprestoree2e/` | Opt-in destructive volume-loss recovery journey through public Grom and Docker endpoints |
+| `frontend/e2e/` | Playwright mocked sign-in smoke and isolated public-stack administrative first-push journey |
 | `frontend/src/modules/registry/` | Inventory and lifecycle API integration |
 
 ## Operational entry points
@@ -150,6 +153,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `make test` | Run backend tests, frontend lint, tests, and type checks |
 | `make test-coverage` | Generate Go and frontend LCOV coverage reports used by Codecov |
 | `make test-registry-e2e` | Run the isolated real-Docker authorization, policy, JWT, and inventory journey |
+| `make test-admin-e2e` | Run the isolated real-browser project, access-key, first-push, and inventory journey |
 | `make test-backup-restore-e2e` | Destroy and restore an isolated default installation and verify old and new registry activity |
 | `make build` | Build frontend and backend |
 | `make dev` | Start the Go backend and Vite frontend together |

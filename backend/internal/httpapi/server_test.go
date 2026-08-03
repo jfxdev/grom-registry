@@ -232,12 +232,6 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	if revokeResponse.Code != http.StatusNoContent {
 		t.Fatalf("revoke token: expected 204, got %d", revokeResponse.Code)
 	}
-	deleteAccountResponse := httptest.NewRecorder()
-	server.deleteServiceAccount(deleteAccountResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/service-accounts/"+account.ID.String(), nil), admin, map[string]string{"id": account.ID.String()}))
-	if deleteAccountResponse.Code != http.StatusNoContent {
-		t.Fatalf("disable service account: expected 204, got %d", deleteAccountResponse.Code)
-	}
-
 	projectResponse := httptest.NewRecorder()
 	server.createProject(projectResponse, withUser(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/projects", strings.NewReader(`{"name":"Payments","slug":"payments"}`)), admin))
 	if projectResponse.Code != http.StatusCreated {
@@ -254,10 +248,22 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	if setMemberResponse.Code != http.StatusOK {
 		t.Fatalf("set membership: expected 200, got %d: %s", setMemberResponse.Code, setMemberResponse.Body.String())
 	}
+	serviceAccountMemberParams := map[string]string{"project": project.Slug, "principalKind": constants.PrincipalServiceAccount, "principalId": account.ID.String()}
+	setServiceAccountMemberResponse := httptest.NewRecorder()
+	server.setMembership(setServiceAccountMemberResponse, withUserAndParams(httptest.NewRequest(http.MethodPut, "http://grom/api/v1/projects/payments/members/service_account/"+account.ID.String(), strings.NewReader(`{"role":"writer"}`)), admin, serviceAccountMemberParams))
+	if setServiceAccountMemberResponse.Code != http.StatusOK {
+		t.Fatalf("set service account membership: expected 200, got %d: %s", setServiceAccountMemberResponse.Code, setServiceAccountMemberResponse.Body.String())
+	}
 	deleteMemberResponse := httptest.NewRecorder()
 	server.deleteMembership(deleteMemberResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/projects/payments/members/user/"+target.ID.String(), nil), admin, memberParams))
 	if deleteMemberResponse.Code != http.StatusNoContent {
 		t.Fatalf("delete membership: expected 204, got %d", deleteMemberResponse.Code)
+	}
+
+	deleteAccountResponse := httptest.NewRecorder()
+	server.deleteServiceAccount(deleteAccountResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/service-accounts/"+account.ID.String(), nil), admin, map[string]string{"id": account.ID.String()}))
+	if deleteAccountResponse.Code != http.StatusNoContent {
+		t.Fatalf("disable service account: expected 204, got %d", deleteAccountResponse.Code)
 	}
 
 	deleteProjectResponse := httptest.NewRecorder()

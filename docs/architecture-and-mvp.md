@@ -417,6 +417,12 @@ Evidence:
 
 ### Completion step 6: finish the Phase 2 management experience
 
+**Planning update on August 3, 2026:** the detailed acceptance plan for the
+remaining browser journey and boot/contract smoke checks is maintained in
+[`mvp-acceptance-implementation-plan.md`](mvp-acceptance-implementation-plan.md).
+It deliberately proves the installed public Grom surface rather than relying
+on mocked frontend routes or direct database setup.
+
 Work:
 
 1. Maintain the repository manifest-detail experience showing digest, media
@@ -1268,10 +1274,11 @@ frontend/
 └── package.json
 ```
 
-Audit presentation, settings, shared test factories, and Playwright `e2e`
-directories are not currently implemented. Audit presentation and settings are
-post-MVP by default; completion step 6 owns the request-level test and
-Playwright work required by the core administration journey.
+Audit presentation, settings, and shared test factories are not currently
+implemented. Audit presentation and settings are post-MVP by default.
+`frontend/e2e` contains both the mocked sign-in smoke and an isolated public
+stack journey for the core administration flow; broader browser coverage
+remains completion-step work.
 
 Each module owns its API query definitions, feature-specific components, validation schemas, pages, and route declarations.
 An `index.ts` file is the module's public API; other modules should not import its internal files.
@@ -1324,7 +1331,11 @@ Current gaps:
   build.
 - Tests use component and application mocks, but not a request-level frontend
   integration layer such as Mock Service Worker.
-- Playwright and the `e2e` suite are not present.
+- Playwright covers mocked invalid sign-in and the real public-stack flow for
+  project creation, service-account key reveal, Writer membership, first push,
+  repository browsing, inventory, and manifest detail. The local acceptance
+  command passed on August 3, 2026; its new GitHub Actions check is awaiting
+  its first run.
 - Generated API drift is checked in CI for both Go and TypeScript outputs.
 - The full responsive and accessibility acceptance matrix is tracked in
   `visual-implementation-plan.md`.
@@ -1336,11 +1347,11 @@ MVP page status:
 | Sign in | Implemented | Complete final responsive and accessibility acceptance |
 | Password reset and user profile | Implemented | Complete final responsive and accessibility acceptance |
 | Overview with projects and recent audit events | Post-MVP | Do not block the default self-hosted release |
-| Projects list and create project | Implemented | Add Playwright coverage |
-| Project detail with repositories and members | Implemented with gaps | Add membership edit/removal UI and copyable push guidance |
-| Repository detail | Partial | Add digest, media type, size, timestamps, classification, and OCI relationship detail |
+| Projects list and create project | Implemented | Broaden browser coverage beyond the first-push journey |
+| Project detail with repositories and members | Implemented | Broaden browser coverage for edit/removal and error states |
+| Repository detail | Implemented | Broaden browser coverage and add config/layer/pull-history data only if promoted |
 | Users for installation administrators | Implemented with gaps | Keep general profile editing post-MVP |
-| Service accounts and nested access keys | Implemented with gaps | Add optional key expiration and Playwright reveal-once coverage |
+| Service accounts and nested access keys | Implemented | Broaden browser coverage for expiration, revocation, and error states |
 | Audit log | Post-MVP | Essential event persistence remains required; browsing UI does not block MVP |
 | Integrations | Implemented as read-only roadmap | ADR required only before active integration work |
 | Basic settings | Post-MVP | Add only when concrete settings cannot be handled safely through deployment configuration |
@@ -1515,13 +1526,15 @@ registry protocol with Docker.
   SQLite persistence/sanitization coverage; public end-to-end audit acceptance
   and audit presentation remain intentionally outside the default MVP.
 - **Partial:** useful empty/error states exist in implemented screens;
-  pagination requirements and browser-level acceptance remain unresolved.
+  pagination requirements and browser-level acceptance beyond the accepted
+  first-push journey remain unresolved.
 
 Exit criterion: a new administrator can create a project, add a service account, push an image, and inspect it without using the database or editing configuration.
 
-The management flows and registry metadata reads exist, but the complete
-first-push browser journey has no Playwright/Distribution evidence. Only that
-browser evidence and the settings decision remain in completion step 6.
+The complete first-push browser journey passed locally on August 3, 2026 via
+`make test-admin-e2e`, exercising the public Grom and Distribution stack. Its
+separate CI workflow is implemented but has not yet reported an acceptance run.
+Broader browser coverage and the settings decision remain in completion step 6.
 Essential audit persistence remains in step 2; an audit browsing page is
 post-MVP unless promoted explicitly.
 
@@ -1610,7 +1623,7 @@ Status vocabulary:
   evidence is absent.
 - **Missing:** the required implementation or delivery mechanism does not exist.
 
-| # | Scenario | Gate | Status on August 2, 2026 | Evidence needed to close |
+| # | Scenario | Gate | Status on August 3, 2026 | Evidence needed to close |
 |---:|---|---|---|---|
 | 1 | An administrator creates projects `alpha` and `beta` | Default MVP | Passing | Registry E2E creates both projects through the public management API |
 | 2 | A service account is Writer in `alpha` and has no membership in `beta` | Default MVP | Passing | Registry E2E persists real projects, principals, and memberships |
@@ -1621,13 +1634,13 @@ Status vocabulary:
 | 7 | Removing a membership prevents access while the key remains valid | Default MVP | Passing | Registry E2E removes membership and verifies the next scoped token loses access |
 | 8 | A short-lived registry JWT expires without invalidating the long-lived key | Default MVP | Passing | Registry E2E bounds expiry rejection and performs a successful fresh exchange |
 | 9 | Docker Engine can push and pull supported image content | Default MVP | Passing | Mandatory registry E2E job exercises Docker through the public Grom endpoint |
-| 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Partial | Playwright flow after a real push |
+| 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Partial | `make test-admin-e2e` and `Admin Journey E2E (Docker)` are implemented; record successful local and CI evidence before marking passing |
 | 11 | Integrations shows backend-driven planned providers with no active configuration | Default MVP | Passing | Existing API/UI tests cover the read-only flow |
 | 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Partial | SQLite metadata restart test exists; add process-level restart coverage for users, memberships, and Distribution/blob state |
 | 13 | The applicable backend suite passes against PostgreSQL | PostgreSQL support | Partial | Mandatory PostgreSQL CI job with no skip path |
-| 14 | Empty or supported older databases migrate before readiness | Default MVP | Partial | Boot tests for empty and supported previous SQLite versions with readiness probing |
-| 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Partial | Migration failure and no-applied-record tests exist; add process-level readiness exposure test |
-| 16 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Partial | Contract validation and bidirectional route tests exist; add `/api/docs` smoke check |
+| 14 | Empty or supported older databases migrate before readiness | Default MVP | Partial | Planned: boot acceptance tests for empty and supported previous SQLite state with public readiness probing |
+| 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Partial | Planned: process-level failing-migration fixture that proves no public readiness, API, or registry exposure |
+| 16 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Partial | Planned: public `/api/docs` smoke check in the boot acceptance suite |
 | 17 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Passing | Backend contract tests and frontend generated-code freshness check run in CI |
 | 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
 | 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |

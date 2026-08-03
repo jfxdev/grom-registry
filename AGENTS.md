@@ -21,6 +21,7 @@ Keep this file aligned with the code that actually exists.
 - Run backend and frontend checks: `make test`
 - Generate backend and frontend coverage reports: `make test-coverage`
 - Run the isolated real-Docker registry journey: `make test-registry-e2e`
+- Run the isolated browser-driven administrative first-push journey: `make test-admin-e2e`
 - Run the isolated destructive backup/restore journey: `make test-backup-restore-e2e`
 - Exercise the low-level offline backup compatibility tool: `make backup BACKUP_DIR=/absolute/path`
 - Inspect a backup with the development tool: `make backup-inspect BACKUP_PATH=/absolute/path/to/backup`
@@ -42,18 +43,21 @@ The runtime `grom` account is fixed at UID 100 and GID 101. Keep the Dockerfile,
 restored-volume ownership, and backup-agent socket group aligned; changing these
 IDs requires an explicit volume-ownership migration.
 
-`make test-registry-e2e` requires an accessible Docker daemon and Docker
-Compose. It owns only its unique Compose project, loopback port, temporary
-Docker credential directories, and exact test image tags; never replace its
-cleanup with a broad Docker prune. Docker daemon permission failures are
-reported before startup. Distribution applies clock-skew tolerance to expired
-JWTs, so the expiry assertion is bounded but can take about one minute.
-Authenticate E2E principals immediately before their scenario because the
-shared Docker daemon may cache bearer tokens for one registry address.
+`make test-registry-e2e` and `make test-admin-e2e` require an accessible Docker
+daemon and Docker Compose. Each owns only its unique Compose project, loopback
+port, temporary Docker credential directories, and exact test image tags; never
+replace cleanup with a broad Docker prune. The administrative journey drives
+the frontend embedded in the container through Playwright; it disables browser
+traces, screenshots, and video because it handles a reveal-once access key.
+Docker daemon permission failures are reported before startup. Distribution
+applies clock-skew tolerance to expired JWTs, so the expiry assertion is bounded
+but can take about one minute. Authenticate E2E principals immediately before
+their scenario because the shared Docker daemon may cache bearer tokens for one
+registry address.
 The mandatory GitHub status checks are `Backend Tests`, `Frontend Tests`,
-`Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`, and
-`Backup Restore E2E`, defined under `.github/workflows`. Keep these job names
-stable and require all six in the
+`Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
+`Admin Journey E2E (Docker)`, and `Backup Restore E2E`, defined under
+`.github/workflows`. Keep these job names stable and require all seven in the
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
