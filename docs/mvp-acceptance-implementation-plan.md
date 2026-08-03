@@ -121,9 +121,10 @@ The acceptance suite must run against the public Grom port and test:
   SQLite boot, a supported prior schema, a failed real migration that never
   exposes the public surface, and the installed documentation endpoints.
 - The supported-upgrade fixture is the reviewed, versioned
-  `fixtures/sqlite-202607260001.sql` schema. The test creates it only in a
-  temporary directory, seeds the historical user/project/membership state, and
-  copies it into the isolated named volume before normal Grom startup.
+  `fixtures/sqlite-supported-baseline-202607260001.sql` schema. The test
+  creates it only in a temporary directory, seeds the historical
+  user/project/membership state, and copies it into the isolated named volume
+  before normal Grom startup.
 - The separate failing-migration fixture starts from the current schema, marks
   migration `202607270006` pending while retaining its added column, and
   therefore makes the real production migration fail deterministically. No

@@ -39,7 +39,7 @@ const (
 // supportedPriorSchema is the reviewed SQLite schema at migration 202607260001,
 // the oldest release state supported by this acceptance journey.
 //
-//go:embed fixtures/sqlite-202607260001.sql
+//go:embed fixtures/sqlite-supported-baseline-202607260001.sql
 var supportedPriorSchema string
 
 func TestBootAcceptance(t *testing.T) {
