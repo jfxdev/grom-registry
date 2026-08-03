@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text",
     "test:coverage:ci": "npm run test:coverage -- --reporter=default --reporter=github-actions --reporter=junit --outputFile.junit=coverage/frontend-junit.xml",
     "test:e2e": "playwright test",
+    "test:admin-e2e": "GROM_RUN_ADMIN_E2E=1 playwright test e2e/admin-journey.spec.ts",
     "lint": "eslint ."
   },
   "dependencies": {

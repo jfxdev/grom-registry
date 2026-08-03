@@ -232,7 +232,7 @@ installation-administrator deletion when no logical repositories remain.
 
 ### Memberships
 
-**Availability: Web and API, with API-only gaps**
+**Availability: Web and API**
 
 - Project Admins and installation administrators can list memberships.
 - They can assign a user or service account as Reader, Writer, or Admin.
@@ -242,7 +242,7 @@ installation-administrator deletion when no logical repositories remain.
 
 The current UI can add a membership, replace its role, and remove it with an
 explicit access-change confirmation. Non-installation project Admins can select
-service accounts in the UI; selecting human users currently depends on the
+service accounts in the UI; selecting human users still depends on the
 installation-admin-only user catalog.
 
 ## 8. Registry authentication and gateway
@@ -374,17 +374,18 @@ globally enforced, or linked to the repository after creation.
   and whether profile review is needed.
 - Opening a repository lists its current Distribution tags.
 - A user can copy a `docker pull` command for a selected tag.
-- Project Admins can open policy, manual deletion, lifecycle, and recent
-  deletion-history controls.
+- Project Admins can open policy, manual deletion, lifecycle, repository
+  archival/removal, and recent deletion-history controls.
 
-The current management API and UI do not expose a dedicated manifest-detail
-page with config, layers, or pull history.
+Selecting an inventory entry opens a manifest-detail dialog with its digest,
+media type, size, timestamps, tags, classification, and OCI relationship.
+Config, layer, and pull-history detail are not implemented.
 
 ## 12. Manifest inventory and passive classification
 
 ### Inventory
 
-**Availability: API and internal; no full inventory screen**
+**Availability: Web, API, and internal**
 
 Grom stores metadata, not content, for observed manifests:
 
@@ -399,11 +400,10 @@ reads live tags, resolves their manifests, discovers OCI referrers, updates
 inventory, and marks disappeared aliases or manifests without discarding
 history.
 
-Project members can read stored inventory through the API. Project Admins can
-request reconciliation. Manual deletion previews and lifecycle previews
-reconcile automatically before making decisions. The frontend API module
-supports inventory reads and reconciliation, but the current project page does
-not render the full inventory.
+Project members can inspect stored inventory from the selected repository in
+the project page. Project Admins can request reconciliation. Manual deletion
+previews and lifecycle previews reconcile automatically before making
+decisions.
 
 ### Repository profile inference
 
@@ -558,16 +558,16 @@ installation; active-active Grom replicas are not supported.
 | User delete/edit | No | No | No |
 | Service-account create/list/disable | Yes | Yes | — |
 | Access-key create/list/revoke | Yes | Yes | — |
-| Access-key expiration selection | No | Yes | Enforced |
+| Access-key expiration selection | Yes | Yes | Enforced |
 | Project create/list/detail/delete-empty | Yes | Yes | — |
 | Membership list/add | Yes | Yes | — |
-| Membership role replacement/removal | No | Yes | Enforced |
+| Membership role replacement/removal | Yes | Yes | Enforced |
 | Repository manual creation and policy selection | Yes | Yes | — |
 | First-push repository provisioning | Indicated | — | Yes |
 | Existing repository reconciliation | Reflected | Yes | Yes |
-| Repository deletion | No | No | No |
+| Logical repository archival/removal | Yes | Yes | Enforced |
 | Tag browsing and pull-command copy | Yes | Yes | — |
-| Full inventory read/reconciliation | No | Yes | Yes |
+| Inventory read/reconciliation | Yes | Yes | Yes |
 | Passive profile inference | Displayed | Returned | Yes |
 | Manual deletion preview/execution/history | Yes | Yes | Yes |
 | Lifecycle preview/execution/history | Yes | Yes | Yes |
@@ -582,8 +582,8 @@ The executable product does not currently provide:
 
 - organizations, teams, or nested authorization groups;
 - user deletion/editing;
-- logical repository deletion;
-- a manifest-detail or audit-log screen;
+- a full manifest-detail page with config, layer, or pull-history data, or an
+  audit-log screen;
 - vulnerability scanning or admission policies;
 - integration secrets, callbacks, or jobs;
 - automatic retention scheduling or autopurge;
