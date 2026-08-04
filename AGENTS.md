@@ -24,6 +24,7 @@ Keep this file aligned with the code that actually exists.
 - Run the isolated browser-driven administrative first-push journey: `make test-admin-e2e`
 - Run the isolated boot, migration, readiness, and API-documentation journey: `make test-boot-acceptance`
 - Run the isolated destructive backup/restore journey: `make test-backup-restore-e2e`
+- Build the clean-checkout production image and smoke-test its public runtime: `make test-production-image-smoke`
 - Exercise the low-level offline backup compatibility tool: `make backup BACKUP_DIR=/absolute/path`
 - Inspect a backup with the development tool: `make backup-inspect BACKUP_PATH=/absolute/path/to/backup`
 - Exercise low-level empty-volume restore: `make restore BACKUP_PATH=/absolute/path/to/backup`
@@ -66,6 +67,18 @@ stable and require all eight in the
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
+`Production Image Smoke (Docker)` builds the root Dockerfile from a clean
+checkout, verifies the final image declares the non-root `grom` user, and
+checks health, readiness, API documentation, and the registry bearer challenge
+through an isolated public Compose stack. Add it to the `main` branch ruleset
+before the first release; it is intentionally separate from the existing eight
+stable mandatory checks until that ruleset change is made.
+`.github/workflows/release.yml` runs only for an existing `vMAJOR.MINOR.PATCH`
+tag (optionally with a prerelease suffix), publishes the exact image to GHCR,
+and creates a GitHub Release with its digest reference, SPDX SBOM, Trivy report,
+and checksums. It uses the repository `GITHUB_TOKEN`; do not replace it with a
+long-lived registry credential or make a mutable image tag the canonical
+deployment reference.
 The `Backend Tests` and `Frontend Tests` jobs upload separate `backend` and
 `frontend` coverage and JUnit test-result reports to Codecov. They require the
 repository Actions secret `CODECOV_TOKEN`; never commit or log its plaintext
