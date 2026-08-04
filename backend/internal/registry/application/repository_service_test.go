@@ -20,6 +20,7 @@ type repositoryLifecycleStore struct {
 	repository *registrydomain.Repository
 	live       bool
 	deleted    bool
+	findErr    error
 }
 
 type repositoryListStore struct {
@@ -61,7 +62,7 @@ func (s *repositoryListStore) SetRepositoryStatus(_ context.Context, repositoryI
 }
 
 func (s *repositoryLifecycleStore) FindRepositoryByID(context.Context, foundation.ID) (*registrydomain.Repository, error) {
-	return s.repository, nil
+	return s.repository, s.findErr
 }
 
 func (s *repositoryLifecycleStore) SetRepositoryStatus(_ context.Context, _ foundation.ID, status string) error {
@@ -161,6 +162,17 @@ func TestRemoveRepositoryDoesNotProceedWhenAuditFails(t *testing.T) {
 
 	if err == nil || store.deleted {
 		t.Fatalf("repository removal proceeded despite audit failure: err=%v deleted=%v", err, store.deleted)
+	}
+}
+
+func TestValidateRemovalPreservesRepositoryLookupErrors(t *testing.T) {
+	want := errors.New("repository store unavailable")
+	service := NewRepositoryService(&repositoryLifecycleStore{findErr: want})
+
+	_, err := service.ValidateRemoval(context.Background(), foundation.ID("project"), foundation.ID("repository"))
+
+	if !errors.Is(err, want) {
+		t.Fatalf("expected lookup error %v, got %v", want, err)
 	}
 }
 

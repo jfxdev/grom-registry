@@ -36,7 +36,11 @@ func TestMigratePropagatesMigrationFailureWithoutMarkingItApplied(t *testing.T) 
 }
 
 func TestSQLiteMigrationLockPathSkipsMemoryDSNsAfterFilePrefixNormalization(t *testing.T) {
-	for _, databaseURL := range []string{"sqlite://:memory:", "sqlite://file::memory:"} {
+	for _, databaseURL := range []string{
+		"sqlite://:memory:",
+		"sqlite://file::memory:",
+		"sqlite://file:migration-failure-test?mode=memory&cache=shared",
+	} {
 		if path := sqliteMigrationLockPath(databaseURL); path != "" {
 			t.Fatalf("%s: expected no lock path, got %q", databaseURL, path)
 		}
@@ -52,7 +56,11 @@ func TestSQLiteFileMigrationLockSerializesAndTimesOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer unlock()
+	defer func() {
+		if unlock != nil {
+			unlock()
+		}
+	}()
 
 	_, err = sqliteFileMigrationLock(context.Background(), lockPath, 10*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "migration lock timeout") {
@@ -60,7 +68,7 @@ func TestSQLiteFileMigrationLockSerializesAndTimesOut(t *testing.T) {
 	}
 
 	unlock()
-	unlock = func() {}
+	unlock = nil
 	secondUnlock, err := sqliteFileMigrationLock(context.Background(), lockPath, time.Second)
 	if err != nil {
 		t.Fatalf("expected lock acquisition after release: %v", err)

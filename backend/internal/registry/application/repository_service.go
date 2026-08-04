@@ -301,7 +301,10 @@ func (s *RepositoryService) Remove(ctx context.Context, projectID, repositoryID 
 
 func (s *RepositoryService) ValidateRemoval(ctx context.Context, projectID, repositoryID foundation.ID) (*registrydomain.Repository, error) {
 	repository, err := s.store.FindRepositoryByID(ctx, repositoryID)
-	if err != nil || repository.ProjectID != projectID {
+	if err != nil {
+		return nil, err
+	}
+	if repository.ProjectID != projectID {
 		return nil, sql.ErrNoRows
 	}
 	if repository.Status != constants.RepositoryStatusArchived {
