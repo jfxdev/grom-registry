@@ -65,7 +65,7 @@ func run(logger *slog.Logger) error {
 			logger.Error("close database", "error", err)
 		}
 	}()
-	if err := database.Migrate(ctx, db, databaseKind, cfg.MigrationLockWait, logger); err != nil {
+	if err := database.MigrateWithDatabaseURL(ctx, db, databaseKind, cfg.DatabaseURL, cfg.MigrationLockWait, logger); err != nil {
 		return err
 	}
 

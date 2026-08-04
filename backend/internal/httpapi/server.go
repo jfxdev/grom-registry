@@ -824,6 +824,19 @@ func (s *Server) removeRepository(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// This handler is intentionally excluded from maintenanceGate's in-flight
+	// count. It initiates the short drain below, then revalidates both
+	// Distribution and inventory while new registry traffic is blocked.
+	drainCtx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	endMaintenance, err := s.maintenance.Begin(drainCtx)
+	cancel()
+	if err != nil {
+		w.Header().Set("Retry-After", "5")
+		writeError(w, r, http.StatusServiceUnavailable, "maintenance_active", "Repository removal is waiting for active registry traffic to drain")
+		return
+	}
+	defer endMaintenance()
+
 	repositoryID := foundation.ID(chi.URLParam(r, "repositoryId"))
 	repository, err := s.repositories.FindByID(r.Context(), repositoryID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1298,6 +1311,10 @@ func (s *Server) maintenanceGate(next http.Handler) http.Handler {
 func requiresQuiescenceTracking(r *http.Request) bool {
 	normalizedPath := path.Clean("/" + strings.TrimPrefix(r.URL.Path, "/"))
 	if r.Method == http.MethodPost && normalizedPath == "/api/v1/backups" {
+		return false
+	}
+	if r.Method == http.MethodDelete && strings.HasPrefix(normalizedPath, "/api/v1/projects/") &&
+		strings.Contains(normalizedPath, "/repositories/") {
 		return false
 	}
 	if normalizedPath == "/auth/token" || normalizedPath == "/v2" ||

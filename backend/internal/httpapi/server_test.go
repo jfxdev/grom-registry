@@ -902,6 +902,7 @@ func TestRequiresQuiescenceTrackingNormalizesSecuritySensitivePaths(t *testing.T
 		{method: http.MethodGet, target: "http://grom/ignored/%2e%2e/v2/manifests/latest", want: true},
 		{method: http.MethodGet, target: "http://grom//v2//blobs/digest", want: true},
 		{method: http.MethodPost, target: "http://grom/api//v1/./backups", want: false},
+		{method: http.MethodDelete, target: "http://grom/api/v1/projects/payments/repositories/repository-id", want: false},
 	} {
 		request := httptest.NewRequest(test.method, test.target, nil)
 		if actual := requiresQuiescenceTracking(request); actual != test.want {
