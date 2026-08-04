@@ -142,6 +142,19 @@ type lifecycleExecutionDistribution struct {
 	deletionCalls int
 }
 
+type rejectingLifecycleAudit struct{}
+
+func (rejectingLifecycleAudit) Record(
+	context.Context,
+	foundation.PrincipalRef,
+	string,
+	string,
+	foundation.ID,
+	map[string]any,
+) error {
+	return errors.New("audit unavailable")
+}
+
 func (d *lifecycleExecutionDistribution) ListRepositoryTags(
 	context.Context,
 	string,
@@ -363,5 +376,57 @@ func TestLifecycleExecutionReconcilesOnceAndRevalidatesEachCandidate(t *testing.
 			store.completeRunErr = nil
 			store.previewStatusErr = nil
 		})
+	}
+}
+
+func TestLifecycleExecutionDoesNotReachDistributionWhenStartAuditFails(t *testing.T) {
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	projectID := foundation.NewID()
+	repositoryID := foundation.NewID()
+	previewID := foundation.NewID()
+	expireAfterDays := 1
+	policies := []registrydomain.Policy{{
+		Type: constants.RepositoryPolicyRetention, Enabled: true,
+		TagPatterns: []string{"release-*"}, ExpireAfterDays: &expireAfterDays,
+	}}
+	inventory := []registrydomain.ManifestInventory{{
+		ID: foundation.NewID(), RepositoryID: repositoryID,
+		Digest: "sha256:one", Tags: []string{"release-one"},
+		State: constants.InventoryStateActive, FirstSeenAt: now.Add(-48 * time.Hour),
+	}}
+	previewItems, err := evaluateLifecycle(policies, inventory, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &lifecycleExecutionStore{
+		repository: &registrydomain.Repository{
+			ID: repositoryID, ProjectID: projectID, Name: "api", Policies: policies,
+		},
+		preview: &registrydomain.LifecyclePreview{
+			ID: previewID, RepositoryID: repositoryID,
+			Status: constants.LifecyclePreviewReady, ExpiresAt: now.Add(time.Hour),
+			Items: previewItems,
+		},
+		inventory: inventory,
+	}
+	distribution := &lifecycleExecutionDistribution{manifests: map[string]*ManifestMetadata{
+		"release-one": {Digest: "sha256:one"},
+		"sha256:one":  {Digest: "sha256:one"},
+	}}
+	inventoryService := NewInventoryService(store)
+	inventoryService.SetDistribution(distribution)
+	service := NewLifecycleService(store, inventoryService, distribution, rejectingLifecycleAudit{})
+	service.now = func() time.Time { return now }
+
+	run, err := service.Execute(
+		context.Background(), projectID, "payments", previewID, "cleanup",
+		foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: foundation.NewID()},
+	)
+
+	if err == nil {
+		t.Fatal("expected audit failure")
+	}
+	if run != nil || distribution.deletionCalls != 0 {
+		t.Fatalf("lifecycle execution reached Distribution despite audit failure: run=%#v deletions=%d", run, distribution.deletionCalls)
 	}
 }

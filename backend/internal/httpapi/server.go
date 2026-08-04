@@ -272,11 +272,12 @@ func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := userFromContext(r.Context())
-	if auditErr := s.audit.Record(
-		r.Context(), principalForUser(user), constants.AuditBackupDeleteRequested,
+	if err := s.recordAudit(
+		r, principalForUser(user), constants.AuditBackupDeleteRequested,
 		constants.AuditResourceBackup, foundation.ID(backupID), map[string]any{},
-	); auditErr != nil {
-		s.logger.Error("record backup deletion request audit event", "error", auditErr)
+	); err != nil {
+		s.internalError(w, r, err)
+		return
 	}
 	err := s.backups.Delete(r.Context(), backupID)
 	switch {
@@ -668,7 +669,23 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	if !requireSystemAdmin(w, r) {
 		return
 	}
-	err := s.projects.Delete(r.Context(), true, chi.URLParam(r, "project"))
+	project, err := s.projects.Find(r.Context(), chi.URLParam(r, "project"))
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if err := s.recordAudit(
+		r, principalForUser(userFromContext(r.Context())), constants.AuditProjectDeleteRequested,
+		constants.AuditResourceProject, project.ID, map[string]any{"slug": project.Slug},
+	); err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	err = s.projects.Delete(r.Context(), true, project.Slug)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
@@ -677,7 +694,7 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.internalError(w, r, err)
 	default:
-		_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditProjectDeleted, constants.AuditResourceProject, foundation.ID(chi.URLParam(r, "project")), nil)
+		_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditProjectDeleted, constants.AuditResourceProject, project.ID, map[string]any{"slug": project.Slug})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

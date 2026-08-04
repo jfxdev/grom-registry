@@ -11,6 +11,7 @@ const (
 	AuditAccessKeyCreated             = "identity.access_key_created"
 	AuditAccessKeyRevoked             = "identity.access_key_revoked"
 	AuditProjectCreated               = "projects.project_created"
+	AuditProjectDeleteRequested       = "projects.project_delete_requested"
 	AuditProjectDeleted               = "projects.project_deleted"
 	AuditMembershipUpserted           = "projects.membership_upserted"
 	AuditMembershipRemoved            = "projects.membership_removed"

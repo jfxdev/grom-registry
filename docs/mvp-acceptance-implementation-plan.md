@@ -5,7 +5,9 @@
 **Status: Work packages A and B are implemented and accepted locally and in CI
 on August 3, 2026. Their recorded CI evidence is
 [PR #6](https://github.com/jfxdev/grom-registry/pull/6) for A and
-[PR #16](https://github.com/jfxdev/grom-registry/pull/16) for B.**
+[PR #16](https://github.com/jfxdev/grom-registry/pull/16) for B. Work packages
+C and D are also accepted locally and in CI on August 3, 2026; their recorded
+evidence is [PR #17](https://github.com/jfxdev/grom-registry/pull/17).**
 
 This plan closes the next two default-MVP acceptance gaps from
 [`architecture-and-mvp.md`](architecture-and-mvp.md):
@@ -152,8 +154,9 @@ preservation.
 
 ## Work package C: administrative user disablement revokes a live session
 
-**Status: implemented and accepted locally on August 3, 2026; mandatory CI
-evidence remains required before MVP scenario 21 is marked Passing.**
+**Status: implemented and accepted locally and in CI on August 3, 2026; the
+mandatory `Registry E2E (Docker)` check passed in
+[PR #17](https://github.com/jfxdev/grom-registry/pull/17).**
 
 ### Current baseline
 
@@ -195,15 +198,17 @@ Run the following test-only scenario through the public Grom endpoint:
 
 ### Acceptance and evidence
 
-The scenario is **Passing** only when `Registry E2E (Docker)` succeeds in CI
-with both the stale-cookie rejection and the disabled-user sign-in rejection.
-It closes MVP scenario 21. It must not log the user's password or session
+The mandatory `Registry E2E (Docker)` check passed in
+[PR #17](https://github.com/jfxdev/grom-registry/pull/17) with both the
+stale-cookie rejection and the disabled-user sign-in rejection. MVP scenario 21
+is therefore **Passing**. The test does not log the user's password or session
 cookie in diagnostics.
 
 ## Work package D: full-stack restart preserves registry state and blobs
 
-**Status: implemented and accepted locally on August 3, 2026; mandatory CI
-evidence remains required before MVP scenario 12 is marked Passing.**
+**Status: implemented and accepted locally and in CI on August 3, 2026; the
+mandatory `Registry E2E (Docker)` check passed in
+[PR #17](https://github.com/jfxdev/grom-registry/pull/17).**
 
 ### Current baseline
 
@@ -245,9 +250,10 @@ public, Docker-backed boundary without changing product behavior.
 
 ### Acceptance and evidence
 
-The scenario is **Passing** only when the mandatory `Registry E2E (Docker)`
-check succeeds in CI with the restarted-stack pull of `v1` and push of `v2`.
-It closes MVP scenario 12.
+The mandatory `Registry E2E (Docker)` check passed in
+[PR #17](https://github.com/jfxdev/grom-registry/pull/17) with the
+restarted-stack pull of `v1` and push of `v2`. MVP scenario 12 is therefore
+**Passing**.
 
 ## Execution order
 
@@ -259,9 +265,9 @@ It closes MVP scenario 12.
    readiness assertions.
 5. Completed: wire the boot-acceptance command into CI, accept its successful
    run, and refresh the architecture acceptance table with dated evidence.
-6. Implemented locally: add the public, test-only user-disable/session-
-   revocation scenario to the registry E2E harness; record its mandatory CI
-   evidence before closing scenario 21.
-7. Implemented locally: add the full-stack restart preservation scenario to
-   the registry E2E harness; record its mandatory CI evidence before closing
-   scenario 12.
+6. Completed: add and accept the public, test-only user-disable/session-
+   revocation scenario in the mandatory CI run recorded by
+   [PR #17](https://github.com/jfxdev/grom-registry/pull/17).
+7. Completed: add and accept the full-stack restart-preservation scenario in
+   the mandatory CI run recorded by
+   [PR #17](https://github.com/jfxdev/grom-registry/pull/17).
