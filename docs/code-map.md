@@ -24,6 +24,8 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `.github/workflows/admin-journey-e2e.yml` | Mandatory browser-driven administrative first-push acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/boot-acceptance-e2e.yml` | Mandatory real-Docker default-installation boot, migration, readiness, and API-documentation acceptance check |
 | `.github/workflows/backup-restore-e2e.yml` | Real-Docker volume-loss and recovery acceptance check |
+| `.github/workflows/production-image-smoke.yml` | Clean-checkout production-image build, non-root assertion, and public-surface smoke check |
+| `.github/workflows/release.yml` | Tag-triggered GHCR image publication, SBOM and vulnerability-report generation, release checksums, and GitHub Release assets |
 | `docs/` | Architecture, domain inventory, operations, decisions, and visual identity |
 | `AGENTS.md` | Current operational instructions for coding agents |
 
@@ -38,7 +40,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/backup-and-disaster-recovery-implementation-plan.md` | Implemented default SQLite/local-storage backup, empty-volume restore, and recovery acceptance design |
 | `docs/backup-and-disaster-recovery.md` | Operator backup, restore, encrypted retention, drill, and troubleshooting procedure |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
-| `docs/mvp-acceptance-implementation-plan.md` | Implemented public-browser first-push journey plus boot/readiness/API-docs acceptance work awaiting evidence |
+| `docs/mvp-acceptance-implementation-plan.md` | Implemented and accepted public-browser first-push, boot/readiness/API-docs, session-revocation, and restart-preservation acceptance work |
 | `docs/visual-identity.md` | Approved visual direction, responsive rules, and UI acceptance criteria |
 | `docs/visual-implementation-plan.md` | Detailed frontend delivery phases, interaction behavior, and validation plan |
 | `docs/assets/visual-identity/` | Visual concept references used by the identity guide |
@@ -158,6 +160,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `make test-admin-e2e` | Run the isolated real-browser project, access-key, first-push, and inventory journey |
 | `make test-boot-acceptance` | Run the isolated default-installation boot, migration, readiness, and API-documentation journey |
 | `make test-backup-restore-e2e` | Destroy and restore an isolated default installation and verify old and new registry activity |
+| `make test-production-image-smoke` | Build the production image from a clean checkout and verify its non-root public runtime surface |
 | `make build` | Build frontend and backend |
 | `make dev` | Start the Go backend and Vite frontend together |
 | `make compose-up` | Build and start Grom plus Distribution |

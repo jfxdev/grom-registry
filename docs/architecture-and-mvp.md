@@ -43,17 +43,18 @@ scanner execution.
 
 | Phase | Status | Current evidence | Remaining exit work |
 |---|---|---|---|
-| Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, and an accepted public boot/migration/docs journey exist | Production image build, dependency/container scanning, and PostgreSQL CI before claiming the corresponding support |
+| Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, an accepted public boot/migration/docs journey, and a clean-checkout production-image smoke check exist | Dependency/container scanning and PostgreSQL CI before claiming the corresponding support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
 | Phase 2: registry browsing and core UI | Partially accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, user-disable flows, and essential audit acceptance evidence exist | Pagination decision and complete first-push Playwright coverage |
-| Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, and accepted full-stack restart preservation exist | Key rotation, upgrade tests, Docker smoke test and release artifacts; expanded matrices follow advertised capabilities |
+| Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, accepted full-stack restart preservation, a clean-checkout image smoke check, and a tag-triggered release-artifact workflow exist | Key rotation, upgrade tests, and first-release publication evidence; expanded matrices follow advertised capabilities |
 | Phase 4: integrations placeholder | Accepted for MVP | Backend-driven planned catalog and disabled read-only UI exist | ADR is required before active event delivery or scan-result storage, not for the inert placeholder |
 
 `make test` passed on July 29, 2026, including backend tests, the SQLite
 integration flow, frontend lint, 23 frontend tests, and TypeScript checking.
 `make build` also passed on July 29, 2026. The PostgreSQL integration test
-remains conditional on `GROM_TEST_POSTGRES_URL`; a container smoke test and
-release acceptance run still need to be recorded.
+remains conditional on `GROM_TEST_POSTGRES_URL`. The clean-checkout container
+smoke test passed locally on August 4, 2026; first tagged-release execution
+evidence remains pending.
 
 ### Update on August 2, 2026
 
@@ -506,6 +507,9 @@ Acceptance:
 
 ### Completion step 8: create release engineering outputs
 
+**Status: publication automation implemented; first tagged-release evidence is
+pending.**
+
 Work:
 
 1. Build a versioned, non-root production image.
@@ -517,6 +521,16 @@ Work:
    restore documentation.
 7. Record database and storage compatibility for the release.
 8. Smoke-test a clean installation and an upgrade before publishing.
+
+Implementation evidence:
+
+- `.github/workflows/release.yml` validates a semantic-version release tag,
+  builds the root Dockerfile with that version, and publishes versioned image
+  tags to GHCR.
+- It records the immutable image digest, generates an SPDX SBOM and a Trivy
+  high/critical vulnerability report, writes checksums for every release asset,
+  and attaches them to the GitHub Release. BuildKit provenance and SBOM
+  attestations are published with the image.
 
 Acceptance:
 
@@ -1494,8 +1508,11 @@ Grom instances are supported.
   3, 2026 in [PR #16](https://github.com/jfxdev/grom-registry/pull/16). Backend
   and frontend unit coverage reports are
   uploaded separately to Codecov, with an explicit 70% patch coverage target.
-- **Pending:** production image build and scanning, broader dependency/container
-  scanning, and PostgreSQL CI before PostgreSQL is advertised as fully
+- **Implemented:** the `Production Image Smoke (Docker)` workflow builds the
+  root Dockerfile from a clean checkout, verifies the final image declares the
+  non-root `grom` user, and starts the isolated public stack before checking
+  health, readiness, API documentation, and the registry bearer challenge.
+- **Pending:** dependency/container scanning and PostgreSQL CI before PostgreSQL is advertised as fully
   supported.
 
 Exit criterion: one command starts Grom with SQLite, applies pending migrations
@@ -1504,8 +1521,7 @@ migration lifecycle must complete against PostgreSQL in CI before PostgreSQL is
 included in the supported release matrix.
 
 Remaining default-path evidence is owned by completion steps 4, 5, 7, and 8.
-Production image build/scanning, broader dependency scanning,
-restart/migration acceptance, and release artifacts are not yet accepted.
+Dependency/container scanning and release artifacts are not yet accepted.
 PostgreSQL CI remains a capability-specific gate.
 
 ### Phase 1: authentication and project authorization
@@ -1584,8 +1600,8 @@ post-MVP unless promoted explicitly.
 
 Exit criterion: a tagged release can be installed and upgraded with preserved metadata and blobs.
 
-Completion step 1 is implemented. Completion steps 4, 5, 7, and 8 own the
-remaining default-path recovery, upgrade, Docker, and release work. Expanded
+Completion step 1 is implemented. Completion steps 4, 7, and 8 own the
+remaining default-path key-rotation, upgrade, scanning, and release work. Expanded
 compatibility and conformance gates apply only to advertised capabilities.
 
 ### Phase 4: integrations placeholder

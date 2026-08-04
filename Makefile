@@ -1,4 +1,4 @@
-.PHONY: generate test test-coverage test-registry-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e build dev compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
+.PHONY: generate test test-coverage test-registry-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-production-image-smoke build dev compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
 
 DEV_ENV_FILE ?= .env
 
@@ -25,6 +25,9 @@ test-boot-acceptance:
 
 test-backup-restore-e2e:
 	cd backend && GROM_RUN_BACKUP_RESTORE_E2E=1 go test -count=1 -timeout=15m ./tests/backuprestoree2e
+
+test-production-image-smoke:
+	deploy/compose/smoke-production-image.sh
 
 build:
 	cd frontend && npm run build
