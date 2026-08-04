@@ -174,6 +174,7 @@ func (d *deletionTestDistribution) DeleteManifest(
 type deletionTestAudit struct {
 	actions  []string
 	metadata []map[string]any
+	err      error
 }
 
 func (a *deletionTestAudit) Record(
@@ -185,7 +186,7 @@ func (a *deletionTestAudit) Record(
 ) error {
 	a.actions = append(a.actions, action)
 	a.metadata = append(a.metadata, metadata)
-	return nil
+	return a.err
 }
 
 func TestArtifactDeletionPersistsAndMarksInventory(t *testing.T) {
@@ -309,5 +310,39 @@ func TestArtifactDeletionAuditsExecutionFailures(t *testing.T) {
 				t.Fatalf("unexpected deletion failure audit metadata: %#v", failure)
 			}
 		})
+	}
+}
+
+func TestArtifactDeletionDoesNotReachDistributionWhenStartAuditFails(t *testing.T) {
+	projectID := foundation.NewID()
+	repository := &registrydomain.Repository{
+		ID: foundation.NewID(), ProjectID: projectID, Name: "api",
+		Policies: []registrydomain.Policy{{
+			Type: constants.RepositoryPolicyManualDeletion, Enabled: true, RequireReason: true,
+		}},
+	}
+	store := &deletionTestStore{repository: repository}
+	distribution := &deletionTestDistribution{digest: "sha256:artifact"}
+	inventory := NewInventoryService(store)
+	inventory.SetDistribution(distribution)
+	service := NewArtifactDeletionService(
+		store, NewRepositoryService(store), inventory, distribution,
+		&deletionTestAudit{err: errors.New("audit unavailable")},
+	)
+
+	deletion, err := service.Execute(
+		context.Background(), projectID, "payments", "api", "dev", "cleanup",
+		"sha256:artifact", []string{"dev"},
+		foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: foundation.NewID()},
+	)
+
+	if err == nil {
+		t.Fatal("expected audit failure")
+	}
+	if deletion != nil || distribution.deleted != "" {
+		t.Fatalf("manifest deletion proceeded despite audit failure: deletion=%#v, distribution=%q", deletion, distribution.deleted)
+	}
+	if store.deletion == nil || store.deletion.Status != constants.ArtifactDeletionFailed {
+		t.Fatalf("expected persisted failed deletion operation, got %#v", store.deletion)
 	}
 }

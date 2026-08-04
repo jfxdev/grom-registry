@@ -45,8 +45,8 @@ scanner execution.
 |---|---|---|---|
 | Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, and an accepted public boot/migration/docs journey exist | Production image build, dependency/container scanning, and PostgreSQL CI before claiming the corresponding support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
-| Phase 2: registry browsing and core UI | Partially accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, and user-disable flows exist | Audit acceptance evidence, pagination decision and complete first-push Playwright coverage |
-| Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, and UI-driven quiesced backup plus same-image recovery exist | Recorded restart CI evidence, key rotation, upgrade tests, Docker smoke test and release artifacts; expanded matrices follow advertised capabilities |
+| Phase 2: registry browsing and core UI | Partially accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, user-disable flows, and essential audit acceptance evidence exist | Pagination decision and complete first-push Playwright coverage |
+| Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, and accepted full-stack restart preservation exist | Key rotation, upgrade tests, Docker smoke test and release artifacts; expanded matrices follow advertised capabilities |
 | Phase 4: integrations placeholder | Accepted for MVP | Backend-driven planned catalog and disabled read-only UI exist | ADR is required before active event delivery or scan-result storage, not for the inert placeholder |
 
 `make test` passed on July 29, 2026, including backend tests, the SQLite
@@ -207,9 +207,8 @@ Evidence:
 
 ### Completion step 2: complete required audit coverage
 
-**Status: event production and SQLite persistence acceptance are implemented;
-public end-to-end and remaining destructive-operation failure-path evidence
-remain open.**
+**Status: implemented and accepted by application, HTTP, and SQLite-persistence
+tests. Audit-event presentation remains post-MVP.**
 
 Primary areas:
 
@@ -238,11 +237,17 @@ Evidence:
 
 - `backend/internal/httpapi/server_test.go` covers authentication,
   user/service-account administration, access-key changes, memberships,
-  project lifecycle, user disabling, and sanitized metadata assertions.
+  project lifecycle, user disabling, sanitized metadata assertions, and
+  fail-closed project and local-backup deletion when the initial audit record
+  cannot persist.
 - `backend/internal/audit/application/service_test.go` covers structured event
   creation, metadata serialization failures, and store error propagation.
 - `backend/internal/audit/infrastructure/persistence/bun/store_test.go` covers
   SQLite persistence and idempotent `RecordOnce` behavior.
+- Registry application tests prove that failed initial audit recording prevents
+  logical-repository removal, lifecycle execution, and Distribution manifest
+  deletion; the latter leaves a persisted failed deletion operation without
+  reaching Distribution.
 
 Acceptance:
 
@@ -1022,7 +1027,8 @@ Implementation evidence:
 - `backend/tests/registrye2e` performs a public, full-stack Grom and
   Distribution restart after a fixture push, then proves persisted management
   state, Writer authorization, blob pull, and a new push. It passed locally on
-  August 3, 2026; mandatory CI evidence remains required.
+  August 3, 2026 and in the mandatory `Registry E2E (Docker)` CI check in
+  [PR #17](https://github.com/jfxdev/grom-registry/pull/17).
 
 Current gap: PostgreSQL uses an advisory lock, but SQLite currently uses only an
 in-process mutex. Completion step 7 must add cross-process SQLite coordination
@@ -1409,7 +1415,7 @@ This is enough to preserve an intentional extension point without pretending the
 | Never log credentials or Authorization headers | Implemented | Access logging records selected request metadata and has a credential-regression test |
 | Rate-limit sign-in and `/auth/token` failures | Implemented | Bounded per-client in-process limiter with configurable window and block duration |
 | Return access-key secrets once and rotate when lost | Implemented | Add end-to-end reveal-once and rotation coverage |
-| Audit sign-in, key changes, memberships, and service-account changes | Partial | Add durable persistence, sanitization, and failure-path acceptance coverage |
+| Audit sign-in, key changes, memberships, and service-account changes | Implemented | Preserve durable persistence, sanitization, and fail-closed destructive-operation coverage; audit presentation remains post-MVP |
 | Run containers as non-root where supported | Partial | Grom image is non-root; verify and document Distribution runtime behavior |
 | Keep the Distribution port private | Implemented in shipped Compose | Preserve in every deployment profile |
 | Trust proxy headers only from configured proxies | Implemented | Immediate peer must match an explicit IP/CIDR in `GROM_TRUSTED_PROXIES` |
@@ -1532,9 +1538,9 @@ registry protocol with Docker.
 - **Implemented:** project, repository, tag, manifest-detail, memberships,
   users, service accounts, token management, copyable pull/push guidance, and
   logical-repository archival/removal screens exist.
-- **Partial:** the complete security-sensitive event set is produced and has
-  SQLite persistence/sanitization coverage; public end-to-end audit acceptance
-  and audit presentation remain intentionally outside the default MVP.
+- **Implemented:** the complete security-sensitive event set has SQLite
+  persistence and sanitization coverage; failed audit intent blocks destructive
+  operations. Audit presentation remains intentionally outside the default MVP.
 - **Partial:** useful empty/error states exist in implemented screens;
   pagination requirements and browser-level acceptance beyond the accepted
   first-push journey remain unresolved.
@@ -1571,8 +1577,9 @@ post-MVP unless promoted explicitly.
   and failed-migration non-exposure with unmarked migration history. It passed
   locally and in the mandatory CI check on August 3, 2026 in
   [PR #16](https://github.com/jfxdev/grom-registry/pull/16). The public
-  Distribution/blob restart journey also passed locally; its mandatory CI
-  evidence remains open.
+  Distribution/blob restart and user-session revocation journeys passed in the
+  mandatory registry CI check on August 3, 2026 in
+  [PR #17](https://github.com/jfxdev/grom-registry/pull/17).
 
 Exit criterion: a tagged release can be installed and upgraded with preserved metadata and blobs.
 
@@ -1651,7 +1658,7 @@ Status vocabulary:
 | 9 | Docker Engine can push and pull supported image content | Default MVP | Passing | Mandatory registry E2E job exercises Docker through the public Grom endpoint |
 | 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Passing | `make test-admin-e2e` passed locally and the mandatory `Admin Journey E2E (Docker)` workflow passed in [PR #6](https://github.com/jfxdev/grom-registry/pull/6) |
 | 11 | Integrations shows backend-driven planned providers with no active configuration | Default MVP | Passing | Existing API/UI tests cover the read-only flow |
-| 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Partial | The public process-level restart test passed locally; record its `Registry E2E (Docker)` CI evidence before marking passing |
+| 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Passing | The public process-level restart test passed in the mandatory `Registry E2E (Docker)` workflow in [PR #17](https://github.com/jfxdev/grom-registry/pull/17) |
 | 13 | The applicable backend suite passes against PostgreSQL | PostgreSQL support | Partial | Mandatory PostgreSQL CI job with no skip path |
 | 14 | Empty or supported older databases migrate before readiness | Default MVP | Passing | `make test-boot-acceptance` and the mandatory `Boot Acceptance E2E (Docker)` workflow passed in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
 | 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Passing | The real failing-migration fixture passed through the mandatory `Boot Acceptance E2E (Docker)` workflow in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
@@ -1659,8 +1666,8 @@ Status vocabulary:
 | 17 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Passing | Backend contract tests and frontend generated-code freshness check run in CI |
 | 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
 | 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |
-| 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Partial | Durable SQLite persistence and sanitization tests exist; complete destructive failure-path coverage |
-| 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Partial | Add the test-only public HTTP/session acceptance scenario in [`mvp-acceptance-implementation-plan.md`](mvp-acceptance-implementation-plan.md) and record its `Registry E2E (Docker)` CI evidence |
+| 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Passing | HTTP/application tests cover event production and sanitization; SQLite persistence tests cover durable storage; failed audit intent blocks backup, project, logical-repository, lifecycle, and manifest-deletion operations |
+| 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Passing | The public stale-cookie and disabled-user login checks passed in the mandatory `Registry E2E (Docker)` workflow in [PR #17](https://github.com/jfxdev/grom-registry/pull/17) |
 | 22 | ORAS can push and pull representative generic OCI content | Generic OCI support | Missing | ORAS smoke job before advertising generic OCI support |
 | 23 | An S3-backed installation passes push, pull, restart, and restore checks | S3 support | Missing | Documented S3 compatibility job before advertising S3 support |
 

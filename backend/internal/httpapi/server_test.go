@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -36,6 +37,7 @@ import (
 type serverTestProjectRepository struct {
 	projectdomain.Repository
 	project *projectdomain.Project
+	deleted bool
 }
 
 type serverTestProjectDeletionGuard struct{}
@@ -53,7 +55,9 @@ type serverTestAuditStore struct {
 func (store *serverTestAuditStore) Record(_ context.Context, event *auditdomain.Event) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	store.events = append(store.events, event)
+	if store.err == nil {
+		store.events = append(store.events, event)
+	}
 	return store.err
 }
 
@@ -70,6 +74,7 @@ type serverTestBackupAgent struct {
 	deleteErr        error
 	downloadErr      error
 	downloadResponse *http.Response
+	deleteCalls      int
 	createStarted    chan struct{}
 	createRelease    chan struct{}
 }
@@ -101,6 +106,9 @@ func (agent *serverTestBackupAgent) Download(context.Context, string) (*http.Res
 }
 
 func (agent *serverTestBackupAgent) Delete(context.Context, string) error {
+	agent.mu.Lock()
+	defer agent.mu.Unlock()
+	agent.deleteCalls++
 	return agent.deleteErr
 }
 
@@ -113,6 +121,14 @@ func (r *serverTestProjectRepository) FindProjectBySlug(
 	string,
 ) (*projectdomain.Project, error) {
 	return r.project, nil
+}
+
+func (r *serverTestProjectRepository) DeleteProject(_ context.Context, projectID foundation.ID) error {
+	if r.project == nil || r.project.ID != projectID {
+		return sql.ErrNoRows
+	}
+	r.deleted = true
+	return nil
 }
 
 func TestOriginGuardAllowsPublicAndForwardedDevelopmentOrigins(t *testing.T) {
@@ -313,7 +329,7 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 		}
 		actions[event.Action] = true
 	}
-	for _, action := range []string{constants.AuditLoginFailed, constants.AuditLoginSucceeded, constants.AuditUserCreated, constants.AuditUserDisabled, constants.AuditServiceAccountCreated, constants.AuditAccessKeyCreated, constants.AuditAccessKeyRevoked, constants.AuditProjectCreated, constants.AuditProjectDeleted, constants.AuditMembershipUpserted, constants.AuditMembershipRemoved, constants.AuditRegistryAuthFailed} {
+	for _, action := range []string{constants.AuditLoginFailed, constants.AuditLoginSucceeded, constants.AuditUserCreated, constants.AuditUserDisabled, constants.AuditServiceAccountCreated, constants.AuditAccessKeyCreated, constants.AuditAccessKeyRevoked, constants.AuditProjectCreated, constants.AuditProjectDeleteRequested, constants.AuditProjectDeleted, constants.AuditMembershipUpserted, constants.AuditMembershipRemoved, constants.AuditRegistryAuthFailed} {
 		if !actions[action] {
 			t.Errorf("missing audit action %s", action)
 		}
@@ -736,6 +752,50 @@ func TestDeleteBackupMapsErrorsAndRecordsAudit(t *testing.T) {
 		t.Fatalf("unexpected active delete response %d: %s", conflict.Code, conflict.Body.String())
 	}
 	close(release)
+}
+
+func TestDeleteBackupDoesNotProceedWhenAuditIntentCannotPersist(t *testing.T) {
+	backupID := foundation.NewID().String()
+	agent := &serverTestBackupAgent{available: true}
+	server := backupTestServer(agent, &serverTestAuditStore{err: errors.New("audit unavailable")})
+	response := httptest.NewRecorder()
+
+	server.deleteBackup(response, backupRequestWithID(http.MethodDelete, backupID))
+
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "internal_error") {
+		t.Fatalf("expected audit failure response, got %d: %s", response.Code, response.Body.String())
+	}
+	if agent.deleteCalls != 0 {
+		t.Fatalf("backup deletion proceeded despite audit failure: %d calls", agent.deleteCalls)
+	}
+}
+
+func TestDeleteProjectDoesNotProceedWhenAuditIntentCannotPersist(t *testing.T) {
+	project := &projectdomain.Project{ID: foundation.NewID(), Slug: "payments"}
+	repository := &serverTestProjectRepository{project: project}
+	projects := projectapp.New(repository)
+	projects.SetDeletionGuard(serverTestProjectDeletionGuard{})
+	server := &Server{
+		projects: projects,
+		audit:    auditapp.New(&serverTestAuditStore{err: errors.New("audit unavailable")}),
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	admin := &identitydomain.User{ID: foundation.NewID(), SystemAdmin: true}
+	response := httptest.NewRecorder()
+	request := withUserAndParams(
+		httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/projects/payments", nil),
+		admin,
+		map[string]string{"project": project.Slug},
+	)
+
+	server.deleteProject(response, request)
+
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "internal_error") {
+		t.Fatalf("expected audit failure response, got %d: %s", response.Code, response.Body.String())
+	}
+	if repository.deleted {
+		t.Fatal("project deletion proceeded despite audit failure")
+	}
 }
 
 func TestDownloadBackupStreamsOnlySuccessfulAgentResponse(t *testing.T) {

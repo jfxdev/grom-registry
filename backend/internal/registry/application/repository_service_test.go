@@ -28,6 +28,19 @@ type repositoryListStore struct {
 	upserts      int
 }
 
+type rejectingRepositoryAudit struct{}
+
+func (rejectingRepositoryAudit) Record(
+	context.Context,
+	foundation.PrincipalRef,
+	string,
+	string,
+	foundation.ID,
+	map[string]any,
+) error {
+	return errors.New("audit unavailable")
+}
+
 func (s *repositoryListStore) ListRepositories(context.Context, foundation.ID) ([]registrydomain.Repository, error) {
 	return append([]registrydomain.Repository(nil), s.repositories...), nil
 }
@@ -132,6 +145,22 @@ func TestRemoveRepositoryRequiresArchiveAndEmptyInventory(t *testing.T) {
 	err = service.Remove(context.Background(), projectID, repositoryID, foundation.PrincipalRef{})
 	if !errors.Is(err, ErrRepositoryNotEmpty) {
 		t.Fatalf("expected empty inventory requirement, got %v", err)
+	}
+}
+
+func TestRemoveRepositoryDoesNotProceedWhenAuditFails(t *testing.T) {
+	projectID := foundation.ID("project")
+	repositoryID := foundation.ID("repository")
+	store := &repositoryLifecycleStore{repository: &registrydomain.Repository{
+		ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusArchived,
+	}}
+	service := NewRepositoryService(store)
+	service.SetAuditRecorder(rejectingRepositoryAudit{})
+
+	err := service.Remove(context.Background(), projectID, repositoryID, foundation.PrincipalRef{})
+
+	if err == nil || store.deleted {
+		t.Fatalf("repository removal proceeded despite audit failure: err=%v deleted=%v", err, store.deleted)
 	}
 }
 
