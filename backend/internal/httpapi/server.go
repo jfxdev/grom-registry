@@ -824,45 +824,60 @@ func (s *Server) removeRepository(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	repositoryID := foundation.ID(chi.URLParam(r, "repositoryId"))
+	validate := func(ctx context.Context) bool {
+		repository, err := s.repositories.ValidateRemoval(ctx, project.ID, repositoryID)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+			return false
+		}
+		if errors.Is(err, registryapp.ErrRepositoryNotArchived) {
+			writeError(w, r, http.StatusConflict, "repository_not_archived", err.Error())
+			return false
+		}
+		if errors.Is(err, registryapp.ErrRepositoryNotEmpty) {
+			writeError(w, r, http.StatusConflict, "repository_not_empty", err.Error())
+			return false
+		}
+		if err != nil {
+			s.internalError(w, r, err)
+			return false
+		}
+		discovered, err := s.distributionClient.ListProjectRepositories(ctx, project.Slug)
+		if err != nil {
+			writeError(w, r, http.StatusServiceUnavailable, "registry_unavailable", "Registry catalog must be available before removing a repository")
+			return false
+		}
+		for _, name := range discovered {
+			if name == repository.Name {
+				writeError(w, r, http.StatusConflict, "repository_not_empty", "Remove all manifests before removing the logical repository")
+				return false
+			}
+		}
+		return true
+	}
+	if !validate(r.Context()) {
+		return
+	}
+
 	// This handler is intentionally excluded from maintenanceGate's in-flight
-	// count. It initiates the short drain below, then revalidates both
-	// Distribution and inventory while new registry traffic is blocked.
-	drainCtx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	// count. It initiates the short drain below, then repeats validation while
+	// new registry traffic and management mutations are blocked.
+	drainCtx, drainCancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	endMaintenance, err := s.maintenance.Begin(drainCtx)
-	cancel()
+	drainCancel()
 	if err != nil {
 		w.Header().Set("Retry-After", "5")
 		writeError(w, r, http.StatusServiceUnavailable, "maintenance_active", "Repository removal is waiting for active registry traffic to drain")
 		return
 	}
 	defer endMaintenance()
-
-	repositoryID := foundation.ID(chi.URLParam(r, "repositoryId"))
-	repository, err := s.repositories.FindByID(r.Context(), repositoryID)
-	if errors.Is(err, sql.ErrNoRows) {
-		writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+	operationCtx, operationCancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer operationCancel()
+	if !validate(operationCtx) {
 		return
 	}
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	if repository.ProjectID != project.ID {
-		writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
-		return
-	}
-	discovered, err := s.distributionClient.ListProjectRepositories(r.Context(), project.Slug)
-	if err != nil {
-		writeError(w, r, http.StatusServiceUnavailable, "registry_unavailable", "Registry catalog must be available before removing a repository")
-		return
-	}
-	for _, name := range discovered {
-		if name == repository.Name {
-			writeError(w, r, http.StatusConflict, "repository_not_empty", "Remove all manifests before removing the logical repository")
-			return
-		}
-	}
-	if err := s.repositories.Remove(r.Context(), project.ID, repositoryID, actor); err != nil {
+	if err := s.repositories.Remove(operationCtx, project.ID, repositoryID, actor); err != nil {
 		switch {
 		case errors.Is(err, registryapp.ErrRepositoryNotArchived):
 			writeError(w, r, http.StatusConflict, "repository_not_archived", err.Error())
@@ -1313,9 +1328,13 @@ func requiresQuiescenceTracking(r *http.Request) bool {
 	if r.Method == http.MethodPost && normalizedPath == "/api/v1/backups" {
 		return false
 	}
-	if r.Method == http.MethodDelete && strings.HasPrefix(normalizedPath, "/api/v1/projects/") &&
-		strings.Contains(normalizedPath, "/repositories/") {
-		return false
+	if r.Method == http.MethodDelete {
+		segments := strings.Split(normalizedPath, "/")
+		if len(segments) == 7 && segments[1] == "api" && segments[2] == "v1" &&
+			segments[3] == "projects" && segments[5] == "repositories" &&
+			segments[4] != "" && segments[6] != "" {
+			return false
+		}
 	}
 	if normalizedPath == "/auth/token" || normalizedPath == "/v2" ||
 		strings.HasPrefix(normalizedPath, "/v2/") {

@@ -3,6 +3,8 @@ package database
 import (
 	"context"
 	"log/slog"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -31,4 +33,37 @@ func TestMigratePropagatesMigrationFailureWithoutMarkingItApplied(t *testing.T) 
 	if count != 0 {
 		t.Fatalf("failed migration was marked as applied: %d", count)
 	}
+}
+
+func TestSQLiteMigrationLockPathSkipsMemoryDSNsAfterFilePrefixNormalization(t *testing.T) {
+	for _, databaseURL := range []string{"sqlite://:memory:", "sqlite://file::memory:"} {
+		if path := sqliteMigrationLockPath(databaseURL); path != "" {
+			t.Fatalf("%s: expected no lock path, got %q", databaseURL, path)
+		}
+	}
+	if path := sqliteMigrationLockPath("sqlite:///var/lib/grom/grom.db"); path != "/var/lib/grom/grom.db.migration.lock" {
+		t.Fatalf("unexpected file-backed lock path %q", path)
+	}
+}
+
+func TestSQLiteFileMigrationLockSerializesAndTimesOut(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "grom.db.migration.lock")
+	unlock, err := sqliteFileMigrationLock(context.Background(), lockPath, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+
+	_, err = sqliteFileMigrationLock(context.Background(), lockPath, 10*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "migration lock timeout") {
+		t.Fatalf("expected lock timeout, got %v", err)
+	}
+
+	unlock()
+	unlock = func() {}
+	secondUnlock, err := sqliteFileMigrationLock(context.Background(), lockPath, time.Second)
+	if err != nil {
+		t.Fatalf("expected lock acquisition after release: %v", err)
+	}
+	secondUnlock()
 }

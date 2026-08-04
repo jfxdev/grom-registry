@@ -287,19 +287,9 @@ func (s *RepositoryService) Archive(ctx context.Context, projectID, repositoryID
 }
 
 func (s *RepositoryService) Remove(ctx context.Context, projectID, repositoryID foundation.ID, actor foundation.PrincipalRef) error {
-	repository, err := s.store.FindRepositoryByID(ctx, repositoryID)
-	if err != nil || repository.ProjectID != projectID {
-		return sql.ErrNoRows
-	}
-	if repository.Status != constants.RepositoryStatusArchived {
-		return ErrRepositoryNotArchived
-	}
-	hasLiveManifests, err := s.store.RepositoryHasLiveManifests(ctx, repositoryID)
+	repository, err := s.ValidateRemoval(ctx, projectID, repositoryID)
 	if err != nil {
 		return err
-	}
-	if hasLiveManifests {
-		return ErrRepositoryNotEmpty
 	}
 	if s.audit != nil {
 		if err := s.audit.Record(ctx, actor, constants.AuditRepositoryRemoved, constants.AuditResourceRepository, repositoryID, map[string]any{"name": repository.Name}); err != nil {
@@ -307,6 +297,24 @@ func (s *RepositoryService) Remove(ctx context.Context, projectID, repositoryID 
 		}
 	}
 	return s.store.DeleteRepository(ctx, repositoryID)
+}
+
+func (s *RepositoryService) ValidateRemoval(ctx context.Context, projectID, repositoryID foundation.ID) (*registrydomain.Repository, error) {
+	repository, err := s.store.FindRepositoryByID(ctx, repositoryID)
+	if err != nil || repository.ProjectID != projectID {
+		return nil, sql.ErrNoRows
+	}
+	if repository.Status != constants.RepositoryStatusArchived {
+		return nil, ErrRepositoryNotArchived
+	}
+	hasLiveManifests, err := s.store.RepositoryHasLiveManifests(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if hasLiveManifests {
+		return nil, ErrRepositoryNotEmpty
+	}
+	return repository, nil
 }
 
 func (s *RepositoryService) CanReceivePush(

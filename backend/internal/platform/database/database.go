@@ -177,7 +177,7 @@ func sqliteMigrationLockPath(databaseURL string) string {
 	}
 	path := strings.SplitN(dsn, "?", 2)[0]
 	path = strings.TrimPrefix(path, "file:")
-	if path == "" {
+	if path == "" || path == ":memory:" {
 		return ""
 	}
 	return path + ".migration.lock"
