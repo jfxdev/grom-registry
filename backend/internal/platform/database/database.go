@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	appmigrations "github.com/jfxdev/grom/backend/migrations"
@@ -73,7 +74,14 @@ func Open(ctx context.Context, databaseURL string) (*bun.DB, Kind, error) {
 }
 
 func Migrate(ctx context.Context, db *bun.DB, kind Kind, lockWait time.Duration, logger *slog.Logger) error {
-	return migrateDatabase(ctx, db, kind, lockWait, logger, appmigrations.Collection)
+	return migrateDatabase(ctx, db, kind, lockWait, logger, appmigrations.Collection, "")
+}
+
+// MigrateWithDatabaseURL acquires a process-safe file lock for file-backed
+// SQLite databases. Callers that do not have the original URL retain the
+// in-process fallback used by isolated in-memory tests.
+func MigrateWithDatabaseURL(ctx context.Context, db *bun.DB, kind Kind, databaseURL string, lockWait time.Duration, logger *slog.Logger) error {
+	return migrateDatabase(ctx, db, kind, lockWait, logger, appmigrations.Collection, databaseURL)
 }
 
 func migrateDatabase(
@@ -83,8 +91,9 @@ func migrateDatabase(
 	lockWait time.Duration,
 	logger *slog.Logger,
 	collection *migrate.Migrations,
+	databaseURL string,
 ) error {
-	unlock, err := migrationLock(ctx, db, kind, lockWait)
+	unlock, err := migrationLock(ctx, db, kind, databaseURL, lockWait)
 	if err != nil {
 		return err
 	}
@@ -119,8 +128,11 @@ func Checkpoint(ctx context.Context, db *bun.DB, kind Kind) error {
 	return nil
 }
 
-func migrationLock(ctx context.Context, db *bun.DB, kind Kind, wait time.Duration) (func(), error) {
+func migrationLock(ctx context.Context, db *bun.DB, kind Kind, databaseURL string, wait time.Duration) (func(), error) {
 	if kind == SQLite {
+		if path := sqliteMigrationLockPath(databaseURL); path != "" {
+			return sqliteFileMigrationLock(ctx, path, wait)
+		}
 		sqliteMigrationMu.Lock()
 		return sqliteMigrationMu.Unlock, nil
 	}
@@ -153,6 +165,50 @@ func migrationLock(ctx context.Context, db *bun.DB, kind Kind, wait time.Duratio
 		case <-lockCtx.Done():
 			_ = conn.Close()
 			return nil, fmt.Errorf("migration lock timeout: %w", lockCtx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func sqliteMigrationLockPath(databaseURL string) string {
+	dsn := strings.TrimPrefix(databaseURL, "sqlite://")
+	if dsn == "" || dsn == ":memory:" || strings.Contains(dsn, "mode=memory") {
+		return ""
+	}
+	path := strings.SplitN(dsn, "?", 2)[0]
+	path = strings.TrimPrefix(path, "file:")
+	if path == "" || path == ":memory:" {
+		return ""
+	}
+	return path + ".migration.lock"
+}
+
+func sqliteFileMigrationLock(ctx context.Context, path string, wait time.Duration) (func(), error) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite migration lock: %w", err)
+	}
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
+			return func() {
+				_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+				_ = file.Close()
+			}, nil
+		} else if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN {
+			_ = file.Close()
+			return nil, fmt.Errorf("acquire sqlite migration lock: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			_ = file.Close()
+			return nil, fmt.Errorf("migration lock timeout: %w", ctx.Err())
+		case <-deadline.C:
+			_ = file.Close()
+			return nil, fmt.Errorf("migration lock timeout after %s", wait)
 		case <-ticker.C:
 		}
 	}

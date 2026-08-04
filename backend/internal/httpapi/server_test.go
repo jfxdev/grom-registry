@@ -46,6 +46,12 @@ func (serverTestProjectDeletionGuard) ProjectHasRepositories(context.Context, fo
 	return false, nil
 }
 
+type missingServerProjectRepository struct{ projectdomain.Repository }
+
+func (missingServerProjectRepository) FindProjectBySlug(context.Context, string) (*projectdomain.Project, error) {
+	return nil, sql.ErrNoRows
+}
+
 type serverTestAuditStore struct {
 	mu     sync.Mutex
 	events []*auditdomain.Event
@@ -798,6 +804,29 @@ func TestDeleteProjectDoesNotProceedWhenAuditIntentCannotPersist(t *testing.T) {
 	}
 }
 
+func TestRemoveRepositoryInvalidRequestDoesNotStartMaintenance(t *testing.T) {
+	controller := maintenance.New()
+	server := &Server{
+		projects:    projectapp.New(missingServerProjectRepository{}),
+		maintenance: controller,
+	}
+	response := httptest.NewRecorder()
+	request := withUserAndParams(
+		httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/projects/missing/repositories/repository-id", nil),
+		&identitydomain.User{ID: foundation.NewID(), SystemAdmin: true},
+		map[string]string{"project": "missing", "repositoryId": "repository-id"},
+	)
+
+	server.removeRepository(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected invalid removal to return 404, got %d: %s", response.Code, response.Body.String())
+	}
+	if controller.Active() {
+		t.Fatal("invalid repository removal started maintenance")
+	}
+}
+
 func TestDownloadBackupStreamsOnlySuccessfulAgentResponse(t *testing.T) {
 	backupID := foundation.NewID().String()
 	for _, test := range []struct {
@@ -902,6 +931,8 @@ func TestRequiresQuiescenceTrackingNormalizesSecuritySensitivePaths(t *testing.T
 		{method: http.MethodGet, target: "http://grom/ignored/%2e%2e/v2/manifests/latest", want: true},
 		{method: http.MethodGet, target: "http://grom//v2//blobs/digest", want: true},
 		{method: http.MethodPost, target: "http://grom/api//v1/./backups", want: false},
+		{method: http.MethodDelete, target: "http://grom/api/v1/projects/payments/repositories/repository-id", want: false},
+		{method: http.MethodDelete, target: "http://grom/api/v1/projects/payments/repositories/repository-id/archive", want: true},
 	} {
 		request := httptest.NewRequest(test.method, test.target, nil)
 		if actual := requiresQuiescenceTracking(request); actual != test.want {

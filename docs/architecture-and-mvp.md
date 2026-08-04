@@ -450,9 +450,9 @@ Work:
 9. Add Playwright coverage for sign-in, project creation, membership
    management, reveal-once key handling, first push, repository browsing, safe
    deletion, and lifecycle review.
-10. Keep archival blocking push while preserving pull and OCI content. Do not
-   claim a race-safe logical-removal guarantee until catalog and inventory
-   preconditions are revalidated inside one serialized removal operation.
+10. Keep archival blocking push while preserving pull and OCI content. Logical
+   removal drains registry and management mutations, then revalidates catalog
+   and inventory preconditions before deleting the logical record.
 
 Acceptance:
 
@@ -1030,9 +1030,10 @@ Implementation evidence:
   August 3, 2026 and in the mandatory `Registry E2E (Docker)` CI check in
   [PR #17](https://github.com/jfxdev/grom-registry/pull/17).
 
-Current gap: PostgreSQL uses an advisory lock, but SQLite currently uses only an
-in-process mutex. Completion step 7 must add cross-process SQLite coordination
-before the migration-lock requirement is considered accepted.
+SQLite migrations for file-backed installations use an advisory lock file next
+to the database, while in-memory test databases retain an in-process mutex.
+PostgreSQL uses an advisory lock. Both production paths respect
+`GROM_MIGRATION_LOCK_TIMEOUT` before startup continues.
 
 ### Database configuration and portability
 
