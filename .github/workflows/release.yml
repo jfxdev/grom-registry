@@ -51,6 +51,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ steps.release.outputs.tag }}
           TAG_PUSH_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
         run: |
