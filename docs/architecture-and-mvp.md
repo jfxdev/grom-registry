@@ -509,7 +509,8 @@ Acceptance:
 
 ### Completion step 8: create release engineering outputs
 
-**Status: publication automation and first tagged-release evidence complete.**
+**Status: artifact publication automation and first tagged-release artifact
+evidence complete; supported upgrades remain unvalidated.**
 
 Work:
 
@@ -533,7 +534,8 @@ Implementation checklist:
   signing-key posture.
 - [x] Publish a tagged release with image digest, SBOM, vulnerability report,
   and checksums.
-- [ ] Run clean-install plus upgrade evidence for the supported matrix.
+- [ ] Run clean-install, upgrade, restart, recovery, and metadata/blob
+  preservation evidence for the supported matrix.
 
 Implementation evidence:
 
@@ -548,11 +550,12 @@ Implementation evidence:
 Acceptance:
 
 - A tagged release can be installed and upgraded with preserved metadata and
-  blobs.
+  blobs only after the supported-matrix upgrade evidence passes.
 - Public release artifacts are checksummed and, when distributed beyond local
   development, scanned and accompanied by an SBOM.
-- Operators have enough documentation to install, back up, restore, replace a
-  signing key in an emergency, upgrade, and diagnose readiness failures.
+- Operators have enough documentation to install, back up, restore, upgrade,
+  and diagnose readiness failures. Signing-key replacement is unsupported in
+  the MVP.
 
 ### Completion step 9: close architecture and MVP acceptance
 
@@ -1535,7 +1538,8 @@ included in the supported release matrix.
 
 Remaining default-path evidence is owned by completion steps 4, 5, 7, and 8.
 The release-artifact and image-scanning automation plus operator documentation
-are complete; upgrade evidence is not yet accepted.
+are complete; `v0.0.1` is artifact-publication evidence only, and supported
+upgrade evidence is not yet accepted.
 PostgreSQL CI remains a capability-specific gate.
 
 ### Phase 1: authentication and project authorization
@@ -1593,8 +1597,9 @@ post-MVP unless promoted explicitly.
 - **Partial:** named deployment profiles, request-size/time limits,
   authentication rate limits, trusted-proxy enforcement, production
   HTTPS/cookie validation, and graceful shutdown exist; streaming-specific
-  timeout evidence, backup/restore documentation, and upgrade tests remain.
-  Signing-key replacement and seamless rotation are post-MVP.
+  timeout evidence and upgrade tests remain. Backup/restore documentation and
+  its recovery acceptance journey are implemented. Signing-key replacement and
+  seamless rotation are post-MVP.
 - **Implemented:** the default SQLite/local-storage recovery matrix is covered
   by the mandatory `Backup Restore E2E` volume-loss journey.
 - **Implemented:** mandatory Docker protocol acceptance through the isolated
@@ -1602,8 +1607,8 @@ post-MVP unless promoted explicitly.
 - **Capability-specific:** PostgreSQL, S3, extended ORAS/referrer, and OCI
   conformance matrices.
 - **Implemented:** release-image, checksum, SBOM, and operator-documentation
-  automation exists; the `v0.0.1` release completed successfully on August 5,
-  2026.
+  automation exists; the `v0.0.1` release completed artifact publication on
+  August 5, 2026. It does not establish supported upgrade behavior.
 - **New evidence:** the boot-acceptance journey proves empty-volume and
   prior-schema migration before public readiness, public OpenAPI/docs serving,
   and failed-migration non-exposure with unmarked migration history. It passed

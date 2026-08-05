@@ -57,11 +57,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.tag }}
           PRERELEASE: ${{ steps.release.outputs.prerelease }}
+          TAG_PUSH_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
         run: |
           set -euo pipefail
-          if draft_state="$(gh release view "${TAG}" --json isDraft --jq .isDraft 2>/dev/null)"; then
-            if [[ "${draft_state}" != "true" ]]; then
+          tag_ref="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}")"
+          tag_object_type="$(jq --raw-output '.object.type' <<<"${tag_ref}")"
+          tag_object_sha="$(jq --raw-output '.object.sha' <<<"${tag_ref}")"
+          if [[ "${tag_object_type}" == "tag" ]]; then
+            tag_commit="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object_sha}" --jq .object.sha)"
+          else
+            tag_commit="${tag_object_sha}"
+          fi
+          if [[ -n "${TAG_PUSH_SHA}" && "${TAG_PUSH_SHA}" != "${tag_commit}" ]]; then
+            echo "tag push SHA does not match the current ${TAG} commit" >&2
+            exit 1
+          fi
+
+          if draft_state="$(gh release view "${TAG}" --json isDraft,targetCommitish 2>/dev/null)"; then
+            is_draft="$(jq --raw-output .isDraft <<<"${draft_state}")"
+            release_commit="$(jq --raw-output .targetCommitish <<<"${draft_state}")"
+            if [[ "${is_draft}" != "true" ]]; then
               echo "release ${TAG} is already published; do not replace published release assets" >&2
+              exit 1
+            fi
+            if [[ "${release_commit}" != "${tag_commit}" ]]; then
+              echo "draft release commit does not match the current ${TAG} commit" >&2
               exit 1
             fi
             exit 0
@@ -71,7 +91,7 @@ jobs:
           if [[ "${PRERELEASE}" == "true" ]]; then
             args+=(--prerelease)
           fi
-          gh release create "${TAG}" "${args[@]}"
+          gh release create "${TAG}" --target "${tag_commit}" "${args[@]}"
 
       - name: Check out release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
