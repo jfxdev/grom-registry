@@ -71,8 +71,8 @@ SARIF modes do not fail the job when vulnerabilities are found.
 checkout, verifies the final image declares the non-root `grom` user, and
 checks health, readiness, API documentation, and the registry bearer challenge
 through an isolated public Compose stack.
-`.github/workflows/release.yml` runs only for an existing `vMAJOR.MINOR.PATCH`
-tag (optionally with a prerelease suffix), publishes the exact image to GHCR,
+`.github/workflows/release.yml` runs only for an existing stable
+`vMAJOR.MINOR.PATCH` tag, publishes the exact image to GHCR,
 and creates a GitHub Release with its digest reference, SPDX SBOM, Trivy report,
 and checksums. It uses the repository `GITHUB_TOKEN`; do not replace it with a
 long-lived registry credential or make a mutable image tag the canonical

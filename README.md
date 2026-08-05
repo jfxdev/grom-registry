@@ -45,8 +45,8 @@ Pushing a semantic-version Git tag such as `v0.1.0` publishes the image to
 `ghcr.io/jfxdev/grom-registry` under both `v0.1.0` and `0.1.0`. Use the image
 digest recorded in the GitHub Release asset for an immutable deployment
 reference. Each release also contains an SPDX SBOM, a Trivy vulnerability
-report, and `checksums.sha256` for its assets. Tags with a prerelease suffix,
-such as `v0.1.0-rc.1`, are published as GitHub prereleases.
+report, and `checksums.sha256` for its assets. Only stable
+`vMAJOR.MINOR.PATCH` tags are published; prerelease tags are rejected.
 
 The pipeline creates a draft release first, attaches its assets, and then
 publishes it. Re-running a failed workflow resumes only a draft release; a
