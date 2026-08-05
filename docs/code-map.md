@@ -24,7 +24,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `.github/workflows/admin-journey-e2e.yml` | Mandatory browser-driven administrative first-push acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/boot-acceptance-e2e.yml` | Mandatory real-Docker default-installation boot, migration, readiness, and API-documentation acceptance check |
 | `.github/workflows/backup-restore-e2e.yml` | Real-Docker volume-loss and recovery acceptance check |
-| `.github/workflows/production-image-smoke.yml` | Clean-checkout production-image build, non-root assertion, and public-surface smoke check |
+| `.github/workflows/production-image-smoke.yml` | Mandatory clean-checkout production-image build, non-root assertion, and public-surface smoke check |
 | `.github/workflows/release.yml` | Tag-triggered GHCR image publication, SBOM and vulnerability-report generation, release checksums, and GitHub Release assets |
 | `docs/` | Architecture, domain inventory, operations, decisions, and visual identity |
 | `AGENTS.md` | Current operational instructions for coding agents |
@@ -39,6 +39,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/code-map.md` | Repository navigation and operational entry points |
 | `docs/backup-and-disaster-recovery-implementation-plan.md` | Implemented default SQLite/local-storage backup, empty-volume restore, and recovery acceptance design |
 | `docs/backup-and-disaster-recovery.md` | Operator backup, restore, encrypted retention, drill, and troubleshooting procedure |
+| `docs/release-operations.md` | Operator installation by digest, upgrade, rollback, signing-key posture, and supported matrix |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
 | `docs/mvp-acceptance-implementation-plan.md` | Implemented and accepted public-browser first-push, boot/readiness/API-docs, session-revocation, and restart-preservation acceptance work |
 | `docs/visual-identity.md` | Approved visual direction, responsive rules, and UI acceptance criteria |

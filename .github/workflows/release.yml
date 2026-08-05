@@ -37,24 +37,65 @@ jobs:
         run: |
           set -euo pipefail
           tag="${REQUESTED_TAG}"
-          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "release tags must use vMAJOR.MINOR.PATCH with an optional prerelease suffix" >&2
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release tags must use vMAJOR.MINOR.PATCH" >&2
             exit 1
           fi
 
           version="${tag#v}"
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          if [[ "${version}" == *-* ]]; then
-            echo "prerelease=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Create or resume draft release
+        id: release-draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+          TAG_PUSH_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+        run: |
+          set -euo pipefail
+          tag_ref="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}")"
+          tag_object_type="$(jq --raw-output '.object.type' <<<"${tag_ref}")"
+          tag_object_sha="$(jq --raw-output '.object.sha' <<<"${tag_ref}")"
+          if [[ "${tag_object_type}" == "tag" ]]; then
+            tag_commit="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object_sha}" --jq .object.sha)"
           else
-            echo "prerelease=false" >> "${GITHUB_OUTPUT}"
+            tag_commit="${tag_object_sha}"
           fi
+          if [[ -n "${TAG_PUSH_SHA}" && "${TAG_PUSH_SHA}" != "${tag_commit}" ]]; then
+            echo "tag push SHA does not match the current ${TAG} commit" >&2
+            exit 1
+          fi
+
+          if draft_state="$(gh release view "${TAG}" --json isDraft,targetCommitish 2>/dev/null)"; then
+            is_draft="$(jq --raw-output .isDraft <<<"${draft_state}")"
+            release_commit="$(jq --raw-output .targetCommitish <<<"${draft_state}")"
+            if [[ "${is_draft}" != "true" ]]; then
+              echo "release ${TAG} is already published; do not replace published release assets" >&2
+              exit 1
+            fi
+            if [[ "${release_commit}" != "${tag_commit}" ]]; then
+              echo "draft release commit does not match the current ${TAG} commit" >&2
+              exit 1
+            fi
+          else
+            gh release create "${TAG}" --target "${tag_commit}" --draft --title "${TAG}" --generate-notes --verify-tag
+          fi
+
+          draft_state="$(gh release view "${TAG}" --json isDraft,targetCommitish)"
+          is_draft="$(jq --raw-output .isDraft <<<"${draft_state}")"
+          release_commit="$(jq --raw-output .targetCommitish <<<"${draft_state}")"
+          if [[ "${is_draft}" != "true" || "${release_commit}" != "${tag_commit}" ]]; then
+            echo "draft release state changed while preparing ${TAG}" >&2
+            exit 1
+          fi
+          echo "tag_commit=${tag_commit}" >> "${GITHUB_OUTPUT}"
 
       - name: Check out release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: refs/tags/${{ steps.release.outputs.tag }}
+          ref: ${{ steps.release-draft.outputs.tag_commit }}
           persist-credentials: false
 
       - name: Record release revision
@@ -128,16 +169,20 @@ jobs:
               "grom-${VERSION}.trivy.txt" > checksums.sha256
           )
 
-      - name: Publish GitHub release
+      - name: Upload release assets and publish draft
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.tag }}
-          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+          FROZEN_TAG_COMMIT: ${{ steps.release-draft.outputs.tag_commit }}
         run: |
           set -euo pipefail
-          args=(--title "${TAG}" --generate-notes --verify-tag)
-          if [[ "${PRERELEASE}" == "true" ]]; then
-            args+=(--prerelease)
+          draft_state="$(gh release view "${TAG}" --json isDraft,targetCommitish)"
+          is_draft="$(jq --raw-output .isDraft <<<"${draft_state}")"
+          release_commit="$(jq --raw-output .targetCommitish <<<"${draft_state}")"
+          if [[ "${is_draft}" != "true" || "${release_commit}" != "${FROZEN_TAG_COMMIT}" ]]; then
+            echo "draft release state changed before publishing ${TAG}" >&2
+            exit 1
           fi
-          gh release create "${TAG}" release-assets/* "${args[@]}"
+          gh release upload "${TAG}" release-assets/* --clobber
+          gh release edit "${TAG}" --draft=false
