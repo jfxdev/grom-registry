@@ -62,17 +62,15 @@ recreate or inspect its volumes directly.
 The mandatory GitHub status checks are `Backend Tests`, `Frontend Tests`,
 `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
 `Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and
-`Backup Restore E2E`, defined under `.github/workflows`. Keep these job names
-stable and require all eight in the
+`Backup Restore E2E`, and `Production Image Smoke (Docker)`, defined under
+`.github/workflows`. Keep these job names stable and require all nine in the
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
 `Production Image Smoke (Docker)` builds the root Dockerfile from a clean
 checkout, verifies the final image declares the non-root `grom` user, and
 checks health, readiness, API documentation, and the registry bearer challenge
-through an isolated public Compose stack. Add it to the `main` branch ruleset
-before the first release; it is intentionally separate from the existing eight
-stable mandatory checks until that ruleset change is made.
+through an isolated public Compose stack.
 `.github/workflows/release.yml` runs only for an existing `vMAJOR.MINOR.PATCH`
 tag (optionally with a prerelease suffix), publishes the exact image to GHCR,
 and creates a GitHub Release with its digest reference, SPDX SBOM, Trivy report,

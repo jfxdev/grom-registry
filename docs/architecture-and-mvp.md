@@ -46,15 +46,17 @@ scanner execution.
 | Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, an accepted public boot/migration/docs journey, and a clean-checkout production-image smoke check exist | Dependency/container scanning and PostgreSQL CI before claiming the corresponding support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
 | Phase 2: registry browsing and core UI | Partially accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, user-disable flows, and essential audit acceptance evidence exist | Pagination decision and complete first-push Playwright coverage |
-| Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, accepted full-stack restart preservation, a clean-checkout image smoke check, and a tag-triggered release-artifact workflow exist | Key rotation, upgrade tests, and first-release publication evidence; expanded matrices follow advertised capabilities |
+| Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, accepted full-stack restart preservation, a clean-checkout image smoke check, release automation, and a published `v0.0.1` release exist | Upgrade tests; expanded matrices follow advertised capabilities |
 | Phase 4: integrations placeholder | Accepted for MVP | Backend-driven planned catalog and disabled read-only UI exist | ADR is required before active event delivery or scan-result storage, not for the inert placeholder |
 
 `make test` passed on July 29, 2026, including backend tests, the SQLite
 integration flow, frontend lint, 23 frontend tests, and TypeScript checking.
 `make build` also passed on July 29, 2026. The PostgreSQL integration test
 remains conditional on `GROM_TEST_POSTGRES_URL`. The clean-checkout container
-smoke test passed locally on August 4, 2026; first tagged-release execution
-evidence remains pending.
+smoke test passed locally on August 4, 2026. The first tagged release,
+[`v0.0.1`](https://github.com/jfxdev/grom-registry/releases/tag/v0.0.1),
+published its image digest, SPDX SBOM, Trivy report, and checksums on August 5,
+2026.
 
 ### Update on August 2, 2026
 
@@ -480,8 +482,8 @@ Work:
 4. Maintain and periodically validate backup and restore for SQLite, signing
    keys, Distribution metadata, and local blob storage. Follow the detailed
    [`backup and disaster recovery implementation plan`](backup-and-disaster-recovery-implementation-plan.md).
-5. Write and test signing-key rotation procedures, including Distribution trust
-   updates and in-flight JWT behavior.
+5. Keep signing-key replacement and seamless signing-key overlap outside the
+   MVP. The existing signing material remains part of every recovery point.
 6. Add upgrade tests from every supported previous release.
 7. Test restart and upgrade preservation of users, projects, memberships,
    repository inventory, lifecycle history, signing material, and blobs.
@@ -507,8 +509,7 @@ Acceptance:
 
 ### Completion step 8: create release engineering outputs
 
-**Status: publication automation implemented; first tagged-release evidence is
-pending.**
+**Status: publication automation and first tagged-release evidence complete.**
 
 Work:
 
@@ -521,6 +522,18 @@ Work:
    restore documentation.
 7. Record database and storage compatibility for the release.
 8. Smoke-test a clean installation and an upgrade before publishing.
+
+Implementation checklist:
+
+- [x] Build a versioned, non-root production image.
+- [x] Publish human-readable version tags and record the immutable image digest.
+- [x] Generate checksums for release assets.
+- [x] Generate and attach an SPDX SBOM and final-image vulnerability report.
+- [x] Publish operator documentation for installation, upgrade, rollback, and
+  signing-key posture.
+- [x] Publish a tagged release with image digest, SBOM, vulnerability report,
+  and checksums.
+- [ ] Run clean-install plus upgrade evidence for the supported matrix.
 
 Implementation evidence:
 
@@ -538,8 +551,8 @@ Acceptance:
   blobs.
 - Public release artifacts are checksummed and, when distributed beyond local
   development, scanned and accompanied by an SBOM.
-- Operators have enough documentation to install, back up, restore, rotate
-  keys, upgrade, and diagnose readiness failures.
+- Operators have enough documentation to install, back up, restore, replace a
+  signing key in an emergency, upgrade, and diagnose readiness failures.
 
 ### Completion step 9: close architecture and MVP acceptance
 
@@ -1426,7 +1439,7 @@ This is enough to preserve an intentional extension point without pretending the
 | Hash passwords and access-key secrets with versioned Argon2id parameters | Implemented | Preserve compatibility and add parameter-upgrade policy when values change |
 | Use secure, HTTP-only, SameSite cookies | Implemented for HTTPS deployments | Permissive private-LAN HTTP is an explicit insecure exception; strict always requires secure cookies |
 | Protect state-changing browser requests against CSRF | Implemented | Foreign origins and session-cookie mutations without `Origin` are rejected |
-| Sign registry JWTs asymmetrically | Implemented | Complete signing-key rotation procedure |
+| Sign registry JWTs asymmetrically | Implemented | Signing-key replacement and seamless rotation are post-MVP |
 | Never log credentials or Authorization headers | Implemented | Access logging records selected request metadata and has a credential-regression test |
 | Rate-limit sign-in and `/auth/token` failures | Implemented | Bounded per-client in-process limiter with configurable window and block duration |
 | Return access-key secrets once and rotate when lost | Implemented | Add end-to-end reveal-once and rotation coverage |
@@ -1521,7 +1534,8 @@ migration lifecycle must complete against PostgreSQL in CI before PostgreSQL is
 included in the supported release matrix.
 
 Remaining default-path evidence is owned by completion steps 4, 5, 7, and 8.
-Dependency/container scanning and release artifacts are not yet accepted.
+The release-artifact and image-scanning automation plus operator documentation
+are complete; upgrade evidence is not yet accepted.
 PostgreSQL CI remains a capability-specific gate.
 
 ### Phase 1: authentication and project authorization
@@ -1579,16 +1593,17 @@ post-MVP unless promoted explicitly.
 - **Partial:** named deployment profiles, request-size/time limits,
   authentication rate limits, trusted-proxy enforcement, production
   HTTPS/cookie validation, and graceful shutdown exist; streaming-specific
-  timeout evidence, backup/restore documentation, key rotation, and upgrade
-  tests remain.
+  timeout evidence, backup/restore documentation, and upgrade tests remain.
+  Signing-key replacement and seamless rotation are post-MVP.
 - **Implemented:** the default SQLite/local-storage recovery matrix is covered
   by the mandatory `Backup Restore E2E` volume-loss journey.
 - **Implemented:** mandatory Docker protocol acceptance through the isolated
   registry E2E workflow.
 - **Capability-specific:** PostgreSQL, S3, extended ORAS/referrer, and OCI
   conformance matrices.
-- **Pending:** release images, checksums, SBOM, and supported deployment
-  documentation.
+- **Implemented:** release-image, checksum, SBOM, and operator-documentation
+  automation exists; the `v0.0.1` release completed successfully on August 5,
+  2026.
 - **New evidence:** the boot-acceptance journey proves empty-volume and
   prior-schema migration before public readiness, public OpenAPI/docs serving,
   and failed-migration non-exposure with unmarked migration history. It passed
@@ -1601,7 +1616,8 @@ post-MVP unless promoted explicitly.
 Exit criterion: a tagged release can be installed and upgraded with preserved metadata and blobs.
 
 Completion step 1 is implemented. Completion steps 4, 7, and 8 own the
-remaining default-path key-rotation, upgrade, scanning, and release work. Expanded
+remaining default-path upgrade, scanning, and release work. Signing-key
+replacement is post-MVP. Expanded
 compatibility and conformance gates apply only to advertised capabilities.
 
 ### Phase 4: integrations placeholder
@@ -1639,10 +1655,12 @@ Product expansion then follows user demand:
 4. Docker-compatible scanner provider.
 5. Optional scheduling for the implemented retention dry-runs and audited
    manual lifecycle execution.
-6. OIDC login.
-7. Multiple Grom replicas, including the required coordination and locking
+6. Seamless signing-key rotation with overlapping JWKS trust and in-flight JWT
+   continuity.
+7. OIDC login.
+8. Multiple Grom replicas, including the required coordination and locking
    design.
-8. Registry mirroring or pull-through cache.
+9. Registry mirroring or pull-through cache.
 
 Signature and vulnerability admission policies, Kubernetes operators, Helm
 charts, teams, organizations, and replication should each require a separate

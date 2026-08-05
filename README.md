@@ -48,6 +48,12 @@ reference. Each release also contains an SPDX SBOM, a Trivy vulnerability
 report, and `checksums.sha256` for its assets. Tags with a prerelease suffix,
 such as `v0.1.0-rc.1`, are published as GitHub prereleases.
 
+The pipeline creates a draft release first, attaches its assets, and then
+publishes it. Re-running a failed workflow resumes only a draft release; a
+published release is never modified automatically. See
+[release operations](docs/release-operations.md) for installation, upgrade,
+rollback, and supported-platform guidance.
+
 To use PostgreSQL instead of SQLite:
 
 ```bash
@@ -173,6 +179,7 @@ is part of the installed backup or recovery workflow. See the
 - [Architecture and MVP plan](docs/architecture-and-mvp.md)
 - [Registry E2E implementation plan](docs/registry-e2e-implementation-plan.md)
 - [Backup and disaster recovery](docs/backup-and-disaster-recovery.md)
+- [Release operations](docs/release-operations.md)
 - [Code map](docs/code-map.md)
 - [Domain model inventory](docs/domain-model.md)
 - [Agent guide](AGENTS.md)
