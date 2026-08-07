@@ -1,4 +1,4 @@
-.PHONY: generate test test-coverage test-registry-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-production-image-smoke build dev compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
+.PHONY: generate test test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-production-image-smoke build dev compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
 
 DEV_ENV_FILE ?= .env
 
@@ -16,6 +16,9 @@ test-coverage:
 
 test-registry-e2e:
 	cd backend && GROM_RUN_REGISTRY_E2E=1 go test -count=1 -timeout=10m ./tests/registrye2e
+
+test-release-upgrade-e2e:
+	cd backend && GROM_RUN_RELEASE_UPGRADE_E2E=1 go test -count=1 -run TestTaggedReleaseUpgradePreservesRegistryState -timeout=12m ./tests/registrye2e
 
 test-admin-e2e:
 	cd frontend && npm run test:admin-e2e

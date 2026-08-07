@@ -1604,6 +1604,15 @@ post-MVP unless promoted explicitly.
   by the mandatory `Backup Restore E2E` volume-loss journey.
 - **Implemented:** mandatory Docker protocol acceptance through the isolated
   registry E2E workflow.
+- **Unverified:** `Release Upgrade E2E (Docker)` pulls the published `v0.0.1`
+  baseline, upgrades its SQLite/local-storage volumes to the checkout candidate,
+  and verifies administrator, project, Writer credential, inventory, blob, and
+  restart preservation. It remains separate from the required
+  network-independent registry journey until its CI evidence is accepted.
+- **Implemented:** the registry E2E workflow streams a blob over 18 seconds,
+  longer than its short-lived registry JWT, then verifies the committed blob
+  remains intact. Header and idle timeouts therefore protect the public server
+  without imposing a body-read or response-write deadline on OCI uploads.
 - **Capability-specific:** PostgreSQL, S3, extended ORAS/referrer, and OCI
   conformance matrices.
 - **Implemented:** release-image, checksum, SBOM, and operator-documentation

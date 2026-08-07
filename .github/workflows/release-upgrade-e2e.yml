@@ -1,0 +1,60 @@
+name: Release Upgrade E2E
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      base_image:
+        description: Published Grom image to upgrade from
+        required: false
+        default: ghcr.io/jfxdev/grom-registry:0.0.1
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: release-upgrade-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-upgrade-e2e:
+    name: Release Upgrade E2E (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Docker prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
+          docker compose version
+
+      - name: Run tagged-release upgrade journey
+        env:
+          GROM_UPGRADE_FROM_IMAGE: ${{ inputs.base_image || 'ghcr.io/jfxdev/grom-registry:0.0.1' }}
+        run: make test-release-upgrade-e2e

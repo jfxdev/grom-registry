@@ -21,6 +21,7 @@ Keep this file aligned with the code that actually exists.
 - Run backend and frontend checks: `make test`
 - Generate backend and frontend coverage reports: `make test-coverage`
 - Run the isolated real-Docker registry, session-revocation, and restart-preservation journeys: `make test-registry-e2e`
+- Upgrade a tagged GHCR release to a locally built candidate while preserving SQLite/local-registry state: `make test-release-upgrade-e2e`
 - Run the isolated browser-driven administrative first-push journey: `make test-admin-e2e`
 - Run the isolated boot, migration, readiness, and API-documentation journey: `make test-boot-acceptance`
 - Run the isolated destructive backup/restore journey: `make test-backup-restore-e2e`
@@ -58,7 +59,19 @@ their scenario because the shared Docker daemon may cache bearer tokens for one
 registry address. The registry journey restarts only the exact isolated Grom and
 Distribution services after a pushed fixture; it must prove public state and
 blob preservation with a fresh Docker credential directory, and must never
-recreate or inspect its volumes directly.
+recreate or inspect its volumes directly. It also streams an authenticated OCI
+blob upload for longer than the short-lived registry JWT and verifies the
+committed blob, so do not introduce body-read or response-write server timeouts
+that would terminate long uploads.
+`make test-release-upgrade-e2e` is a separate, non-ruleset release-acceptance
+journey: it pulls the image in `GROM_UPGRADE_FROM_IMAGE` (defaulting to the
+current published baseline) for `GROM_UPGRADE_PLATFORM` (defaulting to
+`linux/amd64`), deploys it on fresh SQLite/local-storage volumes,
+then upgrades those volumes to a candidate built from the checkout. It must
+preserve the administrator, project, Writer access key, repository inventory,
+and pushed blobs across the upgrade and a subsequent restart. Keep it outside
+the network-independent registry journey and do not mark supported upgrades as
+accepted until the tagged-release evidence has passed in CI.
 The mandatory GitHub status checks are `Backend Tests`, `Frontend Tests`,
 `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
 `Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and
