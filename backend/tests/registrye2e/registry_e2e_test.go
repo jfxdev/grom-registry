@@ -34,7 +34,7 @@ func TestRestartPreservesPublicState(t *testing.T) {
 	writerDocker.login(t, writer.username)
 	v1 := writerDocker.tag(t, variantA, "restart-alpha/app", "v1")
 	writerDocker.push(t, v1)
-	waitForRestartObservation(t, admin, []string{"v1"})
+	waitForRestartObservation(t, admin, "restart-alpha", "restart-alpha/app", []string{"v1"})
 
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	output, err := stack.compose(ctx, "restart", "grom", "distribution")
@@ -46,7 +46,7 @@ func TestRestartPreservesPublicState(t *testing.T) {
 
 	postRestartAdmin := newManagementClient(t, stack.publicURL)
 	postRestartAdmin.login(t)
-	waitForRestartObservation(t, postRestartAdmin, []string{"v1"})
+	waitForRestartObservation(t, postRestartAdmin, "restart-alpha", "restart-alpha/app", []string{"v1"})
 
 	postRestartWriter := newDockerClient(t, stack, writer, &localTags)
 	postRestartWriter.login(t, writer.username)
@@ -55,7 +55,7 @@ func TestRestartPreservesPublicState(t *testing.T) {
 
 	v2 := postRestartWriter.tag(t, variantB, "restart-alpha/app", "v2")
 	postRestartWriter.push(t, v2)
-	waitForRestartObservation(t, postRestartAdmin, []string{"v1", "v2"})
+	waitForRestartObservation(t, postRestartAdmin, "restart-alpha", "restart-alpha/app", []string{"v1", "v2"})
 }
 
 func TestUserDisableRevokesActiveSession(t *testing.T) {
@@ -407,14 +407,15 @@ func observationComplete(
 	return repositoryOK && tagOK && inventoryOK
 }
 
-func waitForRestartObservation(t *testing.T, api *managementClient, expectedTags []string) {
+func waitForRestartObservation(t *testing.T, api *managementClient, projectSlug, repository string, expectedTags []string) {
 	t.Helper()
+	repositoryName := strings.TrimPrefix(repository, projectSlug+"/")
 	deadline := time.Now().Add(15 * time.Second)
 	for {
-		repositories := api.repositories(t, "restart-alpha")
-		tags := api.tags(t, "restart-alpha", "app")
-		inventory := api.inventory(t, "restart-alpha", "app")
-		if restartObservationComplete(repositories, tags, inventory, expectedTags) {
+		repositories := api.repositories(t, projectSlug)
+		tags := api.tags(t, projectSlug, repositoryName)
+		inventory := api.inventory(t, projectSlug, repositoryName)
+		if restartObservationComplete(repositories, tags, inventory, repository, repositoryName, expectedTags) {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -429,16 +430,17 @@ func restartObservationComplete(
 	repositories []openapi.Repository,
 	tags openapi.TagList,
 	inventory []openapi.ManifestInventory,
+	repository, repositoryName string,
 	expectedTags []string,
 ) bool {
 	repositoryOK := false
 	for _, repository := range repositories {
-		if repository.Name == "app" && repository.Status == openapi.RepositoryStatusActive {
+		if repository.Name == repositoryName && repository.Status == openapi.RepositoryStatusActive {
 			repositoryOK = true
 			break
 		}
 	}
-	if !repositoryOK || (tags.Name != "restart-alpha/app" && tags.Name != "app") {
+	if !repositoryOK || (tags.Name != repository && tags.Name != repositoryName) {
 		return false
 	}
 	for _, expectedTag := range expectedTags {
