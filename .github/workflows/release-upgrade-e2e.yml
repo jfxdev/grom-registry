@@ -11,7 +11,6 @@ on:
       base_image:
         description: Published Grom image to upgrade from
         required: false
-        default: ghcr.io/jfxdev/grom-registry:0.0.1
         type: string
 
 permissions:
@@ -20,13 +19,16 @@ permissions:
 
 concurrency:
   group: release-upgrade-e2e-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   release-upgrade-e2e:
     name: Release Upgrade E2E (Docker)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      GROM_UPGRADE_COMPOSE_PROJECT: gromupgradee2e-${{ github.run_id }}-${{ github.run_attempt }}
+      GROM_KEEP_RELEASE_UPGRADE_STACK_ON_FAILURE: "1"
 
     steps:
       - name: Check out repository
@@ -56,5 +58,13 @@ jobs:
 
       - name: Run tagged-release upgrade journey
         env:
-          GROM_UPGRADE_FROM_IMAGE: ${{ inputs.base_image || 'ghcr.io/jfxdev/grom-registry:0.0.1' }}
+          GROM_UPGRADE_FROM_IMAGE: ${{ inputs.base_image }}
         run: make test-release-upgrade-e2e
+
+      - name: Collect failed upgrade diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          docker compose ls
+          docker compose --project-name "$GROM_UPGRADE_COMPOSE_PROJECT" logs --no-color || true
+          docker compose --project-name "$GROM_UPGRADE_COMPOSE_PROJECT" down --volumes --remove-orphans || true

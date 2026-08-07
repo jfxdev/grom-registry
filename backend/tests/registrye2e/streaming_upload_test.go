@@ -67,7 +67,7 @@ func beginBlobUpload(t *testing.T, publicURL, repository, token string) string {
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	response := doRegistryRequest(t, request)
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusAccepted {
 		t.Fatalf("start blob upload: status=%d", response.StatusCode)
 	}
@@ -96,7 +96,7 @@ func streamSlowBlob(t *testing.T, publicURL, uploadURL, token string, payload []
 		resultCh <- uploadResult{response: response, err: err}
 	}()
 
-	chunkSize := len(payload) / 4
+	chunkSize := max(1, len(payload)/4)
 	for offset := 0; offset < len(payload); offset += chunkSize {
 		end := min(offset+chunkSize, len(payload))
 		if _, err := bodyWriter.Write(payload[offset:end]); err != nil {
@@ -115,7 +115,7 @@ func streamSlowBlob(t *testing.T, publicURL, uploadURL, token string, payload []
 	if outcome.err != nil {
 		t.Fatalf("slow blob upload request: %v", outcome.err)
 	}
-	defer outcome.response.Body.Close()
+	defer func() { _ = outcome.response.Body.Close() }()
 	if outcome.response.StatusCode != http.StatusAccepted {
 		t.Fatalf("slow blob upload: status=%d", outcome.response.StatusCode)
 	}
@@ -137,7 +137,7 @@ func commitBlobUpload(t *testing.T, uploadURL, token, digest string) {
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	response := doRegistryRequest(t, request)
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusCreated {
 		t.Fatalf("commit slow blob upload: status=%d", response.StatusCode)
 	}
@@ -151,7 +151,7 @@ func assertBlobContent(t *testing.T, publicURL, repository, token, digest string
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	response := doRegistryRequest(t, request)
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("read slow uploaded blob: status=%d", response.StatusCode)
 	}

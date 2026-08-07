@@ -38,7 +38,7 @@ func TestTaggedReleaseUpgradePreservesRegistryState(t *testing.T) {
 	writerDocker.login(t, writer.username)
 	firstTag := writerDocker.tag(t, variantA, "upgrade/app", "v1")
 	writerDocker.push(t, firstTag)
-	waitForRestartObservation(t, admin, []string{"v1"})
+	waitForRestartObservation(t, admin, "upgrade", "upgrade/app", []string{"v1"})
 
 	upgradeReleaseStack(t, stack, candidateImage)
 
@@ -46,7 +46,7 @@ func TestTaggedReleaseUpgradePreservesRegistryState(t *testing.T) {
 	upgradedAdmin.login(t)
 	assertUpgradeProject(t, upgradedAdmin)
 	assertUpgradeWriterAccess(t, upgradedAdmin, writer)
-	waitForRestartObservation(t, upgradedAdmin, []string{"v1"})
+	waitForRestartObservation(t, upgradedAdmin, "upgrade", "upgrade/app", []string{"v1"})
 
 	upgradedWriter := newDockerClient(t, stack, writer, &localTags)
 	upgradedWriter.login(t, writer.username)
@@ -54,7 +54,7 @@ func TestTaggedReleaseUpgradePreservesRegistryState(t *testing.T) {
 	upgradedWriter.pull(t, firstTag)
 	secondTag := upgradedWriter.tag(t, variantB, "upgrade/app", "v2")
 	upgradedWriter.push(t, secondTag)
-	waitForRestartObservation(t, upgradedAdmin, []string{"v1", "v2"})
+	waitForRestartObservation(t, upgradedAdmin, "upgrade", "upgrade/app", []string{"v1", "v2"})
 
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	output, err := stack.compose(ctx, "restart", "grom", "distribution")
@@ -68,7 +68,7 @@ func TestTaggedReleaseUpgradePreservesRegistryState(t *testing.T) {
 	afterRestart.login(t)
 	assertUpgradeProject(t, afterRestart)
 	assertUpgradeWriterAccess(t, afterRestart, writer)
-	waitForRestartObservation(t, afterRestart, []string{"v1", "v2"})
+	waitForRestartObservation(t, afterRestart, "upgrade", "upgrade/app", []string{"v1", "v2"})
 	removeLocalTag(t, stack.root, firstTag)
 	upgradedWriter.pull(t, firstTag)
 }
@@ -95,7 +95,10 @@ func startReleaseUpgradeStack(t *testing.T) (*testStack, string) {
 	}
 
 	root := repositoryRoot(t)
-	project := fmt.Sprintf("gromupgradee2e%d%d", os.Getpid(), time.Now().UnixNano())
+	project := os.Getenv("GROM_UPGRADE_COMPOSE_PROJECT")
+	if project == "" {
+		project = fmt.Sprintf("gromupgradee2e%d%d", os.Getpid(), time.Now().UnixNano())
+	}
 	candidateImage := "grom-registry-upgrade-" + project + ":candidate"
 	publicURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	stack := &testStack{
@@ -123,6 +126,9 @@ func startReleaseUpgradeStack(t *testing.T) (*testStack, string) {
 		),
 	}
 	t.Cleanup(func() {
+		if os.Getenv("GROM_KEEP_RELEASE_UPGRADE_STACK_ON_FAILURE") == "1" && t.Failed() {
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 		if output, downErr := stack.compose(ctx, "down", "--volumes", "--remove-orphans"); downErr != nil {

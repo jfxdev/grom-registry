@@ -18,7 +18,7 @@ test-registry-e2e:
 	cd backend && GROM_RUN_REGISTRY_E2E=1 go test -count=1 -timeout=10m ./tests/registrye2e
 
 test-release-upgrade-e2e:
-	cd backend && GROM_RUN_RELEASE_UPGRADE_E2E=1 go test -count=1 -run TestTaggedReleaseUpgradePreservesRegistryState -timeout=12m ./tests/registrye2e
+	cd backend && GROM_RUN_RELEASE_UPGRADE_E2E=1 go test -count=1 -run TestTaggedReleaseUpgradePreservesRegistryState -timeout=20m ./tests/registrye2e
 
 test-admin-e2e:
 	cd frontend && npm run test:admin-e2e
