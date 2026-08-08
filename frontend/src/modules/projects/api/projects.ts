@@ -2,17 +2,20 @@ import { apiRequest } from '@/shared/api/client'
 import type {
   CreateRepositoryRequest,
   ArtifactDeletion,
+  ArtifactDeletionPage,
   ArtifactDeletionPreview,
   ArtifactDeletionRequest,
-  Membership,
+  MembershipPage,
   PolicyPreset,
   Project,
+  ProjectPage,
   ProjectRole,
   PrincipalKind,
   Repository,
+  RepositoryPage,
   RepositoryPolicySet,
   ReplaceRepositoryPoliciesRequest,
-  TagList,
+  TagPage,
 } from '@/shared/api/models'
 
 export const projectKeys = {
@@ -28,14 +31,14 @@ export const projectKeys = {
     ['projects', slug, 'repositories', repository, 'artifact-deletions'] as const,
 }
 
-export const listProjects = () => apiRequest<Project[]>('/api/v1/projects')
+export const listProjects = (cursor = '') => apiRequest<ProjectPage>(`/api/v1/projects${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
 export const getProject = (slug: string) => apiRequest<Project>(`/api/v1/projects/${encodeURIComponent(slug)}`)
 export const createProject = (input: { name: string; slug: string }) =>
   apiRequest<Project>('/api/v1/projects', { method: 'POST', body: JSON.stringify(input) })
 export const deleteProject = (slug: string) =>
   apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}`, { method: 'DELETE' })
-export const listMembers = (slug: string) =>
-  apiRequest<Membership[]>(`/api/v1/projects/${encodeURIComponent(slug)}/members`)
+export const listMembers = (slug: string, cursor = '') =>
+  apiRequest<MembershipPage>(`/api/v1/projects/${encodeURIComponent(slug)}/members${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
 export const setMember = (slug: string, kind: PrincipalKind, id: string, role: ProjectRole) =>
   apiRequest<{ status: string }>(`/api/v1/projects/${encodeURIComponent(slug)}/members/${kind}/${id}`, {
     method: 'PUT',
@@ -45,8 +48,8 @@ export const deleteMember = (slug: string, kind: PrincipalKind, id: string) =>
   apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}/members/${kind}/${id}`, {
     method: 'DELETE',
   })
-export const listRepositories = (slug: string) =>
-  apiRequest<Repository[]>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories`)
+export const listRepositories = (slug: string, cursor = '') =>
+  apiRequest<RepositoryPage>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
 export const createRepository = (slug: string, input: CreateRepositoryRequest) =>
   apiRequest<Repository>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories`, {
     method: 'POST',
@@ -75,8 +78,8 @@ export const replaceRepositoryPolicies = (
     `/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}/policies`,
     { method: 'PUT', body: JSON.stringify(input) },
   )
-export const listTags = (slug: string, repository: string) =>
-  apiRequest<TagList>(`/api/v1/projects/${encodeURIComponent(slug)}/repository-tags?repository=${encodeURIComponent(repository)}`)
+export const listTags = (slug: string, repository: string, cursor = '') =>
+  apiRequest<TagPage>(`/api/v1/projects/${encodeURIComponent(slug)}/repository-tags?repository=${encodeURIComponent(repository)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
 export const previewArtifactDeletion = (slug: string, input: ArtifactDeletionRequest) =>
   apiRequest<ArtifactDeletionPreview>(`/api/v1/projects/${encodeURIComponent(slug)}/artifact-deletion-previews`, {
     method: 'POST',
@@ -87,7 +90,7 @@ export const deleteArtifact = (slug: string, input: ArtifactDeletionRequest) =>
     method: 'POST',
     body: JSON.stringify(input),
   })
-export const listArtifactDeletions = (slug: string, repository: string) =>
-  apiRequest<ArtifactDeletion[]>(
-    `/api/v1/projects/${encodeURIComponent(slug)}/artifact-deletions?repository=${encodeURIComponent(repository)}`,
+export const listArtifactDeletions = (slug: string, repository: string, cursor = '') =>
+  apiRequest<ArtifactDeletionPage>(
+    `/api/v1/projects/${encodeURIComponent(slug)}/artifact-deletions?repository=${encodeURIComponent(repository)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
   )

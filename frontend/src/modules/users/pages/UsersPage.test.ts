@@ -3,6 +3,7 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { APIError } from '@/shared/api/client'
 import UsersPage from './UsersPage.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -10,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   createUserPasswordResetLink: vi.fn(),
   disableUser: vi.fn(),
   listUsers: vi.fn(),
+  promoteUserToSystemAdmin: vi.fn(),
+  promoteUserToSystemViewer: vi.fn(),
 }))
 
 vi.mock('../api/users', () => ({
@@ -17,6 +20,8 @@ vi.mock('../api/users', () => ({
   createUserPasswordResetLink: mocks.createUserPasswordResetLink,
   disableUser: mocks.disableUser,
   listUsers: mocks.listUsers,
+  promoteUserToSystemAdmin: mocks.promoteUserToSystemAdmin,
+  promoteUserToSystemViewer: mocks.promoteUserToSystemViewer,
   userKeys: { all: ['users'] },
 }))
 
@@ -41,6 +46,8 @@ describe('UsersPage', () => {
     mocks.createUserPasswordResetLink.mockReset()
     mocks.disableUser.mockReset()
     mocks.listUsers.mockReset()
+    mocks.promoteUserToSystemAdmin.mockReset()
+    mocks.promoteUserToSystemViewer.mockReset()
     mocks.listUsers.mockResolvedValue([
       {
         id: 'user-1',
@@ -103,6 +110,65 @@ describe('UsersPage', () => {
     expect(mocks.disableUser).toHaveBeenCalledWith('user-2')
   })
 
+  it('creates regular users and changes roles through a role dropdown', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text().includes('New user'))!.trigger('click')
+    await wrapper.get('input[type="email"]').setValue('new@example.com')
+    await wrapper.get('input[placeholder="alex"]').setValue('new-user')
+    mocks.createUser.mockResolvedValueOnce({
+      user: { id: 'user-3', email: 'new@example.com', username: 'new-user', systemAdmin: false, createdAt: '2026-08-08T00:00:00Z' },
+      registrationLink: { url: 'https://grom.example/reset-password#token=registration-token', expiresAt: '2026-08-08T00:30:00Z' },
+    })
+    await wrapper.findAll('form').find((form) => form.text().includes('Create user'))!.trigger('submit')
+    expect(mocks.createUser.mock.calls[0]![0]).toEqual({ email: 'new@example.com', username: 'new-user' })
+    await flushPromises()
+    expect(wrapper.get('[role="dialog"]').text()).toContain('Copy this registration link now')
+    expect(wrapper.text()).toContain('registration-token')
+
+    const roleButton = wrapper.get('button[aria-label="Change role for sam"]')
+    expect(wrapper.text()).toContain('Administrator')
+    expect(wrapper.text()).toContain('User')
+    await roleButton.trigger('click')
+    expect(wrapper.get('[role="menu"]').text()).toContain('Viewer')
+    await wrapper.findAll('[role="menuitem"]').find((item) => item.text().includes('Administrator'))!.trigger('click')
+    expect(wrapper.text()).toContain('Make sam an administrator?')
+    mocks.promoteUserToSystemAdmin.mockResolvedValueOnce(undefined)
+    await wrapper.get('form[aria-labelledby="promote-user-title"]').trigger('submit')
+    expect(mocks.promoteUserToSystemAdmin.mock.calls[0]![0]).toBe('user-2')
+  })
+
+  it('offers only promotion to administrator for viewers', async () => {
+    mocks.listUsers.mockResolvedValueOnce([{
+      id: 'viewer-1', email: 'viewer@example.com', username: 'viewer', systemAdmin: false, systemViewer: true,
+      createdAt: '2026-08-08T00:00:00Z',
+    }])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Change role for viewer"]').trigger('click')
+    const roleMenu = wrapper.get('[role="menu"]')
+    expect(roleMenu.text()).not.toContain('Viewer')
+    expect(roleMenu.text()).toContain('Administrator')
+  })
+
+  it.each([
+    ['UNIQUE constraint failed: users.username (2067)', 'This username is already in use.'],
+    ['UNIQUE constraint failed: users.email (2067)', 'This email address is already in use.'],
+  ])('shows a clear message for duplicate user %s', async (databaseError, expectedMessage) => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text().includes('New user'))!.trigger('click')
+    mocks.createUser.mockRejectedValueOnce(new APIError(400, 'invalid_user', databaseError))
+    await wrapper.findAll('form').find((form) => form.text().includes('Create user'))!.trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(expectedMessage)
+    expect(wrapper.text()).not.toContain('UNIQUE constraint failed')
+  })
+
   it('does not offer password reset or disable actions for disabled users', async () => {
     mocks.listUsers.mockResolvedValueOnce([{
       id: 'user-3', email: 'disabled@example.com', username: 'disabled', systemAdmin: false,
@@ -111,7 +177,7 @@ describe('UsersPage', () => {
     const wrapper = mountPage()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Disabled')
+    expect(wrapper.get('[aria-label="Inactive user"]')).toBeDefined()
     expect(wrapper.text()).not.toContain('Reset password')
     expect(wrapper.find('button[aria-label="Disable user disabled"]').exists()).toBe(false)
   })

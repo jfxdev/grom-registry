@@ -1,5 +1,5 @@
 import { apiRequest } from '@/shared/api/client'
-import type { LifecyclePreview, LifecycleRun, ManifestInventory } from '@/shared/api/models'
+import type { LifecyclePreview, LifecycleRun, LifecycleRunPage, ManifestInventory, ManifestInventoryPage } from '@/shared/api/models'
 
 export const registryKeys = {
   inventory: (project: string, repository: string) =>
@@ -8,9 +8,9 @@ export const registryKeys = {
     ['registry', project, repository, 'lifecycle-runs'] as const,
 }
 
-export const listInventory = (project: string, repository: string) =>
-  apiRequest<ManifestInventory[]>(
-    `/api/v1/projects/${encodeURIComponent(project)}/repository-inventory?repository=${encodeURIComponent(repository)}`,
+export const listInventory = (project: string, repository: string, cursor = '') =>
+  apiRequest<ManifestInventoryPage>(
+    `/api/v1/projects/${encodeURIComponent(project)}/repository-inventory?repository=${encodeURIComponent(repository)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
   )
 
 export const reconcileInventory = (project: string, repository: string) =>
@@ -31,7 +31,7 @@ export const executeLifecycle = (project: string, previewId: string, reason: str
     { method: 'POST', body: JSON.stringify({ previewId, reason }) },
   )
 
-export const listLifecycleRuns = (project: string, repository: string) =>
-  apiRequest<LifecycleRun[]>(
-    `/api/v1/projects/${encodeURIComponent(project)}/lifecycle-runs?repository=${encodeURIComponent(repository)}`,
+export const listLifecycleRuns = (project: string, repository: string, cursor = '') =>
+  apiRequest<LifecycleRunPage>(
+    `/api/v1/projects/${encodeURIComponent(project)}/lifecycle-runs?repository=${encodeURIComponent(repository)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
   )

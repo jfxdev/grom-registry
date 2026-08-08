@@ -12,6 +12,7 @@ type User struct {
 	Username     string        `json:"username"`
 	PasswordHash string        `json:"-"`
 	SystemAdmin  bool          `json:"systemAdmin"`
+	SystemViewer bool          `json:"systemViewer"`
 	CreatedAt    time.Time     `json:"createdAt"`
 	DisabledAt   *time.Time    `json:"disabledAt,omitempty"`
 }
@@ -26,15 +27,29 @@ type ServiceAccount struct {
 }
 
 type APIToken struct {
-	ID               foundation.ID `json:"id"`
-	PublicID         string        `json:"publicId"`
-	ServiceAccountID foundation.ID `json:"serviceAccountId"`
-	Name             string        `json:"name"`
-	SecretHash       string        `json:"-"`
-	CreatedAt        time.Time     `json:"createdAt"`
-	ExpiresAt        *time.Time    `json:"expiresAt,omitempty"`
-	LastUsedAt       *time.Time    `json:"lastUsedAt,omitempty"`
-	RevokedAt        *time.Time    `json:"revokedAt,omitempty"`
+	ID               foundation.ID           `json:"id"`
+	PublicID         string                  `json:"publicId"`
+	ServiceAccountID foundation.ID           `json:"serviceAccountId"`
+	Principal        foundation.PrincipalRef `json:"-"`
+	Name             string                  `json:"name"`
+	SecretHash       string                  `json:"-"`
+	CreatedAt        time.Time               `json:"createdAt"`
+	ExpiresAt        *time.Time              `json:"expiresAt,omitempty"`
+	LastUsedAt       *time.Time              `json:"lastUsedAt,omitempty"`
+	RevokedAt        *time.Time              `json:"revokedAt,omitempty"`
+}
+
+// ViewerRegistryToken is an access key owned by an installation viewer. It can
+// only be exchanged for pull access and is deliberately separate from service
+// account credentials in the management API.
+type ViewerRegistryToken struct {
+	ID         foundation.ID `json:"id"`
+	PublicID   string        `json:"publicId"`
+	Name       string        `json:"name"`
+	CreatedAt  time.Time     `json:"createdAt"`
+	ExpiresAt  *time.Time    `json:"expiresAt,omitempty"`
+	LastUsedAt *time.Time    `json:"lastUsedAt,omitempty"`
+	RevokedAt  *time.Time    `json:"revokedAt,omitempty"`
 }
 
 type Session struct {
@@ -54,4 +69,12 @@ type PasswordReset struct {
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
 	UsedAt     *time.Time
+	Purpose    PasswordResetPurpose
 }
+
+type PasswordResetPurpose string
+
+const (
+	PasswordResetPurposeRegistration  PasswordResetPurpose = "registration"
+	PasswordResetPurposePasswordReset PasswordResetPurpose = "password_reset"
+)

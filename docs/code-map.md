@@ -43,6 +43,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/release-operations.md` | Operator installation by digest, upgrade, rollback, signing-key posture, and supported matrix |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
 | `docs/mvp-acceptance-implementation-plan.md` | Implemented and accepted public-browser first-push, boot/readiness/API-docs, session-revocation, and restart-preservation acceptance work |
+| `docs/pagination-and-destructive-browser-acceptance-plan.md` | Planned one-shot delivery for cursor pagination of administrative/registry lists and public-browser acceptance of destructive flows |
 | `docs/visual-identity.md` | Approved visual direction, responsive rules, and UI acceptance criteria |
 | `docs/visual-implementation-plan.md` | Detailed frontend delivery phases, interaction behavior, and validation plan |
 | `docs/assets/visual-identity/` | Visual concept references used by the identity guide |
@@ -51,11 +52,10 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 
 | Context | Owns | Does not own |
 |---|---|---|
-| `identity` | Users, sessions, service accounts, API token credentials | Project membership decisions |
+| `identity` | Users (including installation viewers), sessions, service accounts, and token credentials | Project membership decisions |
 | `projects` | Projects, memberships, roles, authorization policies | Credential verification |
 | `registry` | Logical repositories, behavior policies, Docker token grants, catalog reconciliation, safe deletion, `/v2` gateway | Blob persistence or OCI protocol implementation |
 | `audit` | Immutable security event recording | Business transaction state or audit presentation/querying in the current MVP |
-| `integrations` | Integration catalog and future provider contracts | Scanner execution in the MVP |
 
 Each context may contain:
 
@@ -91,11 +91,10 @@ only if an actual split is implemented.
 | Module | Responsibility |
 |---|---|
 | `auth` | Sign-in, current-session experience, self-service password changes, and public magic-link reset completion |
-| `projects` | Project list, detail, creation, and memberships |
+| `projects` | Project list, detail, creation, memberships, and dedicated repository detail pages |
 | `registry` | Repositories, manifest inventory, lifecycle dry-runs, manual execution, tags, and command snippets |
 | `service-accounts` | Service-account lifecycle, assignments, and nested access-key management |
 | `users` | User profile, password management, and installation user administration |
-| `integrations` | Backend-driven integration catalog |
 | `backups` | Installation-admin recovery-point creation, status, listing, and download |
 
 Audit presentation and settings modules are planned completion work and do not
@@ -116,7 +115,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 |---|---|
 | `/api/v1/session`, `/api/v1/me`, `/api/v1/me/password`, `/api/v1/password-resets` | Identity session, self-service password management, and public reset completion |
 | `/api/v1/service-accounts`, `/api/v1/service-accounts/{id}/tokens` | Identity |
-| `/api/v1/users`, `/api/v1/users/{id}`, `/api/v1/users/{id}/password-reset-link` | Identity administration, user disabling with session revocation, and reveal-once magic reset-link creation |
+| `/api/v1/users`, `/api/v1/users/{id}`, `/api/v1/users/{id}/administrator`, `/api/v1/users/{id}/password-reset-link` | Identity administration, regular-user creation with reveal-once registration links, installation-administrator promotion, user disabling with session revocation, and password-reset-link creation |
 | `/api/v1/projects` | Project listing and installation-admin creation |
 | `/api/v1/projects/{project}` | Project detail and installation-admin deletion of empty projects |
 | `/api/v1/projects/{project}/repositories`, `/api/v1/projects/{project}/repository-tags` | Registry browsing and logical repository creation |
@@ -126,7 +125,6 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `/api/v1/projects/{project}/artifact-deletion-previews`, `/api/v1/projects/{project}/artifact-deletions` | Safe manifest deletion through the control plane |
 | `/api/v1/projects/{project}/repository-inventory`, `/api/v1/projects/{project}/repository-inventory-reconciliations` | Metadata inventory and reconciliation with Distribution |
 | `/api/v1/projects/{project}/lifecycle-previews`, `/api/v1/projects/{project}/lifecycle-runs` | Persisted retention dry-runs and audited manual execution |
-| `/api/v1/integrations` | Integrations |
 | `/api/v1/deployment` | Public non-sensitive deployment posture used for operator warnings |
 | `/api/v1/backups`, `/api/v1/backups/{backupId}`, `/api/v1/backups/{backupId}/download` | Installation-admin paginated backup operations, confirmed local deletion, and portable recovery bundles |
 | `/auth/token` | Registry authentication |

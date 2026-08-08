@@ -5,6 +5,8 @@ import type { ServiceAccount } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
 import { ActionButton, Button, CancelButton, DeleteButton } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
+import { PaginationControls } from '@/shared/components/ui/pagination'
+import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Bot, ChevronDown, KeyRound, Plus, Search, X } from '@lucide/vue'
 import { computed, ref } from 'vue'
@@ -18,7 +20,8 @@ import {
 
 const queryClient = useQueryClient()
 const session = useSessionStore()
-const accounts = useQuery({ queryKey: serviceAccountKeys.list(true), queryFn: () => listServiceAccounts(true) })
+const pagination = useCursorPagination()
+const accounts = useQuery({ queryKey: computed(() => [...serviceAccountKeys.list(true), pagination.cursor.value]), queryFn: () => listServiceAccounts(true, pagination.cursor.value) })
 const modalOpen = ref(false)
 const selectedAccountId = ref<string | null>(null)
 const name = ref('')
@@ -30,7 +33,7 @@ const statusFilter = ref<'active' | 'disabled' | 'all'>('active')
 const disableTarget = ref<ServiceAccount | null>(null)
 const disableConfirmation = ref('')
 const disableError = ref('')
-const statusAccounts = computed(() => (accounts.data.value ?? []).filter((account) => {
+const statusAccounts = computed(() => pageItems(accounts.data.value).filter((account) => {
   if (statusFilter.value === 'all') return true
   return statusFilter.value === 'disabled' ? Boolean(account.disabledAt) : !account.disabledAt
 }))
@@ -186,6 +189,15 @@ function confirmDisable() {
           <ServiceAccountKeysPanel v-if="!account.disabledAt && selectedAccountId === account.id" :account="account" />
         </div>
       </template>
+      <PaginationControls
+        :page="pagination.page.value"
+        :page-count="accounts.data.value?.pageCount ?? 0"
+        :has-previous="pagination.hasPrevious.value"
+        :has-next="Boolean(accounts.data.value?.nextCursor)"
+        :disabled="accounts.isFetching.value"
+        @previous="pagination.previous()"
+        @next="pagination.next(accounts.data.value?.nextCursor)"
+      />
     </div>
 
     <div v-if="modalOpen" class="modal-backdrop" @click.self="modalOpen = false">

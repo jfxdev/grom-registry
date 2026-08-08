@@ -58,7 +58,7 @@ dev:
 	trap handle_signal INT TERM; \
 	trap cleanup EXIT; \
 	(cd backend && go run ./cmd/grom) & backend_pid=$$!; \
-	(cd frontend && npm run dev) & frontend_pid=$$!; \
+	(cd frontend && npm run dev -- --host localhost --port 5173 --strictPort) & frontend_pid=$$!; \
 	echo "Grom backend:  http://localhost:8080"; \
 	echo "Grom frontend: http://localhost:5173"; \
 	while kill -0 "$$backend_pid" 2>/dev/null && kill -0 "$$frontend_pid" 2>/dev/null; do \

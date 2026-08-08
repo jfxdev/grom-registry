@@ -164,6 +164,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/administrator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["promoteUserToSystemAdmin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/viewer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["promoteUserToSystemViewer"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/registry-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listViewerRegistryTokens"];
+        put?: never;
+        post: operations["createViewerRegistryToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/registry-tokens/{tokenId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeViewerRegistryToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/service-accounts": {
         parameters: {
             query?: never;
@@ -516,38 +580,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/integrations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listIntegrations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/integrations/{key}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getIntegration"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/backups": {
         parameters: {
             query?: never;
@@ -678,19 +710,70 @@ export interface components {
             email: string;
             username: string;
             systemAdmin: boolean;
+            systemViewer?: boolean;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             disabledAt?: string | null;
         };
+        UserPage: {
+            items: components["schemas"]["User"][];
+            nextCursor?: string;
+            pageCount: number;
+        };
+        ServiceAccountPage: {
+            items: components["schemas"]["ServiceAccount"][];
+            nextCursor?: string;
+            pageCount: number;
+        };
+        APITokenPage: {
+            items: components["schemas"]["APIToken"][];
+            nextCursor?: string;
+            pageCount: number;
+        };
+        ProjectPage: {
+            items: components["schemas"]["Project"][];
+            nextCursor?: string;
+            pageCount: number;
+        };
+        MembershipPage: {
+            items: components["schemas"]["Membership"][];
+            nextCursor?: string;
+            pageCount: number;
+        };
+        RepositoryPage: {
+            items: components["schemas"]["Repository"][];
+            nextCursor?: string;
+            pageCount: number;
+        };
+        TagPage: {
+            items: string[];
+            nextCursor?: string;
+            pageCount: number;
+        };
+        ArtifactDeletionPage: {
+            items: components["schemas"]["ArtifactDeletion"][];
+            nextCursor?: string;
+            pageCount: number;
+        };
+        ManifestInventoryPage: {
+            items: components["schemas"]["ManifestInventory"][];
+            nextCursor?: string;
+            pageCount: number;
+        };
+        LifecycleRunPage: {
+            items: components["schemas"]["LifecycleRun"][];
+            nextCursor?: string;
+            pageCount: number;
+        };
         CreateUserRequest: {
             /** Format: email */
             email: string;
             username: string;
-            /** Format: password */
-            password: string;
-            /** @default false */
-            systemAdmin: boolean;
+        };
+        CreateUserResponse: {
+            user: components["schemas"]["User"];
+            registrationLink: components["schemas"]["PasswordResetLink"];
         };
         ChangePasswordRequest: {
             /** Format: password */
@@ -754,6 +837,30 @@ export interface components {
         CreatedToken: {
             token: components["schemas"]["APIToken"];
             /** @description Reveal-once API token secret. */
+            secret: string;
+        };
+        ViewerRegistryToken: {
+            /** Format: uuid */
+            id: string;
+            publicId: string;
+            name: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt?: string | null;
+            /** Format: date-time */
+            lastUsedAt?: string | null;
+            /** Format: date-time */
+            revokedAt?: string | null;
+        };
+        CreateViewerRegistryTokenRequest: {
+            name: string;
+            /** Format: date-time */
+            expiresAt?: string | null;
+        };
+        CreatedViewerRegistryToken: {
+            token: components["schemas"]["ViewerRegistryToken"];
+            /** @description Reveal-once API token restricted to registry pull access. */
             secret: string;
         };
         Project: {
@@ -1004,16 +1111,6 @@ export interface components {
             completedAt?: string | null;
             items: components["schemas"]["LifecycleRunItem"][];
         };
-        Integration: {
-            key: string;
-            name: string;
-            category: string;
-            /** @enum {string} */
-            status: "planned" | "available" | "configured" | "disabled";
-            capabilities: string[];
-            /** Format: uri */
-            documentationUrl?: string | null;
-        };
         RegistryToken: {
             token: string;
             access_token: string;
@@ -1090,6 +1187,9 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Opaque cursor returned by the previous page */
+        Cursor: string;
+        PageLimit: number;
         ID: string;
         Project: string;
         PrincipalKind: components["schemas"]["PrincipalKind"];
@@ -1277,7 +1377,11 @@ export interface operations {
     };
     listUsers: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1290,7 +1394,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["User"][];
+                    "application/json": components["schemas"]["UserPage"];
                 };
             };
             403: components["responses"]["Forbidden"];
@@ -1309,13 +1413,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Created user */
+            /** @description Created user and reveal-once registration link */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["User"];
+                    "application/json": components["schemas"]["CreateUserResponse"];
                 };
             };
             403: components["responses"]["Forbidden"];
@@ -1376,9 +1480,129 @@ export interface operations {
             };
         };
     };
+    promoteUserToSystemAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User promoted to installation administrator */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    promoteUserToSystemViewer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User promoted to installation viewer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listViewerRegistryTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only registry tokens owned by the installation viewer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewerRegistryToken"][];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createViewerRegistryToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateViewerRegistryTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Reveal-once read-only registry token */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedViewerRegistryToken"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    revokeViewerRegistryToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tokenId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listServiceAccounts: {
         parameters: {
             query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
                 /** @description Include disabled service accounts in the administrative listing. */
                 includeDisabled?: boolean;
             };
@@ -1394,7 +1618,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ServiceAccount"][];
+                    "application/json": components["schemas"]["ServiceAccountPage"];
                 };
             };
         };
@@ -1446,7 +1670,11 @@ export interface operations {
     };
     listServiceAccountTokens: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
+            };
             header?: never;
             path: {
                 id: components["parameters"]["ID"];
@@ -1461,7 +1689,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["APIToken"][];
+                    "application/json": components["schemas"]["APITokenPage"];
                 };
             };
         };
@@ -1515,7 +1743,11 @@ export interface operations {
     };
     listProjects: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1528,7 +1760,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Project"][];
+                    "application/json": components["schemas"]["ProjectPage"];
                 };
             };
         };
@@ -1614,7 +1846,11 @@ export interface operations {
     };
     listProjectMembers: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
+            };
             header?: never;
             path: {
                 project: components["parameters"]["Project"];
@@ -1629,7 +1865,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Membership"][];
+                    "application/json": components["schemas"]["MembershipPage"];
                 };
             };
         };
@@ -1686,7 +1922,11 @@ export interface operations {
     };
     listProjectRepositories: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
+            };
             header?: never;
             path: {
                 project: components["parameters"]["Project"];
@@ -1701,7 +1941,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Repository"][];
+                    "application/json": components["schemas"]["RepositoryPage"];
                 };
             };
         };
@@ -1875,6 +2115,9 @@ export interface operations {
     listRepositoryTags: {
         parameters: {
             query: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
                 /** @description Repository path relative to the project, including optional nested segments */
                 repository: string;
             };
@@ -1892,7 +2135,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TagList"];
+                    "application/json": components["schemas"]["TagPage"];
                 };
             };
         };
@@ -1927,6 +2170,9 @@ export interface operations {
     listArtifactDeletions: {
         parameters: {
             query: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
                 repository: string;
             };
             header?: never;
@@ -1943,7 +2189,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArtifactDeletion"][];
+                    "application/json": components["schemas"]["ArtifactDeletionPage"];
                 };
             };
             403: components["responses"]["Forbidden"];
@@ -1988,6 +2234,9 @@ export interface operations {
     listRepositoryInventory: {
         parameters: {
             query: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
                 repository: string;
             };
             header?: never;
@@ -2004,7 +2253,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ManifestInventory"][];
+                    "application/json": components["schemas"]["ManifestInventoryPage"];
                 };
             };
         };
@@ -2098,6 +2347,9 @@ export interface operations {
     listLifecycleRuns: {
         parameters: {
             query: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
                 repository: string;
             };
             header?: never;
@@ -2114,7 +2366,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LifecycleRun"][];
+                    "application/json": components["schemas"]["LifecycleRunPage"];
                 };
             };
         };
@@ -2176,49 +2428,6 @@ export interface operations {
                     "application/json": components["schemas"]["LifecycleRun"];
                 };
             };
-        };
-    };
-    listIntegrations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Integration catalog */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Integration"][];
-                };
-            };
-        };
-    };
-    getIntegration: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                key: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Integration descriptor */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Integration"];
-                };
-            };
-            404: components["responses"]["NotFound"];
         };
     };
     listBackups: {

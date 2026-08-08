@@ -46,8 +46,7 @@ scanner execution.
 | Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, an accepted public boot/migration/docs journey, and a clean-checkout production-image smoke check exist | Dependency/container scanning and PostgreSQL CI before claiming the corresponding support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
 | Phase 2: registry browsing and core UI | Partially accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, user-disable flows, and essential audit acceptance evidence exist | Pagination decision and complete first-push Playwright coverage |
-| Phase 3: operational hardening | Partially accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, accepted full-stack restart preservation, a clean-checkout image smoke check, release automation, and a published `v0.0.1` release exist | Upgrade tests; expanded matrices follow advertised capabilities |
-| Phase 4: integrations placeholder | Accepted for MVP | Backend-driven planned catalog and disabled read-only UI exist | ADR is required before active event delivery or scan-result storage, not for the inert placeholder |
+| Phase 3: operational hardening | Default path accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, accepted full-stack restart preservation, a clean-checkout image smoke check, release automation, a published `v0.0.1` release, and tagged-release upgrade evidence exist | Expanded matrices follow advertised capabilities |
 
 `make test` passed on July 29, 2026, including backend tests, the SQLite
 integration flow, frontend lint, 23 frontend tests, and TypeScript checking.
@@ -56,7 +55,10 @@ remains conditional on `GROM_TEST_POSTGRES_URL`. The clean-checkout container
 smoke test passed locally on August 4, 2026. The first tagged release,
 [`v0.0.1`](https://github.com/jfxdev/grom-registry/releases/tag/v0.0.1),
 published its image digest, SPDX SBOM, Trivy report, and checksums on August 5,
-2026.
+2026. The accepted release-upgrade journey in [PR #23](https://github.com/jfxdev/grom-registry/pull/23)
+then upgraded its preserved SQLite/local-storage volumes to a checkout candidate
+and verified administrator, project, Writer credential, inventory, blobs, and
+post-upgrade restart preservation.
 
 ### Update on August 2, 2026
 
@@ -470,7 +472,8 @@ Acceptance:
 
 ### Completion step 7: complete operational hardening
 
-**Backup and restore status: implemented and accepted on July 29, 2026.**
+**Backup/restore and the default SQLite/local-storage release-upgrade path are
+implemented and accepted.**
 
 Work:
 
@@ -509,8 +512,8 @@ Acceptance:
 
 ### Completion step 8: create release engineering outputs
 
-**Status: artifact publication automation and first tagged-release artifact
-evidence complete; supported upgrades remain unvalidated.**
+**Status: artifact publication and the default SQLite/local-storage upgrade
+evidence are complete.**
 
 Work:
 
@@ -534,8 +537,8 @@ Implementation checklist:
   signing-key posture.
 - [x] Publish a tagged release with image digest, SBOM, vulnerability report,
   and checksums.
-- [ ] Run clean-install, upgrade, restart, recovery, and metadata/blob
-  preservation evidence for the supported matrix.
+- [x] Run clean-install, upgrade, restart, recovery, and metadata/blob
+  preservation evidence for the default SQLite/local-storage matrix.
 
 Implementation evidence:
 
@@ -546,6 +549,10 @@ Implementation evidence:
   high/critical vulnerability report, writes checksums for every release asset,
   and attaches them to the GitHub Release. BuildKit provenance and SBOM
   attestations are published with the image.
+- [PR #23](https://github.com/jfxdev/grom-registry/pull/23) accepts the
+  tagged `v0.0.1`-to-checkout-candidate upgrade journey. It preserves the
+  SQLite/local-registry volumes, verifies management and registry credentials,
+  inventory and blobs, then verifies the candidate again after restart.
 
 Acceptance:
 
@@ -561,13 +568,10 @@ Acceptance:
 
 Work:
 
-1. Confirm integrations remain inert; require the event-delivery and
-   scan-result-storage ADR before implementing active integrations, not as a
-   blocker for the read-only MVP placeholder.
-2. Execute every `Default MVP` scenario in the acceptance matrix.
-3. Link each default scenario to an automated test or recorded manual release
+1. Execute every `Default MVP` scenario in the acceptance matrix.
+2. Link each default scenario to an automated test or recorded manual release
    check.
-4. Resolve every `partial`, `unverified`, or `missing` default entry, and
+3. Resolve every `partial`, `unverified`, or `missing` default entry, and
    resolve capability-specific entries for every capability advertised by the
    release.
 5. Run `make test` and `make build` from a clean checkout.
@@ -611,7 +615,7 @@ intentionally outside the MVP.
    SQLite, and local filesystem storage; the PostgreSQL implementation is an
    optional capability with its own release gate.
 4. **Keep secrets recoverable only by rotation.** Passwords and API tokens are stored as hashes; a token secret is shown only once.
-5. **Do not build roadmap features early.** The Integrations page exposes planned capabilities, but the MVP does not execute scanners or manage integration secrets.
+5. **Do not build roadmap features early.** Promote new capabilities only with an explicit scope, contract, and release gate.
 6. **Optimize the default path first.** SQLite, local blob storage, and Docker
    push/pull define the first supported release gate.
 7. **Scale validation with the claim.** PostgreSQL, S3, ORAS, and generic OCI
@@ -700,13 +704,17 @@ never enables policies, rejects pushes, or changes authorization.
 
 - **User:** a human account that can sign in to the web interface.
 - **Service account:** a non-human account used by CI, CD, or automation.
-- **API token:** a revocable credential owned exclusively by a service account.
+- **API token:** a revocable credential normally owned by a service account. An
+  installation viewer may also create a profile-scoped, read-only registry token.
 
 A user authenticates to the web UI with email and password.
-Docker/OCI clients authenticate with the service-account username and one of its API tokens as the password.
+Docker/OCI clients authenticate with the service-account username and one of its API tokens as the password. Installation viewers may use their username and their own read-only registry token; web passwords are never accepted.
 Web passwords are never accepted as registry credentials.
 
 Service accounts belong to the installation and can be assigned to one or more projects.
+An installation viewer has no user-management access and gains project visibility
+only from explicit membership. Its registry token is constrained to pull even if
+its membership is Writer or Admin.
 This avoids introducing organizations or nested teams.
 
 ### Project roles
@@ -724,15 +732,21 @@ deletions are persisted and audited. Subjects with referrers and referrer
 artifacts remain protected; cascade deletion is not implemented. Registry
 garbage collection remains an explicit operator action.
 
-An installation administrator can manage users and service accounts.
+An installation administrator can manage users and service accounts. Bootstrap
+creates the first user as an installation administrator. Every later user is
+created with regular access and a reveal-once registration link to choose an
+initial password. The account remains disabled until the registration link is
+consumed. Only an installation administrator can promote an active user to
+installation administrator.
 Only an installation administrator can create a project and becomes its first
 project admin. Only an installation administrator can delete a project, and only
 after every logical repository has been removed. This prevents project deletion
 from orphaning Distribution content or silently erasing repository inventory.
 
 Every user has a dedicated profile page where they can change their password
-after confirming the current password. Installation administrators reset a user
-through a system-generated, reveal-once magic URL. Its random token is stored
+after confirming the current password. Installation administrators create users
+with a system-generated, reveal-once registration magic URL, and reset a user
+through the same safe capability flow. Its random token is stored
 only as a hash, expires after 30 minutes, becomes invalid when a newer link is
 created, and can be consumed only once. The token is carried in the URL fragment
 so it is not included in navigation requests or access logs. Completing the
@@ -756,7 +770,7 @@ Tokens are created, displayed, and revoked only inside their owning service acco
 
 1. A Docker client requests `/v2/` or a repository operation.
 2. Distribution responds with a Bearer challenge pointing to Grom's `/auth/token`.
-3. The Docker client calls `/auth/token` using Basic authentication, with the service-account username and API token.
+3. The Docker client calls `/auth/token` using Basic authentication, with the service-account username and API token, or an installation viewer's username and read-only profile token.
 4. Grom parses the requested repository scope and takes the first path segment as the project.
 5. Grom intersects the requested actions with the principal's project role.
 6. Grom returns a signed, short-lived registry JWT containing only the allowed actions.
@@ -837,7 +851,6 @@ isolated real-Docker registry acceptance workflow.
 - **Registry:** registry token grants, repository scope parsing, catalog reads, and the Distribution gateway.
 - **Audit:** immutable security event recording; authorized querying is planned
   in completion step 2.
-- **Integrations:** read-only integration catalog in the MVP.
 
 Identity and Projects are separate contexts because a principal may exist without belonging to a project and memberships should not own identity credentials.
 Registry asks Projects for authorization decisions instead of reading membership tables directly.
@@ -874,8 +887,6 @@ backend/
 │   │   ├── domain/
 │   │   ├── application/
 │   │   └── infrastructure/persistence/bun/
-│   ├── integrations/
-│   │   └── domain/
 │   ├── httpapi/
 │   ├── foundation/
 │   ├── constants/
@@ -998,7 +1009,6 @@ The package centralizes stable named values such as:
 - project roles and principal kinds;
 - registry scope actions and token claims;
 - session, token, and migration defaults;
-- integration keys and statuses;
 - header names, context keys, and application limits.
 
 Rules for backend constants:
@@ -1109,6 +1119,7 @@ POST   /api/v1/password-resets
 GET    /api/v1/users
 POST   /api/v1/users
 DELETE /api/v1/users/{id}
+PUT    /api/v1/users/{id}/administrator
 POST   /api/v1/users/{id}/password-reset-link
 
 GET    /api/v1/service-accounts
@@ -1145,9 +1156,6 @@ GET    /api/v1/projects/{project}/lifecycle-previews/{previewId}
 GET    /api/v1/projects/{project}/lifecycle-runs
 POST   /api/v1/projects/{project}/lifecycle-runs
 GET    /api/v1/projects/{project}/lifecycle-runs/{runId}
-
-GET    /api/v1/integrations
-GET    /api/v1/integrations/{key}
 
 GET    /auth/token
 GET    /api/openapi.yaml        (when API documentation is enabled)
@@ -1202,7 +1210,7 @@ Each operation defines:
 - the shared structured error schema;
 - pagination behavior where applicable;
 - validation limits and representative examples;
-- externally visible enums such as roles, principal kinds, actions, and integration statuses.
+- externally visible enums such as roles, principal kinds, and actions.
 
 Serve the rendered interactive documentation at `/api/docs` and the raw contract at `/api/openapi.yaml`.
 Neither endpoint includes secrets or environment-specific server URLs.
@@ -1301,8 +1309,7 @@ frontend/
 │   │   ├── projects/
 │   │   ├── registry/
 │   │   ├── service-accounts/
-│   │   ├── users/
-│   │   └── integrations/
+│   │   └── users/
 │   ├── shared/
 │   │   ├── api/
 │   │   │   ├── client.ts
@@ -1398,43 +1405,11 @@ MVP page status:
 | Users for installation administrators | Implemented with gaps | Keep general profile editing post-MVP |
 | Service accounts and nested access keys | Implemented | Broaden browser coverage for expiration, revocation, and error states |
 | Audit log | Post-MVP | Essential event persistence remains required; browsing UI does not block MVP |
-| Integrations | Implemented as read-only roadmap | ADR required only before active integration work |
 | Basic settings | Post-MVP | Add only when concrete settings cannot be handled safely through deployment configuration |
 
 Accessibility, empty states, clear permission errors, and copy-to-clipboard commands are part of the MVP, not polish for later.
 
-## 10. Integrations page: MVP contract, roadmap implementation
-
-The Integrations page exists in the MVP, but it is read-only.
-It fetches a backend-owned catalog so the frontend does not hard-code product behavior.
-
-Initial cards:
-
-- Trivy.
-- Docker Scout or another Docker-compatible scanner.
-- Generic OCI artifact scanner.
-- Generic webhook.
-
-Each card may expose:
-
-```json
-{
-  "key": "trivy",
-  "name": "Trivy",
-  "category": "security",
-  "status": "planned",
-  "capabilities": ["scan-on-push", "manual-scan"],
-  "documentationUrl": null
-}
-```
-
-The backend defines catalog descriptor types and the current static catalog, but
-no provider interface, provider implementation, secret storage, callback
-endpoint, job execution, or scan-result schema is implemented in the MVP.
-Buttons display `Coming soon` and cannot save configuration.
-This is enough to preserve an intentional extension point without pretending the integration exists.
-
-## 11. Security baseline
+## 10. Security baseline
 
 | Requirement | Status | Completion requirement |
 |---|---|---|
@@ -1454,7 +1429,7 @@ This is enough to preserve an intentional extension point without pretending the
 No release may be described as security-baseline complete while a `Missing`
 entry remains in this table.
 
-## 12. Deployment profiles
+## 11. Deployment profiles
 
 ### Development
 
@@ -1503,7 +1478,7 @@ Multi-instance Grom, Redis, and distributed locking are deferred until real
 scale requires them. PostgreSQL support does not imply that multiple active
 Grom instances are supported.
 
-## 13. Delivery phases
+## 12. Delivery phases
 
 ### Phase 0: executable foundation
 
@@ -1536,10 +1511,10 @@ automatically, and returns an authenticated `/v2/` challenge. The same boot
 migration lifecycle must complete against PostgreSQL in CI before PostgreSQL is
 included in the supported release matrix.
 
-Remaining default-path evidence is owned by completion steps 4, 5, 7, and 8.
-The release-artifact and image-scanning automation plus operator documentation
-are complete; `v0.0.1` is artifact-publication evidence only, and supported
-upgrade evidence is not yet accepted.
+The default-path release-artifact, image-scanning, operator-documentation, and
+tagged-release upgrade evidence are complete. `v0.0.1` is both the first
+published artifact and the accepted baseline for the SQLite/local-storage
+upgrade journey in [PR #23](https://github.com/jfxdev/grom-registry/pull/23).
 PostgreSQL CI remains a capability-specific gate.
 
 ### Phase 1: authentication and project authorization
@@ -1592,22 +1567,23 @@ post-MVP unless promoted explicitly.
 
 ### Phase 3: operational hardening
 
-**Progress: partially accepted.**
+**Progress: default path accepted.**
 
-- **Partial:** named deployment profiles, request-size/time limits,
-	  authentication rate limits, trusted-proxy enforcement, production
-	  HTTPS/cookie validation, and graceful shutdown exist; upgrade tests remain.
-	  Backup/restore documentation and its recovery acceptance journey are
-	  implemented. Signing-key replacement and seamless rotation are post-MVP.
+- **Implemented:** named deployment profiles, request-size/time limits,
+  authentication rate limits, trusted-proxy enforcement, production
+  HTTPS/cookie validation, graceful shutdown, backup/restore documentation,
+  and recovery acceptance exist. Signing-key replacement and seamless rotation
+  are post-MVP.
 - **Implemented:** the default SQLite/local-storage recovery matrix is covered
   by the mandatory `Backup Restore E2E` volume-loss journey.
 - **Implemented:** mandatory Docker protocol acceptance through the isolated
   registry E2E workflow.
-- **Unverified:** `Release Upgrade E2E (Docker)` pulls the published `v0.0.1`
+- **Accepted:** `Release Upgrade E2E (Docker)` pulls the published `v0.0.1`
   baseline, upgrades its SQLite/local-storage volumes to the checkout candidate,
   and verifies administrator, project, Writer credential, inventory, blob, and
-  restart preservation. It remains separate from the required
-  network-independent registry journey until its CI evidence is accepted.
+  restart preservation. [PR #23](https://github.com/jfxdev/grom-registry/pull/23)
+  records this evidence; the journey remains separate from the
+  network-independent registry gate because it requires the tagged GHCR image.
 - **Implemented:** the registry E2E workflow streams a blob over 18 seconds,
   longer than its short-lived registry JWT, then verifies the committed blob
   remains intact. Header and idle timeouts therefore protect the public server
@@ -1616,7 +1592,8 @@ post-MVP unless promoted explicitly.
   conformance matrices.
 - **Implemented:** release-image, checksum, SBOM, and operator-documentation
   automation exists; the `v0.0.1` release completed artifact publication on
-  August 5, 2026. It does not establish supported upgrade behavior.
+  August 5, 2026. Its upgrade to the checkout candidate was accepted on August
+  7, 2026 in [PR #23](https://github.com/jfxdev/grom-registry/pull/23).
 - **New evidence:** the boot-acceptance journey proves empty-volume and
   prior-schema migration before public readiness, public OpenAPI/docs serving,
   and failed-migration non-exposure with unmarked migration history. It passed
@@ -1628,28 +1605,11 @@ post-MVP unless promoted explicitly.
 
 Exit criterion: a tagged release can be installed and upgraded with preserved metadata and blobs.
 
-Completion step 1 is implemented. Completion steps 4, 7, and 8 own the
-remaining default-path upgrade, scanning, and release work. Signing-key
-replacement is post-MVP. Expanded
-compatibility and conformance gates apply only to advertised capabilities.
+Completion steps 1, 4, 7, and 8 have accepted default-path evidence.
+Signing-key replacement is post-MVP. Expanded compatibility and conformance
+gates apply only to advertised capabilities.
 
-### Phase 4: integrations placeholder
-
-**Progress: accepted for the MVP.**
-
-- **Implemented:** backend integration catalog.
-- **Implemented:** read-only Integrations page with planned providers and
-  capabilities.
-- **Deferred guardrail:** architecture decision record before future event
-  delivery or scan-result storage is implemented.
-
-Exit criterion: the page is driven by the backend contract and makes no claim that scanning is active.
-
-The exit criterion passes in the current UI and API. The event-delivery and
-scan-result-storage ADR is required before active integration work begins, but
-does not block the inert MVP placeholder.
-
-## 14. Roadmap after the MVP
+## 13. Roadmap after the MVP
 
 Compatibility expansion is driven by actual installation demand:
 
@@ -1682,7 +1642,7 @@ behavior policies and safe manual deletion are part of the implemented control
 plane. Inventory-backed dry-runs and audited manual execution are implemented;
 periodic scheduling remains an explicit follow-up.
 
-## 15. MVP acceptance scenarios
+## 14. MVP acceptance scenarios
 
 Status vocabulary:
 
@@ -1693,7 +1653,7 @@ Status vocabulary:
   evidence is absent.
 - **Missing:** the required implementation or delivery mechanism does not exist.
 
-| # | Scenario | Gate | Status on August 3, 2026 | Evidence needed to close |
+| # | Scenario | Gate | Status on August 7, 2026 | Evidence needed to close |
 |---:|---|---|---|---|
 | 1 | An administrator creates projects `alpha` and `beta` | Default MVP | Passing | Registry E2E creates both projects through the public management API |
 | 2 | A service account is Writer in `alpha` and has no membership in `beta` | Default MVP | Passing | Registry E2E persists real projects, principals, and memberships |
@@ -1705,19 +1665,19 @@ Status vocabulary:
 | 8 | A short-lived registry JWT expires without invalidating the long-lived key | Default MVP | Passing | Registry E2E bounds expiry rejection and performs a successful fresh exchange |
 | 9 | Docker Engine can push and pull supported image content | Default MVP | Passing | Mandatory registry E2E job exercises Docker through the public Grom endpoint |
 | 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Passing | `make test-admin-e2e` passed locally and the mandatory `Admin Journey E2E (Docker)` workflow passed in [PR #6](https://github.com/jfxdev/grom-registry/pull/6) |
-| 11 | Integrations shows backend-driven planned providers with no active configuration | Default MVP | Passing | Existing API/UI tests cover the read-only flow |
-| 12 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Passing | The public process-level restart test passed in the mandatory `Registry E2E (Docker)` workflow in [PR #17](https://github.com/jfxdev/grom-registry/pull/17) |
-| 13 | The applicable backend suite passes against PostgreSQL | PostgreSQL support | Partial | Mandatory PostgreSQL CI job with no skip path |
-| 14 | Empty or supported older databases migrate before readiness | Default MVP | Passing | `make test-boot-acceptance` and the mandatory `Boot Acceptance E2E (Docker)` workflow passed in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
-| 15 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Passing | The real failing-migration fixture passed through the mandatory `Boot Acceptance E2E (Docker)` workflow in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
-| 16 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Passing | The public OpenAPI and documentation checks passed through the mandatory `Boot Acceptance E2E (Docker)` workflow in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
-| 17 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Passing | Backend contract tests and frontend generated-code freshness check run in CI |
-| 18 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
+| 11 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Passing | The public process-level restart test passed in the mandatory `Registry E2E (Docker)` workflow in [PR #17](https://github.com/jfxdev/grom-registry/pull/17) |
+| 12 | The applicable backend suite passes against PostgreSQL | PostgreSQL support | Partial | Mandatory PostgreSQL CI job with no skip path |
+| 13 | Empty or supported older databases migrate before readiness | Default MVP | Passing | `make test-boot-acceptance` and the mandatory `Boot Acceptance E2E (Docker)` workflow passed in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
+| 14 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Passing | The real failing-migration fixture passed through the mandatory `Boot Acceptance E2E (Docker)` workflow in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
+| 15 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Passing | The public OpenAPI and documentation checks passed through the mandatory `Boot Acceptance E2E (Docker)` workflow in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
+| 16 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Passing | Backend contract tests and frontend generated-code freshness check run in CI |
+| 17 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
 | 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |
 | 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Passing | HTTP/application tests cover event production and sanitization; SQLite persistence tests cover durable storage; failed audit intent blocks backup, project, logical-repository, lifecycle, and manifest-deletion operations |
 | 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Passing | The public stale-cookie and disabled-user login checks passed in the mandatory `Registry E2E (Docker)` workflow in [PR #17](https://github.com/jfxdev/grom-registry/pull/17) |
 | 22 | ORAS can push and pull representative generic OCI content | Generic OCI support | Missing | ORAS smoke job before advertising generic OCI support |
 | 23 | An S3-backed installation passes push, pull, restart, and restore checks | S3 support | Missing | Documented S3 compatibility job before advertising S3 support |
+| 24 | A published SQLite/local-storage release upgrades without losing metadata, credentials, or blobs | Default MVP | Passing | [PR #23](https://github.com/jfxdev/grom-registry/pull/23) upgrades the published `v0.0.1` baseline to the checkout candidate, verifies administrator, project, Writer key, inventory, blob, and restart preservation |
 
 The default self-hosted MVP is not accepted until every `Default MVP` row is
 `Passing`. Capability-specific rows must pass before that capability is
@@ -1727,7 +1687,7 @@ tests remain valuable, but they do not replace a scenario whose stated boundary
 is Docker, browser UI, process restart, backup restoration, startup failure, or
 CI.
 
-## 16. Decisions to preserve
+## 15. Decisions to preserve
 
 - Distribution is a separate, unmodified process.
 - Grom is the only public entry point.
@@ -1751,9 +1711,8 @@ CI.
 - Repository behavior policies never cross their owning project boundary.
 - Global policy presets are form recommendations, not inherited runtime policy.
 - Manifest deletion is performed by digest through Grom; garbage collection remains a separate operator action.
-- Integrations are visible but inactive until the roadmap phase implements a real provider.
 
-## 17. Primary references
+## 16. Primary references
 
 - [CNCF Distribution](https://distribution.github.io/distribution/about/)
 - [Distribution token authentication specification](https://distribution.github.io/distribution/spec/auth/token/)

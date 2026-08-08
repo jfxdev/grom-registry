@@ -64,7 +64,7 @@ keys are not web-login credentials.
 
 An installation administrator can:
 
-- create users, including other installation administrators;
+- create regular users and promote active users to installation administrators;
 - disable users, revoking their active web sessions;
 - generate a password-reset link for a user;
 - create and disable service accounts;
@@ -141,20 +141,22 @@ External registry clients are never granted the `delete` action.
 An administrator can:
 
 - list human users;
-- create a user with email, username, initial password, and optional
-  installation-administrator privilege;
+- create a regular user with email and username, then copy a reveal-once
+  registration link for them to choose their initial password; the account
+  remains disabled until the link is used;
+- promote an active regular user to installation administrator;
 - generate a reveal-once password-reset URL for an existing user.
 
 Administrators cannot disable their own account or the last active installation
 administrator. Disabling a user blocks future sign-in and revokes all active
 sessions immediately.
 
-The initial password accepted during user creation must contain at least eight
-characters. The user must use at least 12 characters when later changing or
-resetting it.
+The registration link is single-use, expires after 30 minutes, and carries its
+secret in the URL fragment. The user must choose a password of at least 12
+characters when registering, changing, or resetting it.
 
-Deletion, email editing, username editing, and administrator privilege editing
-are not currently exposed.
+Deletion, email editing, username editing, and administrator demotion are not
+currently exposed.
 
 ### Administrator password reset
 
@@ -501,22 +503,7 @@ metadata, and timestamp.
 There is currently no audit-event listing endpoint or audit page. Events remain
 available only through durable backend persistence in the MVP.
 
-## 16. Integrations catalog
-
-**Availability: Roadmap**
-
-The backend provides a read-only catalog and the UI displays disabled cards for:
-
-- Trivy;
-- Docker Scout;
-- a generic OCI artifact scanner;
-- a generic webhook.
-
-All entries currently have `planned` status. No scanner, webhook delivery,
-provider configuration, secret storage, job execution, or scan-result model is
-implemented. The `Coming soon` controls cannot save configuration.
-
-## 17. Operational capabilities
+## 16. Operational capabilities
 
 **Availability: Web, API, and runtime**
 
@@ -549,7 +536,7 @@ non-local public URL that does not satisfy both requirements. The default
 SQLite configuration is designed for a small single-instance
 installation; active-active Grom replicas are not supported.
 
-## 18. Current channel coverage
+## 17. Current channel coverage
 
 | Capability | Web UI | API | Internal behavior |
 |---|---:|---:|---:|
@@ -574,9 +561,8 @@ installation; active-active Grom replicas are not supported.
 | Backup creation/paginated list/download/confirmed deletion | Yes | Yes | Isolated agent |
 | Empty-volume disaster recovery | Local recovery UI | Local recovery service | Staged restore |
 | Audit event recording | No | No | Yes |
-| Integrations catalog | Read-only | Read-only | No provider |
 
-## 19. Explicitly not implemented
+## 18. Explicitly not implemented
 
 The executable product does not currently provide:
 
@@ -585,7 +571,6 @@ The executable product does not currently provide:
 - a full manifest-detail page with config, layer, or pull-history data, or an
   audit-log screen;
 - vulnerability scanning or admission policies;
-- integration secrets, callbacks, or jobs;
 - automatic retention scheduling or autopurge;
 - cascade deletion of OCI subjects and referrers;
 - Distribution blob garbage collection from the management plane;

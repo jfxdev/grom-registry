@@ -117,7 +117,7 @@ already downloaded bundle.
 ## Architecture
 
 - Backend: Go with pragmatic DDD and vertical bounded contexts under `backend/internal`.
-- Contexts: Identity, Projects, Registry, Audit, and Integrations.
+- Contexts: Identity, Projects, Registry, and Audit.
 - Domain packages must not depend on Bun, HTTP frameworks, generated transport types, or another context's infrastructure.
 - Repository interfaces express domain capabilities; Bun implementations live under the owning context's `infrastructure/persistence/bun`.
 - Cross-context behavior uses narrow application interfaces, never direct access to another context's tables.
@@ -188,14 +188,20 @@ already downloaded bundle.
 - Repository profiles are inferred passively from tagged primary OCI manifests. Referrers such as SBOMs and signatures never change the repository profile.
 - Passive profile inference must not enable policies or reject pushes. Conflicting specific primary types produce the `mixed` profile with `profileNeedsReview=true`.
 - Registry clients use API tokens, never web passwords.
+- Bootstrap creates the only initially defined installation administrator. Every
+  later user is created as a regular user with a reveal-once registration link
+  to choose an initial password and remains disabled until the link is consumed;
+  only an active installation administrator may promote a user to installation
+  administrator. The account and registration token must be created atomically;
+  registration tokens may enable pending users, while password-reset tokens
+  must not re-enable disabled users.
 - User password changes require the current password. Administrator resets use
   a system-generated reveal-once magic URL whose token is hashed, expires after
   30 minutes, and is carried in the URL fragment. Completing the reset revokes
   the target user's sessions. Authenticated users cannot access or consume reset
   links; they must change the password from their profile or sign out first.
   Never log or persist the plaintext reset token.
-- API tokens are credentials owned exclusively by service accounts. Management endpoints and UI flows stay nested under the owning service account; do not reintroduce a global token page or user-owned registry tokens.
-- Integrations are read-only planned catalog entries in the MVP; do not implement scanners, jobs, or secret storage without a roadmap decision.
+- API tokens are normally credentials owned by service accounts. The sole exception is an installation viewer's profile-scoped, reveal-once registry token: it is revocable by that viewer and must always grant only `pull` from projects with explicit membership. It must never grant `push` or `delete`, even if the viewer has a Writer or Admin project membership. Do not add tokens for other user roles or a global user-token page.
 - Avoid Redis, message brokers, dependency-injection frameworks, and background-job frameworks in the MVP.
 
 ## Required documentation maintenance

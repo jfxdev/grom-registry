@@ -8,4 +8,5 @@ type PageRequest struct {
 type PageResult[T any] struct {
 	Items      []T    `json:"items"`
 	NextCursor string `json:"nextCursor,omitempty"`
+	PageCount  int    `json:"pageCount"`
 }

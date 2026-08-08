@@ -41,4 +41,10 @@ describe('DeleteButton', () => {
     expect(wrapper.get('.lucide-trash-2')).toBeTruthy()
     expect(wrapper.text()).toBe('')
   })
+
+  it('forwards the compact size to the shared button', () => {
+    const wrapper = mount(DeleteButton, { props: { size: 'sm' } })
+
+    expect(wrapper.get('button').classes()).toContain('grom-button-size-sm')
+  })
 })

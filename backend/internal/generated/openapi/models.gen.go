@@ -174,30 +174,6 @@ func (e DeploymentProfile) Valid() bool {
 	}
 }
 
-// Defines values for IntegrationStatus.
-const (
-	Available  IntegrationStatus = "available"
-	Configured IntegrationStatus = "configured"
-	Disabled   IntegrationStatus = "disabled"
-	Planned    IntegrationStatus = "planned"
-)
-
-// Valid indicates whether the value is a known member of the IntegrationStatus enum.
-func (e IntegrationStatus) Valid() bool {
-	switch e {
-	case Available:
-		return true
-	case Configured:
-		return true
-	case Disabled:
-		return true
-	case Planned:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for InventoryState.
 const (
 	InventoryStateActive   InventoryState = "active"
@@ -480,6 +456,13 @@ type APIToken struct {
 	ServiceAccountId openapi_types.UUID `json:"serviceAccountId"`
 }
 
+// APITokenPage defines model for APITokenPage.
+type APITokenPage struct {
+	Items      []APIToken `json:"items"`
+	NextCursor *string    `json:"nextCursor,omitempty"`
+	PageCount  int        `json:"pageCount"`
+}
+
 // ArtifactDeletion defines model for ArtifactDeletion.
 type ArtifactDeletion struct {
 	ActorId      openapi_types.UUID     `json:"actorId"`
@@ -497,6 +480,13 @@ type ArtifactDeletion struct {
 
 // ArtifactDeletionStatus defines model for ArtifactDeletion.Status.
 type ArtifactDeletionStatus string
+
+// ArtifactDeletionPage defines model for ArtifactDeletionPage.
+type ArtifactDeletionPage struct {
+	Items      []ArtifactDeletion `json:"items"`
+	NextCursor *string            `json:"nextCursor,omitempty"`
+	PageCount  int                `json:"pageCount"`
+}
 
 // ArtifactDeletionPreview defines model for ArtifactDeletionPreview.
 type ArtifactDeletionPreview struct {
@@ -605,10 +595,20 @@ type CreateServiceAccountTokenRequest struct {
 
 // CreateUserRequest defines model for CreateUserRequest.
 type CreateUserRequest struct {
-	Email       openapi_types.Email `json:"email"`
-	Password    string              `json:"password"`
-	SystemAdmin *bool               `json:"systemAdmin,omitempty"`
-	Username    string              `json:"username"`
+	Email    openapi_types.Email `json:"email"`
+	Username string              `json:"username"`
+}
+
+// CreateUserResponse defines model for CreateUserResponse.
+type CreateUserResponse struct {
+	RegistrationLink PasswordResetLink `json:"registrationLink"`
+	User             User              `json:"user"`
+}
+
+// CreateViewerRegistryTokenRequest defines model for CreateViewerRegistryTokenRequest.
+type CreateViewerRegistryTokenRequest struct {
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	Name      string     `json:"name"`
 }
 
 // CreatedToken defines model for CreatedToken.
@@ -616,6 +616,13 @@ type CreatedToken struct {
 	// Secret Reveal-once API token secret.
 	Secret string   `json:"secret"`
 	Token  APIToken `json:"token"`
+}
+
+// CreatedViewerRegistryToken defines model for CreatedViewerRegistryToken.
+type CreatedViewerRegistryToken struct {
+	// Secret Reveal-once API token restricted to registry pull access.
+	Secret string              `json:"secret"`
+	Token  ViewerRegistryToken `json:"token"`
 }
 
 // Deployment defines model for Deployment.
@@ -640,19 +647,6 @@ type Health struct {
 	// Status Example: ok
 	Status string `json:"status"`
 }
-
-// Integration defines model for Integration.
-type Integration struct {
-	Capabilities     []string          `json:"capabilities"`
-	Category         string            `json:"category"`
-	DocumentationUrl *string           `json:"documentationUrl,omitempty"`
-	Key              string            `json:"key"`
-	Name             string            `json:"name"`
-	Status           IntegrationStatus `json:"status"`
-}
-
-// IntegrationStatus defines model for Integration.Status.
-type IntegrationStatus string
 
 // InventoryState defines model for InventoryState.
 type InventoryState string
@@ -720,6 +714,13 @@ type LifecycleRunItem struct {
 // LifecycleRunItemStatus defines model for LifecycleRunItem.Status.
 type LifecycleRunItemStatus string
 
+// LifecycleRunPage defines model for LifecycleRunPage.
+type LifecycleRunPage struct {
+	Items      []LifecycleRun `json:"items"`
+	NextCursor *string        `json:"nextCursor,omitempty"`
+	PageCount  int            `json:"pageCount"`
+}
+
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
 	Email    openapi_types.Email `json:"email"`
@@ -748,6 +749,13 @@ type ManifestInventory struct {
 	UntaggedAt               *time.Time               `json:"untaggedAt,omitempty"`
 }
 
+// ManifestInventoryPage defines model for ManifestInventoryPage.
+type ManifestInventoryPage struct {
+	Items      []ManifestInventory `json:"items"`
+	NextCursor *string             `json:"nextCursor,omitempty"`
+	PageCount  int                 `json:"pageCount"`
+}
+
 // Membership defines model for Membership.
 type Membership struct {
 	CreatedAt     time.Time          `json:"createdAt"`
@@ -755,6 +763,13 @@ type Membership struct {
 	PrincipalKind PrincipalKind      `json:"principalKind"`
 	ProjectId     openapi_types.UUID `json:"projectId"`
 	Role          ProjectRole        `json:"role"`
+}
+
+// MembershipPage defines model for MembershipPage.
+type MembershipPage struct {
+	Items      []Membership `json:"items"`
+	NextCursor *string      `json:"nextCursor,omitempty"`
+	PageCount  int          `json:"pageCount"`
 }
 
 // PasswordResetLink defines model for PasswordResetLink.
@@ -786,6 +801,13 @@ type Project struct {
 	Id        openapi_types.UUID `json:"id"`
 	Name      string             `json:"name"`
 	Slug      string             `json:"slug"`
+}
+
+// ProjectPage defines model for ProjectPage.
+type ProjectPage struct {
+	Items      []Project `json:"items"`
+	NextCursor *string   `json:"nextCursor,omitempty"`
+	PageCount  int       `json:"pageCount"`
 }
 
 // ProjectRole defines model for ProjectRole.
@@ -833,6 +855,13 @@ type RepositoryCreationSource string
 
 // RepositoryProfileSource defines model for Repository.ProfileSource.
 type RepositoryProfileSource string
+
+// RepositoryPage defines model for RepositoryPage.
+type RepositoryPage struct {
+	Items      []Repository `json:"items"`
+	NextCursor *string      `json:"nextCursor,omitempty"`
+	PageCount  int          `json:"pageCount"`
+}
 
 // RepositoryPolicy defines model for RepositoryPolicy.
 type RepositoryPolicy struct {
@@ -899,6 +928,13 @@ type ServiceAccount struct {
 	Username    string             `json:"username"`
 }
 
+// ServiceAccountPage defines model for ServiceAccountPage.
+type ServiceAccountPage struct {
+	Items      []ServiceAccount `json:"items"`
+	NextCursor *string          `json:"nextCursor,omitempty"`
+	PageCount  int              `json:"pageCount"`
+}
+
 // SetMembershipRequest defines model for SetMembershipRequest.
 type SetMembershipRequest struct {
 	Role ProjectRole `json:"role"`
@@ -909,24 +945,50 @@ type Status struct {
 	Status string `json:"status"`
 }
 
-// TagList defines model for TagList.
-type TagList struct {
-	Name string   `json:"name"`
-	Tags []string `json:"tags"`
+// TagPage defines model for TagPage.
+type TagPage struct {
+	Items      []string `json:"items"`
+	NextCursor *string  `json:"nextCursor,omitempty"`
+	PageCount  int      `json:"pageCount"`
 }
 
 // User defines model for User.
 type User struct {
-	CreatedAt   time.Time           `json:"createdAt"`
-	DisabledAt  *time.Time          `json:"disabledAt,omitempty"`
-	Email       openapi_types.Email `json:"email"`
-	Id          openapi_types.UUID  `json:"id"`
-	SystemAdmin bool                `json:"systemAdmin"`
-	Username    string              `json:"username"`
+	CreatedAt    time.Time           `json:"createdAt"`
+	DisabledAt   *time.Time          `json:"disabledAt,omitempty"`
+	Email        openapi_types.Email `json:"email"`
+	Id           openapi_types.UUID  `json:"id"`
+	SystemAdmin  bool                `json:"systemAdmin"`
+	SystemViewer *bool               `json:"systemViewer,omitempty"`
+	Username     string              `json:"username"`
 }
+
+// UserPage defines model for UserPage.
+type UserPage struct {
+	Items      []User  `json:"items"`
+	NextCursor *string `json:"nextCursor,omitempty"`
+	PageCount  int     `json:"pageCount"`
+}
+
+// ViewerRegistryToken defines model for ViewerRegistryToken.
+type ViewerRegistryToken struct {
+	CreatedAt  time.Time          `json:"createdAt"`
+	ExpiresAt  *time.Time         `json:"expiresAt,omitempty"`
+	Id         openapi_types.UUID `json:"id"`
+	LastUsedAt *time.Time         `json:"lastUsedAt,omitempty"`
+	Name       string             `json:"name"`
+	PublicId   string             `json:"publicId"`
+	RevokedAt  *time.Time         `json:"revokedAt,omitempty"`
+}
+
+// Cursor defines model for Cursor.
+type Cursor = string
 
 // ID defines model for ID.
 type ID = openapi_types.UUID
+
+// PageLimit defines model for PageLimit.
+type PageLimit = int
 
 // PrincipalID defines model for PrincipalID.
 type PrincipalID = openapi_types.UUID
@@ -964,31 +1026,83 @@ type ListBackupsParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListProjectsParams defines parameters for ListProjects.
+type ListProjectsParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListArtifactDeletionsParams defines parameters for ListArtifactDeletions.
 type ListArtifactDeletionsParams struct {
-	Repository string `form:"repository" json:"repository"`
+	// Cursor Opaque cursor returned by the previous page
+	Cursor     *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit      *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+	Repository string     `form:"repository" json:"repository"`
 }
 
 // ListLifecycleRunsParams defines parameters for ListLifecycleRuns.
 type ListLifecycleRunsParams struct {
-	Repository string `form:"repository" json:"repository"`
+	// Cursor Opaque cursor returned by the previous page
+	Cursor     *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit      *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+	Repository string     `form:"repository" json:"repository"`
+}
+
+// ListProjectMembersParams defines parameters for ListProjectMembers.
+type ListProjectMembersParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListProjectRepositoriesParams defines parameters for ListProjectRepositories.
+type ListProjectRepositoriesParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListRepositoryInventoryParams defines parameters for ListRepositoryInventory.
 type ListRepositoryInventoryParams struct {
-	Repository string `form:"repository" json:"repository"`
+	// Cursor Opaque cursor returned by the previous page
+	Cursor     *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit      *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+	Repository string     `form:"repository" json:"repository"`
 }
 
 // ListRepositoryTagsParams defines parameters for ListRepositoryTags.
 type ListRepositoryTagsParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
 	// Repository Repository path relative to the project, including optional nested segments
 	Repository string `form:"repository" json:"repository"`
 }
 
 // ListServiceAccountsParams defines parameters for ListServiceAccounts.
 type ListServiceAccountsParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
 	// IncludeDisabled Include disabled service accounts in the administrative listing.
 	IncludeDisabled *bool `form:"includeDisabled,omitempty" json:"includeDisabled,omitempty"`
+}
+
+// ListServiceAccountTokensParams defines parameters for ListServiceAccountTokens.
+type ListServiceAccountTokensParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListUsersParams defines parameters for ListUsers.
+type ListUsersParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ExchangeRegistryTokenParams defines parameters for ExchangeRegistryToken.
@@ -999,6 +1113,9 @@ type ExchangeRegistryTokenParams struct {
 
 // ChangeCurrentUserPasswordJSONRequestBody defines body for ChangeCurrentUserPassword for application/json ContentType.
 type ChangeCurrentUserPasswordJSONRequestBody = ChangePasswordRequest
+
+// CreateViewerRegistryTokenJSONRequestBody defines body for CreateViewerRegistryToken for application/json ContentType.
+type CreateViewerRegistryTokenJSONRequestBody = CreateViewerRegistryTokenRequest
 
 // CompletePasswordResetJSONRequestBody defines body for CompletePasswordReset for application/json ContentType.
 type CompletePasswordResetJSONRequestBody = CompletePasswordResetRequest

@@ -381,7 +381,7 @@ func assertManifestPutDenied(t *testing.T, output string) {
 
 func observationComplete(
 	repositories []openapi.Repository,
-	tags openapi.TagList,
+	tags openapi.TagPage,
 	inventory []openapi.ManifestInventory,
 ) bool {
 	repositoryOK := false
@@ -393,8 +393,7 @@ func observationComplete(
 			repositoryOK = true
 		}
 	}
-	tagOK := tags.Name == "alpha/app" || tags.Name == "app"
-	tagOK = tagOK && contains(tags.Tags, "v1")
+	tagOK := contains(tags.Items, "v1")
 	inventoryOK := false
 	for _, manifest := range inventory {
 		if manifest.Digest != "" &&
@@ -428,7 +427,7 @@ func waitForRestartObservation(t *testing.T, api *managementClient, projectSlug,
 
 func restartObservationComplete(
 	repositories []openapi.Repository,
-	tags openapi.TagList,
+	tags openapi.TagPage,
 	inventory []openapi.ManifestInventory,
 	repository, repositoryName string,
 	expectedTags []string,
@@ -440,11 +439,11 @@ func restartObservationComplete(
 			break
 		}
 	}
-	if !repositoryOK || (tags.Name != repository && tags.Name != repositoryName) {
+	if !repositoryOK {
 		return false
 	}
 	for _, expectedTag := range expectedTags {
-		if !contains(tags.Tags, expectedTag) {
+		if !contains(tags.Items, expectedTag) {
 			return false
 		}
 		inventoryTagObserved := false

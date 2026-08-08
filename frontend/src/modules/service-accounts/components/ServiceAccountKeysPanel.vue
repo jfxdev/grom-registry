@@ -5,6 +5,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { writeClipboardText } from '@/shared/lib/clipboard'
+import { pageItems } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Check, Copy, KeyRound, Plus, ShieldAlert, Trash2, X } from '@lucide/vue'
 import { onUnmounted, ref } from 'vue'
@@ -128,12 +129,12 @@ function closeSecret() {
     </div>
 
     <div v-if="keys.isLoading.value" class="keys-empty">Loading keys…</div>
-    <div v-else-if="!keys.data.value?.length" class="keys-empty">
+    <div v-else-if="!pageItems(keys.data.value).length" class="keys-empty">
       <KeyRound :size="18" />
       <span>No keys linked to this service account.</span>
     </div>
     <div v-else class="key-list">
-      <div v-for="token in keys.data.value" :key="token.id" class="key-row">
+      <div v-for="token in pageItems(keys.data.value)" :key="token.id" class="key-row">
         <div>
           <p class="text-sm font-medium">{{ token.name }}</p>
           <p class="mt-1 font-mono text-xs text-muted-foreground">grm_{{ token.publicId }}_••••••••</p>
@@ -210,15 +211,24 @@ function closeSecret() {
 }
 
 .secret-value {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   margin-top: 0.8rem;
 }
 
 .secret-value code {
+  display: block;
   min-width: 0;
-  overflow: auto;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 0.7rem 0.8rem;
   color: var(--accent);
   font-size: 0.75rem;
-  white-space: nowrap;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .key-list {
@@ -247,10 +257,18 @@ function closeSecret() {
 
 @media (max-width: 700px) {
   .keys-header,
-  .key-row,
-  .secret-value {
+  .key-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .secret-value {
+    grid-template-columns: 1fr;
+  }
+
+  .secret-value :deep(.grom-button) {
+    width: 100%;
+    min-height: 3rem;
   }
 
   .key-meta {

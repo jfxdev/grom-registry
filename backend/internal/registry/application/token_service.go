@@ -53,6 +53,9 @@ func (s *TokenService) Issue(ctx context.Context, subject string, principal foun
 			continue
 		}
 		allowed := s.projects.AllowedActions(ctx, principal, name, actions)
+		if principal.Kind == constants.PrincipalUser {
+			allowed = onlyPullActions(allowed)
+		}
 		if containsAction(allowed, constants.RegistryActionPush) && !s.repositoryCanReceivePush(ctx, name) {
 			if err := s.ensureRepositoryForPush(ctx, name, principal); err != nil {
 				if errors.Is(err, ErrRepositoryArchived) {
@@ -77,6 +80,16 @@ func (s *TokenService) Issue(ctx context.Context, subject string, principal foun
 	}
 	token, err := s.signer.Sign(claims)
 	return token, int(s.ttl.Seconds()), now, err
+}
+
+func onlyPullActions(actions []string) []string {
+	result := make([]string, 0, 1)
+	for _, action := range actions {
+		if action == constants.RegistryActionPull {
+			result = append(result, action)
+		}
+	}
+	return result
 }
 
 func withoutAction(actions []string, denied string) []string {

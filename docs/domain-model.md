@@ -24,7 +24,7 @@ These structs must remain free of Bun persistence tags and HTTP framework depend
 | Type | Kind | Responsibility |
 |---|---|---|
 | `User` | Entity | Human identity, password credential, and account status |
-| `PasswordReset` | Entity | Expiring, single-use password-reset capability stored only as a public identifier and secret hash |
+| `PasswordReset` | Entity | Expiring, single-use password setup or reset capability stored only as a public identifier and secret hash |
 | `ServiceAccount` | Entity | Non-human automation identity |
 | `APIToken` | Child entity | Revocable long-lived registry credential owned by exactly one `ServiceAccount` through `ServiceAccountID` |
 | `Session` | Entity | Web authentication session |
@@ -32,7 +32,12 @@ These structs must remain free of Bun persistence tags and HTTP framework depend
 | `Email` | Value object | Normalized human email |
 | `TokenSecret` | Value object | Reveal-once plaintext used only at creation/verification boundaries |
 
-Identity verifies credentials but does not decide repository access. On the
+The bootstrap path creates the first user as the installation administrator.
+Every later user is created with regular access and a reveal-once registration
+link to choose an initial password. The user stays disabled until that link is
+consumed; only an active installation administrator may promote a user to
+installation administrator. Identity verifies credentials but does not decide
+repository access. On the
 first boot after a recovery restore, Identity atomically invalidates all
 restored web sessions and password-reset capabilities. Service-account API
 tokens remain durable credentials at the selected recovery point.
@@ -48,6 +53,10 @@ tokens remain durable credentials at the selected recovery point.
 | `AccessDecision` | Value object | Allowed subset of requested project actions |
 
 Projects owns the authorization policy that maps memberships and roles to allowed actions.
+Installation viewers are global read-only users: they cannot access user management,
+and only receive project or registry visibility through an explicit project membership.
+Their profile-scoped registry API tokens authenticate as the user but are always
+reduced to `pull`, irrespective of the membership role.
 Only installation administrators create or delete projects. Deletion is rejected
 while Registry reports any logical repository for the project; an accepted
 deletion cascades only the now-empty project's memberships.
@@ -124,17 +133,6 @@ an idempotent `platform.restore_completed` event keyed by the backup ID after
 restored ephemeral credentials are invalidated. Backup manifests, operations,
 pagination cursors, and restore markers are platform-operational records rather
 than domain entities.
-
-## Integrations context
-
-| Type | Kind | Responsibility |
-|---|---|---|
-| `IntegrationDescriptor` | Read model | Backend-owned integration catalog entry |
-| `IntegrationKey` | Value object | Stable provider identifier |
-| `IntegrationStatus` | Value object | Planned, available, configured, or disabled |
-| `IntegrationCapability` | Value object | Provider capability such as scan-on-push |
-
-Only planned/read-only descriptors are implemented in the MVP.
 
 ## Constants ownership
 

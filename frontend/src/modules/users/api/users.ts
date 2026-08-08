@@ -1,14 +1,18 @@
 import { apiRequest } from '@/shared/api/client'
-import type { User } from '@/shared/api/models'
+import type { CreateUserResponse, User, UserPage } from '@/shared/api/models'
 
 export const userKeys = { all: ['users'] as const }
-export const listUsers = () => apiRequest<User[]>('/api/v1/users')
+export const listUsers = (cursor = '') => apiRequest<UserPage>(`/api/v1/users${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
 export const createUser = (input: {
   email: string
   username: string
-  password: string
-  systemAdmin: boolean
-}) => apiRequest<User>('/api/v1/users', { method: 'POST', body: JSON.stringify(input) })
+}) => apiRequest<CreateUserResponse>('/api/v1/users', { method: 'POST', body: JSON.stringify(input) })
+
+export const promoteUserToSystemAdmin = (userId: string) =>
+  apiRequest<User>(`/api/v1/users/${encodeURIComponent(userId)}/administrator`, { method: 'PUT' })
+
+export const promoteUserToSystemViewer = (userId: string) =>
+  apiRequest<User>(`/api/v1/users/${encodeURIComponent(userId)}/viewer`, { method: 'PUT' })
 
 export const createUserPasswordResetLink = (userId: string) =>
   apiRequest<{ url: string; expiresAt: string }>(`/api/v1/users/${encodeURIComponent(userId)}/password-reset-link`, {

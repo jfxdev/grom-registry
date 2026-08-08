@@ -26,7 +26,6 @@ import (
 	"github.com/jfxdev/grom/backend/internal/foundation"
 	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
 	identitydomain "github.com/jfxdev/grom/backend/internal/identity/domain"
-	integrationdomain "github.com/jfxdev/grom/backend/internal/integrations/domain"
 	platformbackup "github.com/jfxdev/grom/backend/internal/platform/backup"
 	"github.com/jfxdev/grom/backend/internal/platform/maintenance"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
@@ -157,11 +156,17 @@ func (s *Server) routes() chi.Router {
 
 		apiRouter.Group(func(protected chi.Router) {
 			protected.Use(s.requireSession)
+			protected.Use(s.viewerReadOnly)
 			protected.Get("/me", s.currentUser)
 			protected.Put("/me/password", s.changeCurrentUserPassword)
+			protected.Get("/me/registry-tokens", s.listViewerRegistryTokens)
+			protected.Post("/me/registry-tokens", s.createViewerRegistryToken)
+			protected.Delete("/me/registry-tokens/{tokenId}", s.revokeViewerRegistryToken)
 			protected.Get("/users", s.listUsers)
 			protected.Post("/users", s.createUser)
 			protected.Delete("/users/{id}", s.deleteUser)
+			protected.Put("/users/{id}/administrator", s.promoteUserToSystemAdmin)
+			protected.Put("/users/{id}/viewer", s.promoteUserToSystemViewer)
 			protected.Post("/users/{id}/password-reset-link", s.createUserPasswordResetLink)
 
 			protected.Get("/service-accounts", s.listServiceAccounts)
@@ -197,8 +202,6 @@ func (s *Server) routes() chi.Router {
 			protected.Get("/projects/{project}/lifecycle-runs/{runId}", s.getLifecycleRun)
 			protected.Get("/registry-policy-presets", s.listRegistryPolicyPresets)
 
-			protected.Get("/integrations", s.listIntegrations)
-			protected.Get("/integrations/{key}", s.getIntegration)
 			protected.Get("/backups", s.listBackups)
 			protected.Post("/backups", s.createBackup)
 			protected.Delete("/backups/{backupId}", s.deleteBackup)
@@ -405,6 +408,44 @@ func (s *Server) changeCurrentUserPassword(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+func (s *Server) listViewerRegistryTokens(w http.ResponseWriter, r *http.Request) {
+	user := userFromContext(r.Context())
+	tokens, err := s.identity.ListViewerRegistryTokens(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer permission required")
+		return
+	}
+	writeJSON(w, http.StatusOK, tokens)
+}
+
+func (s *Server) createViewerRegistryToken(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Name      string     `json:"name"`
+		ExpiresAt *time.Time `json:"expiresAt"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	user := userFromContext(r.Context())
+	created, err := s.identity.CreateViewerRegistryToken(r.Context(), user.ID, input.Name, input.ExpiresAt)
+	if err != nil {
+		writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer permission required")
+		return
+	}
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditAccessKeyCreated, constants.AuditResourceUser, user.ID, map[string]any{"tokenId": created.Token.ID, "expiresAt": created.Token.ExpiresAt, "readOnly": true})
+	writeJSON(w, http.StatusCreated, map[string]any{"token": identitydomain.ViewerRegistryToken{ID: created.Token.ID, PublicID: created.Token.PublicID, Name: created.Token.Name, CreatedAt: created.Token.CreatedAt, ExpiresAt: created.Token.ExpiresAt}, "secret": created.Secret})
+}
+
+func (s *Server) revokeViewerRegistryToken(w http.ResponseWriter, r *http.Request) {
+	user := userFromContext(r.Context())
+	if err := s.identity.RevokeViewerRegistryToken(r.Context(), user.ID, foundation.ID(chi.URLParam(r, "tokenId"))); err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Token not found")
+		return
+	}
+	_ = s.recordAudit(r, principalForUser(user), constants.AuditAccessKeyRevoked, constants.AuditResourceUser, user.ID, map[string]any{"tokenId": chi.URLParam(r, "tokenId"), "readOnly": true})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	if !requireSystemAdmin(w, r) {
 		return
@@ -414,7 +455,7 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, users)
+	writePage(w, r, "users", users)
 }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
@@ -422,21 +463,57 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Email       string `json:"email"`
-		Username    string `json:"username"`
-		Password    string `json:"password"`
-		SystemAdmin bool   `json:"systemAdmin"`
+		Email    string `json:"email"`
+		Username string `json:"username"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	user, err := s.identity.CreateUser(r.Context(), input.Email, input.Username, input.Password, input.SystemAdmin)
+	created, err := s.identity.CreateUser(r.Context(), input.Email, input.Username)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_user", err.Error())
 		return
 	}
-	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserCreated, constants.AuditResourceUser, user.ID, map[string]any{"systemAdmin": user.SystemAdmin})
-	writeJSON(w, http.StatusCreated, user)
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserCreated, constants.AuditResourceUser, created.User.ID, map[string]any{"systemAdmin": false})
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"user": created.User,
+		"registrationLink": map[string]any{
+			"url":       s.passwordResetURL(r, created.RegistrationLink.Token),
+			"expiresAt": created.RegistrationLink.ExpiresAt,
+		},
+	})
+}
+
+func (s *Server) promoteUserToSystemAdmin(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	targetID := foundation.ID(chi.URLParam(r, "id"))
+	user, err := s.identity.PromoteUserToSystemAdmin(r.Context(), targetID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+		return
+	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserPromotedToSystemAdmin, constants.AuditResourceUser, user.ID, nil)
+	writeJSON(w, http.StatusOK, user)
+}
+
+func (s *Server) promoteUserToSystemViewer(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	targetID := foundation.ID(chi.URLParam(r, "id"))
+	user, err := s.identity.PromoteUserToSystemViewer(r.Context(), targetID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+			return
+		}
+		writeError(w, r, http.StatusBadRequest, "invalid_role", err.Error())
+		return
+	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserPromotedToSystemViewer, constants.AuditResourceUser, user.ID, nil)
+	writeJSON(w, http.StatusOK, user)
 }
 
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
@@ -486,14 +563,18 @@ func (s *Server) createUserPasswordResetLink(w http.ResponseWriter, r *http.Requ
 	); auditErr != nil {
 		s.logger.Error("record password reset link audit event", "error", auditErr)
 	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"url":       s.passwordResetURL(r, created.Token),
+		"expiresAt": created.ExpiresAt,
+	})
+}
+
+func (s *Server) passwordResetURL(r *http.Request, token string) string {
 	resetURLBase := s.publicURL.String()
 	if requestOrigin, parseErr := url.Parse(r.Header.Get("Origin")); parseErr == nil && requestOrigin.Scheme != "" && requestOrigin.Host != "" {
 		resetURLBase = requestOrigin.Scheme + "://" + requestOrigin.Host
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"url":       resetURLBase + "/reset-password#token=" + url.QueryEscape(created.Token),
-		"expiresAt": created.ExpiresAt,
-	})
+	return resetURLBase + "/reset-password#token=" + url.QueryEscape(token)
 }
 
 func (s *Server) completePasswordReset(w http.ResponseWriter, r *http.Request) {
@@ -534,7 +615,7 @@ func (s *Server) listServiceAccounts(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, accounts)
+	writePage(w, r, "service-accounts:include-disabled="+r.URL.Query().Get("includeDisabled"), accounts)
 }
 
 func (s *Server) createServiceAccount(w http.ResponseWriter, r *http.Request) {
@@ -579,7 +660,7 @@ func (s *Server) listServiceAccountTokens(w http.ResponseWriter, r *http.Request
 		writeError(w, r, http.StatusNotFound, "not_found", "Service account not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, tokens)
+	writePage(w, r, "service-account-tokens:"+chi.URLParam(r, "id"), tokens)
 }
 
 func (s *Server) createServiceAccountToken(w http.ResponseWriter, r *http.Request) {
@@ -627,7 +708,7 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, projects)
+	writePage(w, r, "projects:"+user.ID.String(), projects)
 }
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
@@ -701,12 +782,16 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listMemberships(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
+	if user.SystemViewer {
+		writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer accounts cannot access user memberships")
+		return
+	}
 	memberships, err := s.projects.ListMemberships(r.Context(), principalForUser(user), user.SystemAdmin, chi.URLParam(r, "project"))
 	if err != nil {
 		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, memberships)
+	writePage(w, r, "memberships:"+chi.URLParam(r, "project"), memberships)
 }
 
 func (s *Server) setMembership(w http.ResponseWriter, r *http.Request) {
@@ -769,7 +854,7 @@ func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, repositories)
+	writePage(w, r, "repositories:"+project.Slug, repositories)
 }
 
 func (s *Server) createRepository(w http.ResponseWriter, r *http.Request) {
@@ -998,7 +1083,7 @@ func (s *Server) listArtifactDeletions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "artifact_deletions_unavailable", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, deletions)
+	writePage(w, r, "artifact-deletions:"+project.Slug+":"+repository, deletions)
 }
 
 func stringValue(value *string) string {
@@ -1071,7 +1156,7 @@ func (s *Server) listRepositoryInventory(w http.ResponseWriter, r *http.Request)
 		writeError(w, r, http.StatusBadRequest, "inventory_unavailable", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writePage(w, r, "repository-inventory:"+project.Slug+":"+repository, items)
 }
 
 func (s *Server) reconcileRepositoryInventory(w http.ResponseWriter, r *http.Request) {
@@ -1180,7 +1265,7 @@ func (s *Server) listLifecycleRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "lifecycle_runs_unavailable", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, runs)
+	writePage(w, r, "lifecycle-runs:"+project.Slug+":"+repository, runs)
 }
 
 func (s *Server) getLifecycleRun(w http.ResponseWriter, r *http.Request) {
@@ -1223,21 +1308,7 @@ func (s *Server) listTags(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadGateway, "registry_unavailable", "Registry metadata is unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, tags)
-}
-
-func (s *Server) listIntegrations(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, integrationCatalog())
-}
-
-func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) {
-	for _, integration := range integrationCatalog() {
-		if integration.Key == chi.URLParam(r, "key") {
-			writeJSON(w, http.StatusOK, integration)
-			return
-		}
-	}
-	writeError(w, r, http.StatusNotFound, "not_found", "Integration not found")
+	writePage(w, r, "repository-tags:"+project.Slug+":"+repository, tags.Tags)
 }
 
 func (s *Server) exchangeRegistryToken(w http.ResponseWriter, r *http.Request) {
@@ -1288,6 +1359,18 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), currentUserKey{}, user)))
+	})
+}
+
+func (s *Server) viewerReadOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := userFromContext(r.Context())
+		viewerOwnCredentialAction := r.URL.Path == "/api/v1/me/password" || strings.HasPrefix(r.URL.Path, "/api/v1/me/registry-tokens")
+		if user != nil && user.SystemViewer && r.Method != http.MethodGet && r.Method != http.MethodHead && !viewerOwnCredentialAction {
+			writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer accounts have read-only access")
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -1385,9 +1468,18 @@ func (s *Server) allowedOrigin(origin *url.URL, r *http.Request) bool {
 		strings.EqualFold(origin.Host, s.publicURL.Host) {
 		return true
 	}
-	return isLoopbackHostname(s.publicURL.Hostname()) &&
-		strings.EqualFold(origin.Scheme, requestScheme(r)) &&
-		strings.EqualFold(origin.Host, r.Host)
+	if !isLoopbackHostname(s.publicURL.Hostname()) ||
+		!isLoopbackHostname(origin.Hostname()) ||
+		!strings.EqualFold(origin.Scheme, requestScheme(r)) {
+		return false
+	}
+	if strings.EqualFold(origin.Host, r.Host) {
+		return true
+	}
+	// Vite's development proxy can rewrite the request Host to the backend
+	// target. Keep the development exception narrowly limited to its fixed
+	// loopback port rather than accepting arbitrary loopback origins.
+	return origin.Port() == "5173"
 }
 
 func requestScheme(r *http.Request) string {
@@ -1454,15 +1546,6 @@ func (s *Server) spa(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(index)
-}
-
-func integrationCatalog() []integrationdomain.Descriptor {
-	return []integrationdomain.Descriptor{
-		{Key: constants.IntegrationTrivy, Name: "Trivy", Category: "security", Status: constants.IntegrationStatusPlanned, Capabilities: []string{"scan-on-push", "manual-scan"}},
-		{Key: constants.IntegrationDockerScout, Name: "Docker Scout", Category: "security", Status: constants.IntegrationStatusPlanned, Capabilities: []string{"manual-scan"}},
-		{Key: constants.IntegrationOCI, Name: "OCI artifact scanner", Category: "security", Status: constants.IntegrationStatusPlanned, Capabilities: []string{"oci-referrers"}},
-		{Key: constants.IntegrationWebhook, Name: "Generic webhook", Category: "automation", Status: constants.IntegrationStatusPlanned, Capabilities: []string{"manifest-pushed"}},
-	}
 }
 
 func principalForUser(user *identitydomain.User) foundation.PrincipalRef {

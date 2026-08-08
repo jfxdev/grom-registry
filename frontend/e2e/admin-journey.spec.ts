@@ -72,3 +72,46 @@ test('an administrator completes the first-push journey through the public UI', 
     await cleanup()
   }
 })
+
+test('an administrator confirms destructive access changes through the public UI', async ({ page }) => {
+  const runtime = await readRuntime()
+  await page.goto(`${runtime.publicURL}/signin`)
+  await page.getByLabel('Email').fill(ADMIN_E2E_ADMIN.email)
+  await page.getByRole('textbox', { name: 'Password' }).fill(ADMIN_E2E_ADMIN.password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+
+  await page.goto(`${runtime.publicURL}/projects/alpha`)
+  await page.getByRole('button', { name: /Members/ }).click()
+  await page.getByRole('button', { name: 'Remove service account member' }).click()
+  const memberDialog = page.getByRole('dialog', { name: 'Remove member' })
+  await expect(memberDialog).toContainText('loses project access')
+  const [memberResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().includes('/members/service_account/')),
+    memberDialog.getByRole('button', { name: 'Remove member' }).click(),
+  ])
+  expect(memberResponse.status()).toBe(204)
+  await expect(page.getByRole('button', { name: 'Remove service account member' })).toBeHidden()
+
+  await page.getByRole('link', { name: 'Service accounts' }).click()
+  const account = page.locator('.account-item', { hasText: 'alpha-writer' })
+  await account.getByRole('button', { name: 'Disable service account Alpha writer' }).click()
+  const disableDialog = page.getByRole('dialog', { name: 'Disable service account' })
+  await expect(disableDialog.getByRole('button', { name: 'Disable service account' })).toBeDisabled()
+  await disableDialog.getByLabel('Service account name confirmation').fill('Alpha writer')
+  const [disableResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'DELETE' && /\/service-accounts\//.test(response.url())),
+    disableDialog.getByRole('button', { name: 'Disable service account' }).click(),
+  ])
+  expect(disableResponse.status()).toBe(204)
+  await expect(account.getByText('Disabled', { exact: true })).toBeVisible()
+
+  await page.goto(`${runtime.publicURL}/projects/alpha`)
+  await page.getByRole('button', { name: 'Delete project' }).click()
+  const projectDialog = page.getByRole('dialog', { name: 'Delete project' })
+  const [projectResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().endsWith('/api/v1/projects/alpha')),
+    projectDialog.getByRole('button', { name: 'Delete project' }).click(),
+  ])
+  expect(projectResponse.status()).toBe(409)
+  await expect(projectDialog).toContainText('Remove every repository before deleting this project')
+})

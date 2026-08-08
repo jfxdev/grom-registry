@@ -3,7 +3,9 @@ import { useSessionStore } from '@/modules/auth/store/session'
 import { APIError } from '@/shared/api/client'
 import { ActionButton, Button, CancelButton } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
+import { PaginationControls } from '@/shared/components/ui/pagination'
 import { ROUTES } from '@/shared/constants'
+import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ArrowUpRight, Box, Plus, Search, X } from '@lucide/vue'
 import { computed, ref } from 'vue'
@@ -16,13 +18,14 @@ const name = ref('')
 const slug = ref('')
 const error = ref('')
 const searchQuery = ref('')
-const projects = useQuery({ queryKey: projectKeys.all, queryFn: listProjects })
-const projectCount = computed(() => projects.data.value?.length ?? 0)
+const pagination = useCursorPagination()
+const projects = useQuery({ queryKey: computed(() => [...projectKeys.all, pagination.cursor.value]), queryFn: () => listProjects(pagination.cursor.value) })
+const projectCount = computed(() => pageItems(projects.data.value).length)
 const filteredProjects = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
-  if (!query) return projects.data.value ?? []
+  if (!query) return pageItems(projects.data.value)
 
-  return (projects.data.value ?? []).filter((project) =>
+  return pageItems(projects.data.value).filter((project) =>
     project.name.toLocaleLowerCase().includes(query) || project.slug.toLocaleLowerCase().includes(query),
   )
 })
@@ -129,6 +132,15 @@ function submitCreate() {
           <ArrowUpRight class="project-open" :size="17" />
         </RouterLink>
       </div>
+      <PaginationControls
+        :page="pagination.page.value"
+        :page-count="projects.data.value?.pageCount ?? 0"
+        :has-previous="pagination.hasPrevious.value"
+        :has-next="Boolean(projects.data.value?.nextCursor)"
+        :disabled="projects.isFetching.value"
+        @previous="pagination.previous()"
+        @next="pagination.next(projects.data.value?.nextCursor)"
+      />
     </section>
 
     <div v-if="modalOpen && session.user?.systemAdmin" class="modal-backdrop" @click.self="modalOpen = false">

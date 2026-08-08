@@ -77,12 +77,22 @@ func (c *managementClient) currentUser(t *testing.T, expectedStatus int) openapi
 
 func (c *managementClient) createUser(t *testing.T, email, username, password string) openapi.User {
 	t.Helper()
-	systemAdmin := false
-	var user openapi.User
+	var created openapi.CreateUserResponse
 	c.doJSON(t, http.MethodPost, "/api/v1/users", openapi.CreateUserRequest{
-		Email: openapi_types.Email(email), Username: username, Password: password, SystemAdmin: &systemAdmin,
-	}, &user, http.StatusCreated)
-	return user
+		Email: openapi_types.Email(email), Username: username,
+	}, &created, http.StatusCreated)
+	registrationURL, err := url.Parse(created.RegistrationLink.Url)
+	if err != nil {
+		t.Fatalf("parse registration link: %v", err)
+	}
+	registrationToken, err := url.ParseQuery(registrationURL.Fragment)
+	if err != nil {
+		t.Fatalf("parse registration token: %v", err)
+	}
+	c.doJSON(t, http.MethodPost, "/api/v1/password-resets", openapi.CompletePasswordResetRequest{
+		Token: registrationToken.Get("token"), NewPassword: password,
+	}, nil, http.StatusNoContent)
+	return created.User
 }
 
 func (c *managementClient) disableUser(t *testing.T, userID string) {
@@ -163,9 +173,9 @@ func (c *managementClient) repositories(t *testing.T, project string) []openapi.
 	return repositories
 }
 
-func (c *managementClient) tags(t *testing.T, project, repository string) openapi.TagList {
+func (c *managementClient) tags(t *testing.T, project, repository string) openapi.TagPage {
 	t.Helper()
-	var tags openapi.TagList
+	var tags openapi.TagPage
 	path := "/api/v1/projects/" + url.PathEscape(project) + "/repository-tags?repository=" +
 		url.QueryEscape(repository)
 	c.doJSON(t, http.MethodGet, path, nil, &tags, http.StatusOK)

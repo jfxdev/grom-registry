@@ -155,6 +155,8 @@ func TestOriginGuardAllowsPublicAndForwardedDevelopmentOrigins(t *testing.T) {
 	}{
 		{name: "configured public URL", host: "localhost:8080", origin: "http://localhost:8080", status: http.StatusNoContent},
 		{name: "Vite forwarded host", host: "localhost:5173", origin: "http://localhost:5173", status: http.StatusNoContent},
+		{name: "Vite proxied backend host", host: "localhost:8080", origin: "http://localhost:5173", status: http.StatusNoContent},
+		{name: "other loopback port", host: "localhost:8080", origin: "http://localhost:4173", status: http.StatusForbidden},
 		{name: "foreign origin", host: "localhost:8080", origin: "https://example.com", status: http.StatusForbidden},
 		{name: "invalid origin", host: "localhost:8080", origin: "null", status: http.StatusForbidden},
 	}
@@ -199,6 +201,7 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	projects.SetDeletionGuard(serverTestProjectDeletionGuard{})
 	server := &Server{
 		identity: identity, audit: auditapp.New(auditStore), projects: projects,
+		publicURL:       &url.URL{Scheme: "https", Host: "grom.example"},
 		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 		loginLimiter:    newAuthenticationFailureLimiter(SecurityOptions{AuthFailureLimit: 10, AuthFailureWindow: time.Minute, AuthBlockDuration: time.Minute}),
 		registryLimiter: newAuthenticationFailureLimiter(SecurityOptions{AuthFailureLimit: 10, AuthFailureWindow: time.Minute, AuthBlockDuration: time.Minute}),
@@ -216,13 +219,57 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	}
 
 	createUserResponse := httptest.NewRecorder()
-	server.createUser(createUserResponse, withUser(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/users", strings.NewReader(`{"email":"target@example.com","username":"target","password":"target-password","systemAdmin":false}`)), admin))
+	server.createUser(createUserResponse, withUser(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/users", strings.NewReader(`{"email":"target@example.com","username":"target"}`)), admin))
 	if createUserResponse.Code != http.StatusCreated {
 		t.Fatalf("create user: expected 201, got %d: %s", createUserResponse.Code, createUserResponse.Body.String())
 	}
-	var target identitydomain.User
-	if err := json.NewDecoder(createUserResponse.Body).Decode(&target); err != nil {
+	var createdUser struct {
+		User             identitydomain.User `json:"user"`
+		RegistrationLink struct {
+			URL string `json:"url"`
+		} `json:"registrationLink"`
+	}
+	if err := json.NewDecoder(createUserResponse.Body).Decode(&createdUser); err != nil {
 		t.Fatal(err)
+	}
+	target := createdUser.User
+	if target.SystemAdmin {
+		t.Fatal("expected newly created user to be a regular user")
+	}
+	if target.DisabledAt == nil {
+		t.Fatal("expected newly created user to remain disabled until registration")
+	}
+	if _, _, err := identity.Login(ctx, "target@example.com", "target-password"); err == nil {
+		t.Fatal("expected pending user login to be rejected before registration")
+	}
+	registrationURL, err := url.Parse(createdUser.RegistrationLink.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registrationToken, err := url.ParseQuery(registrationURL.Fragment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completeRegistrationResponse := httptest.NewRecorder()
+	server.completePasswordReset(completeRegistrationResponse, httptest.NewRequest(http.MethodPost, "http://grom/api/v1/password-resets", strings.NewReader(`{"token":"`+registrationToken.Get("token")+`","newPassword":"target-password"}`)))
+	if completeRegistrationResponse.Code != http.StatusNoContent {
+		t.Fatalf("complete registration: expected 204, got %d: %s", completeRegistrationResponse.Code, completeRegistrationResponse.Body.String())
+	}
+	if registered, err := identity.FindUser(ctx, target.ID); err != nil || registered.DisabledAt != nil {
+		t.Fatalf("expected registration to enable the user, got %#v, %v", registered, err)
+	}
+	forbiddenPromotionResponse := httptest.NewRecorder()
+	server.promoteUserToSystemAdmin(forbiddenPromotionResponse, withUserAndParams(httptest.NewRequest(http.MethodPut, "http://grom/api/v1/users/"+target.ID.String()+"/administrator", nil), &target, map[string]string{"id": target.ID.String()}))
+	if forbiddenPromotionResponse.Code != http.StatusForbidden {
+		t.Fatalf("regular-user promotion: expected 403, got %d", forbiddenPromotionResponse.Code)
+	}
+	promoteUserResponse := httptest.NewRecorder()
+	server.promoteUserToSystemAdmin(promoteUserResponse, withUserAndParams(httptest.NewRequest(http.MethodPut, "http://grom/api/v1/users/"+target.ID.String()+"/administrator", nil), admin, map[string]string{"id": target.ID.String()}))
+	if promoteUserResponse.Code != http.StatusOK {
+		t.Fatalf("promote user: expected 200, got %d: %s", promoteUserResponse.Code, promoteUserResponse.Body.String())
+	}
+	if promoted, err := identity.FindUser(ctx, target.ID); err != nil || !promoted.SystemAdmin {
+		t.Fatalf("expected user promotion to persist, got %#v, %v", promoted, err)
 	}
 	targetSession, _, err := identity.Login(ctx, "target@example.com", "target-password")
 	if err != nil {
@@ -335,7 +382,7 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 		}
 		actions[event.Action] = true
 	}
-	for _, action := range []string{constants.AuditLoginFailed, constants.AuditLoginSucceeded, constants.AuditUserCreated, constants.AuditUserDisabled, constants.AuditServiceAccountCreated, constants.AuditAccessKeyCreated, constants.AuditAccessKeyRevoked, constants.AuditProjectCreated, constants.AuditProjectDeleteRequested, constants.AuditProjectDeleted, constants.AuditMembershipUpserted, constants.AuditMembershipRemoved, constants.AuditRegistryAuthFailed} {
+	for _, action := range []string{constants.AuditLoginFailed, constants.AuditLoginSucceeded, constants.AuditUserCreated, constants.AuditUserPromotedToSystemAdmin, constants.AuditUserDisabled, constants.AuditServiceAccountCreated, constants.AuditAccessKeyCreated, constants.AuditAccessKeyRevoked, constants.AuditProjectCreated, constants.AuditProjectDeleteRequested, constants.AuditProjectDeleted, constants.AuditMembershipUpserted, constants.AuditMembershipRemoved, constants.AuditRegistryAuthFailed} {
 		if !actions[action] {
 			t.Errorf("missing audit action %s", action)
 		}

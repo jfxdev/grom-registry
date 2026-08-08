@@ -116,10 +116,14 @@ func runRepositoryPersistenceFlow(
 	repositoryService := registryapp.NewRepositoryService(registryStore)
 	projectService.SetDeletionGuard(repositoryService)
 
-	developer, err := identityService.CreateUser(ctx, "developer@example.com", "developer", "developer-password", false)
+	createdDeveloper, err := identityService.CreateUser(ctx, "developer@example.com", "developer")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := identityService.CompletePasswordReset(ctx, createdDeveloper.RegistrationLink.Token, "developer-password"); err != nil {
+		t.Fatal(err)
+	}
+	developer := &createdDeveloper.User
 	developerSession, _, err := identityService.Login(ctx, "developer@example.com", "developer-password")
 	if err != nil {
 		t.Fatal(err)
@@ -166,6 +170,41 @@ func runRepositoryPersistenceFlow(
 	}, true, "Payments", "payments")
 	if err != nil {
 		t.Fatal(err)
+	}
+	viewerCreated, err := identityService.CreateUser(ctx, "viewer@example.com", "viewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := identityService.CompletePasswordReset(ctx, viewerCreated.RegistrationLink.Token, "viewer-password"); err != nil {
+		t.Fatal(err)
+	}
+	viewer, err := identityService.PromoteUserToSystemViewer(ctx, viewerCreated.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewerCreatedToken, err := identityService.CreateViewerRegistryToken(ctx, viewer.ID, "local pull", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewerPrincipal, err := identityService.AuthenticateRegistry(ctx, viewer.Username, viewerCreatedToken.Secret)
+	if err != nil || viewerPrincipal.Kind != constants.PrincipalUser || viewerPrincipal.ID != viewer.ID {
+		t.Fatalf("authenticate viewer registry token: %#v, %v", viewerPrincipal, err)
+	}
+	viewerSigner, err := signing.LoadOrCreate(filepath.Join(t.TempDir(), "viewer.key"), filepath.Join(t.TempDir(), "viewer.crt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewerTokenService := registryapp.NewTokenService(projectService, nil, viewerSigner, time.Minute)
+	withoutMembership, _, _, err := viewerTokenService.Issue(ctx, viewer.Username, viewerPrincipal, constants.RegistryService, []string{"repository:payments/api:pull"})
+	if err != nil || viewerTokenService.HasAccess(withoutMembership, "payments/api", constants.RegistryActionPull) {
+		t.Fatalf("viewer must not receive registry access without membership: %v", err)
+	}
+	if err := projectService.SetMembership(ctx, foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: admin.ID}, true, project.Slug, viewerPrincipal, constants.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	viewerJWT, _, _, err := viewerTokenService.Issue(ctx, viewer.Username, viewerPrincipal, constants.RegistryService, []string{"repository:payments/api:pull,push,delete"})
+	if err != nil || !viewerTokenService.HasAccess(viewerJWT, "payments/api", constants.RegistryActionPull) || viewerTokenService.HasAccess(viewerJWT, "payments/api", constants.RegistryActionPush) || viewerTokenService.HasAccess(viewerJWT, "payments/api", constants.RegistryActionDelete) {
+		t.Fatalf("viewer registry token must be pull-only: %v", err)
 	}
 	account, err := identityService.CreateServiceAccount(ctx, "CI", "ci-payments", "")
 	if err != nil {

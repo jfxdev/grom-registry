@@ -31,6 +31,19 @@ func (r *Repository) CreateUser(ctx context.Context, user *identity.User) error 
 	return err
 }
 
+func (r *Repository) CreateUserWithPasswordReset(ctx context.Context, user *identity.User, reset *identity.PasswordReset) error {
+	return r.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewInsert().Model(fromUser(user)).Exec(ctx); err != nil {
+			return err
+		}
+		_, err := tx.NewInsert().Model(&passwordResetModel{
+			ID: reset.ID.String(), PublicID: reset.PublicID, UserID: reset.UserID.String(),
+			SecretHash: reset.SecretHash, CreatedAt: reset.CreatedAt, ExpiresAt: reset.ExpiresAt, Purpose: string(reset.Purpose),
+		}).Exec(ctx)
+		return err
+	})
+}
+
 func (r *Repository) FindUserByEmail(ctx context.Context, email string) (*identity.User, error) {
 	model := new(userModel)
 	err := r.db.NewSelect().Model(model).Where("email = ?", email).Where("disabled_at IS NULL").Scan(ctx)
@@ -68,6 +81,40 @@ func (r *Repository) ListUsers(ctx context.Context) ([]identity.User, error) {
 		result = append(result, *toUser(&models[i]))
 	}
 	return result, nil
+}
+
+func (r *Repository) PromoteUserToSystemAdmin(ctx context.Context, id foundation.ID) error {
+	result, err := r.db.NewUpdate().Model((*userModel)(nil)).
+		Set("is_system_admin = TRUE").
+		Set("is_system_viewer = FALSE").
+		Where("id = ?", id.String()).
+		Where("disabled_at IS NULL").
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (r *Repository) PromoteUserToSystemViewer(ctx context.Context, id foundation.ID) error {
+	result, err := r.db.NewUpdate().Model((*userModel)(nil)).
+		Set("is_system_viewer = TRUE").
+		Where("id = ?", id.String()).
+		Where("disabled_at IS NULL").
+		Where("is_system_admin = FALSE").
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (r *Repository) DisableUser(ctx context.Context, id foundation.ID) error {
@@ -123,7 +170,7 @@ func (r *Repository) CreatePasswordReset(ctx context.Context, reset *identity.Pa
 		}
 		_, err := tx.NewInsert().Model(&passwordResetModel{
 			ID: reset.ID.String(), PublicID: reset.PublicID, UserID: reset.UserID.String(),
-			SecretHash: reset.SecretHash, CreatedAt: reset.CreatedAt, ExpiresAt: reset.ExpiresAt,
+			SecretHash: reset.SecretHash, CreatedAt: reset.CreatedAt, ExpiresAt: reset.ExpiresAt, Purpose: string(reset.Purpose),
 		}).Exec(ctx)
 		return err
 	})
@@ -136,7 +183,7 @@ func (r *Repository) FindPasswordResetByPublicID(ctx context.Context, publicID s
 	}
 	return &identity.PasswordReset{
 		ID: foundation.ID(model.ID), PublicID: model.PublicID, UserID: foundation.ID(model.UserID),
-		SecretHash: model.SecretHash, CreatedAt: model.CreatedAt, ExpiresAt: model.ExpiresAt, UsedAt: model.UsedAt,
+		SecretHash: model.SecretHash, CreatedAt: model.CreatedAt, ExpiresAt: model.ExpiresAt, UsedAt: model.UsedAt, Purpose: identity.PasswordResetPurpose(model.Purpose),
 	}, nil
 }
 
@@ -144,6 +191,7 @@ func (r *Repository) ConsumePasswordReset(
 	ctx context.Context,
 	resetID, userID foundation.ID,
 	passwordHash string,
+	activateUser bool,
 	usedAt time.Time,
 ) error {
 	return r.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
@@ -161,11 +209,15 @@ func (r *Repository) ConsumePasswordReset(
 		if affected == 0 {
 			return sql.ErrNoRows
 		}
-		result, err = tx.NewUpdate().Model((*userModel)(nil)).
+		userUpdate := tx.NewUpdate().Model((*userModel)(nil)).
 			Set("password_hash = ?", passwordHash).
-			Where("id = ?", userID.String()).
-			Where("disabled_at IS NULL").
-			Exec(ctx)
+			Where("id = ?", userID.String())
+		if activateUser {
+			userUpdate = userUpdate.Set("disabled_at = NULL")
+		} else {
+			userUpdate = userUpdate.Where("disabled_at IS NULL")
+		}
+		result, err = userUpdate.Exec(ctx)
 		if err != nil {
 			return err
 		}
@@ -278,6 +330,15 @@ func (r *Repository) CreateServiceAccountAPIToken(ctx context.Context, token *id
 	return err
 }
 
+func (r *Repository) CreateViewerAPIToken(ctx context.Context, token *identity.APIToken) error {
+	_, err := r.db.NewInsert().Model(&apiTokenModel{
+		ID: token.ID.String(), PublicID: token.PublicID, PrincipalKind: constants.PrincipalUser,
+		PrincipalID: token.Principal.ID.String(), Name: token.Name, SecretHash: token.SecretHash,
+		CreatedAt: token.CreatedAt, ExpiresAt: token.ExpiresAt,
+	}).Exec(ctx)
+	return err
+}
+
 func (r *Repository) ListServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID) ([]identity.APIToken, error) {
 	var models []apiTokenModel
 	if err := r.db.NewSelect().Model(&models).
@@ -321,6 +382,31 @@ func (r *Repository) RevokeServiceAccountAPIToken(ctx context.Context, serviceAc
 	return nil
 }
 
+func (r *Repository) ListViewerAPITokens(ctx context.Context, userID foundation.ID) ([]identity.ViewerRegistryToken, error) {
+	var models []apiTokenModel
+	if err := r.db.NewSelect().Model(&models).Where("principal_kind = ?", constants.PrincipalUser).Where("principal_id = ?", userID.String()).OrderExpr("created_at DESC").Scan(ctx); err != nil {
+		return nil, err
+	}
+	result := make([]identity.ViewerRegistryToken, 0, len(models))
+	for i := range models {
+		result = append(result, toViewerRegistryToken(&models[i]))
+	}
+	return result, nil
+}
+
+func (r *Repository) RevokeViewerAPIToken(ctx context.Context, userID, tokenID foundation.ID) error {
+	now := time.Now().UTC()
+	result, err := r.db.NewUpdate().Model((*apiTokenModel)(nil)).Set("revoked_at = ?", now).Where("id = ?", tokenID.String()).Where("principal_kind = ?", constants.PrincipalUser).Where("principal_id = ?", userID.String()).Where("revoked_at IS NULL").Exec(ctx)
+	if err != nil {
+		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (r *Repository) TouchAPIToken(ctx context.Context, id foundation.ID) error {
 	_, err := r.db.NewUpdate().Model((*apiTokenModel)(nil)).
 		Set("last_used_at = ?", time.Now().UTC()).Where("id = ?", id.String()).Exec(ctx)
@@ -330,14 +416,14 @@ func (r *Repository) TouchAPIToken(ctx context.Context, id foundation.ID) error 
 func fromUser(user *identity.User) *userModel {
 	return &userModel{
 		ID: user.ID.String(), Email: user.Email, Username: user.Username, Password: user.PasswordHash,
-		SystemAdmin: user.SystemAdmin, CreatedAt: user.CreatedAt, DisabledAt: user.DisabledAt,
+		SystemAdmin: user.SystemAdmin, SystemViewer: user.SystemViewer, CreatedAt: user.CreatedAt, DisabledAt: user.DisabledAt,
 	}
 }
 
 func toUser(model *userModel) *identity.User {
 	return &identity.User{
 		ID: foundation.ID(model.ID), Email: model.Email, Username: model.Username, PasswordHash: model.Password,
-		SystemAdmin: model.SystemAdmin, CreatedAt: model.CreatedAt, DisabledAt: model.DisabledAt,
+		SystemAdmin: model.SystemAdmin, SystemViewer: model.SystemViewer, CreatedAt: model.CreatedAt, DisabledAt: model.DisabledAt,
 	}
 }
 
@@ -351,9 +437,14 @@ func toServiceAccount(model *serviceAccountModel) *identity.ServiceAccount {
 func toAPIToken(model *apiTokenModel) *identity.APIToken {
 	return &identity.APIToken{
 		ID: foundation.ID(model.ID), PublicID: model.PublicID, ServiceAccountID: foundation.ID(model.PrincipalID),
-		Name: model.Name, SecretHash: model.SecretHash,
+		Principal: foundation.PrincipalRef{Kind: model.PrincipalKind, ID: foundation.ID(model.PrincipalID)},
+		Name:      model.Name, SecretHash: model.SecretHash,
 		CreatedAt: model.CreatedAt, ExpiresAt: model.ExpiresAt, LastUsedAt: model.LastUsedAt, RevokedAt: model.RevokedAt,
 	}
+}
+
+func toViewerRegistryToken(model *apiTokenModel) identity.ViewerRegistryToken {
+	return identity.ViewerRegistryToken{ID: foundation.ID(model.ID), PublicID: model.PublicID, Name: model.Name, CreatedAt: model.CreatedAt, ExpiresAt: model.ExpiresAt, LastUsedAt: model.LastUsedAt, RevokedAt: model.RevokedAt}
 }
 
 var _ identity.Repository = (*Repository)(nil)

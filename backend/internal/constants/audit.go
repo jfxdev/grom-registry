@@ -5,6 +5,8 @@ const (
 	AuditLoginFailed                  = "identity.login_failed"
 	AuditRegistryAuthFailed           = "identity.registry_auth_failed"
 	AuditUserCreated                  = "identity.user_created"
+	AuditUserPromotedToSystemAdmin    = "identity.user_promoted_to_system_admin"
+	AuditUserPromotedToSystemViewer   = "identity.user_promoted_to_system_viewer"
 	AuditUserDisabled                 = "identity.user_disabled"
 	AuditServiceAccountCreated        = "identity.service_account_created"
 	AuditServiceAccountDisabled       = "identity.service_account_disabled"
