@@ -3,6 +3,7 @@ package bunstore
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -28,13 +29,13 @@ func (r *Repository) CountUsers(ctx context.Context) (int, error) {
 
 func (r *Repository) CreateUser(ctx context.Context, user *identity.User) error {
 	_, err := r.db.NewInsert().Model(fromUser(user)).Exec(ctx)
-	return err
+	return userConflictError(err)
 }
 
 func (r *Repository) CreateUserWithPasswordReset(ctx context.Context, user *identity.User, reset *identity.PasswordReset) error {
 	return r.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		if _, err := tx.NewInsert().Model(fromUser(user)).Exec(ctx); err != nil {
-			return err
+			return userConflictError(err)
 		}
 		_, err := tx.NewInsert().Model(&passwordResetModel{
 			ID: reset.ID.String(), PublicID: reset.PublicID, UserID: reset.UserID.String(),
@@ -42,6 +43,20 @@ func (r *Repository) CreateUserWithPasswordReset(ctx context.Context, user *iden
 		}).Exec(ctx)
 		return err
 	})
+}
+
+func userConflictError(err error) error {
+	if err == nil {
+		return nil
+	}
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "users.username") || strings.Contains(message, "users_username") {
+		return identity.ErrUsernameAlreadyExists
+	}
+	if strings.Contains(message, "users.email") || strings.Contains(message, "users_email") {
+		return identity.ErrEmailAlreadyExists
+	}
+	return err
 }
 
 func (r *Repository) FindUserByEmail(ctx context.Context, email string) (*identity.User, error) {
@@ -331,12 +346,22 @@ func (r *Repository) CreateServiceAccountAPIToken(ctx context.Context, token *id
 }
 
 func (r *Repository) CreateViewerAPIToken(ctx context.Context, token *identity.APIToken) error {
-	_, err := r.db.NewInsert().Model(&apiTokenModel{
+	result, err := r.db.NewInsert().Model(&apiTokenModel{
 		ID: token.ID.String(), PublicID: token.PublicID, PrincipalKind: constants.PrincipalUser,
 		PrincipalID: token.Principal.ID.String(), Name: token.Name, SecretHash: token.SecretHash,
 		CreatedAt: token.CreatedAt, ExpiresAt: token.ExpiresAt,
-	}).Exec(ctx)
-	return err
+	}).On("CONFLICT DO NOTHING").Exec(ctx)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return identity.ErrViewerRegistryTokenAlreadyExists
+	}
+	return nil
 }
 
 func (r *Repository) ListServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID) ([]identity.APIToken, error) {
@@ -384,7 +409,7 @@ func (r *Repository) RevokeServiceAccountAPIToken(ctx context.Context, serviceAc
 
 func (r *Repository) ListViewerAPITokens(ctx context.Context, userID foundation.ID) ([]identity.ViewerRegistryToken, error) {
 	var models []apiTokenModel
-	if err := r.db.NewSelect().Model(&models).Where("principal_kind = ?", constants.PrincipalUser).Where("principal_id = ?", userID.String()).OrderExpr("created_at DESC").Scan(ctx); err != nil {
+	if err := r.db.NewSelect().Model(&models).Where("principal_kind = ?", constants.PrincipalUser).Where("principal_id = ?", userID.String()).Where("revoked_at IS NULL").OrderExpr("created_at DESC").Limit(1).Scan(ctx); err != nil {
 		return nil, err
 	}
 	result := make([]identity.ViewerRegistryToken, 0, len(models))

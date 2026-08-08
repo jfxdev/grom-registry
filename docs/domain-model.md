@@ -55,8 +55,8 @@ tokens remain durable credentials at the selected recovery point.
 Projects owns the authorization policy that maps memberships and roles to allowed actions.
 Installation viewers are global read-only users: they cannot access user management,
 and only receive project or registry visibility through an explicit project membership.
-Their profile-scoped registry API tokens authenticate as the user but are always
-reduced to `pull`, irrespective of the membership role.
+Their single active, profile-scoped registry API token authenticates as the user
+but is always reduced to `pull`, irrespective of the membership role.
 Only installation administrators create or delete projects. Deletion is rejected
 while Registry reports any logical repository for the project; an accepted
 deletion cascades only the now-empty project's memberships.

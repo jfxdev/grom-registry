@@ -23,6 +23,7 @@ const revealedRegistryToken = ref('')
 const queryClient = useQueryClient()
 const isViewer = computed(() => session.user?.systemViewer === true)
 const registryTokens = useQuery({ queryKey: viewerRegistryTokenKeys.all, queryFn: listViewerRegistryTokens, enabled: isViewer })
+const hasActiveRegistryToken = computed(() => (registryTokens.data.value?.length ?? 0) > 0)
 
 const change = useMutation({
   mutationFn: changePassword,
@@ -47,7 +48,11 @@ const createRegistryToken = useMutation({
     registryTokenError.value = ''
     void queryClient.invalidateQueries({ queryKey: viewerRegistryTokenKeys.all })
   },
-  onError: (caught) => { registryTokenError.value = caught instanceof APIError ? caught.message : 'Could not create the registry token' },
+  onError: (caught) => {
+    registryTokenError.value = caught instanceof APIError && caught.code === 'viewer_token_exists'
+      ? 'Revoke the active registry token before creating another one.'
+      : caught instanceof APIError ? caught.message : 'Could not create the registry token'
+  },
 })
 
 const revokeRegistryToken = useMutation({
@@ -107,15 +112,16 @@ async function copyRegistryToken() { await navigator.clipboard.writeText(reveale
           <KeyRound :size="22" class="text-accent" />
           <div><h2 class="text-lg font-semibold">Read-only registry tokens</h2><p class="mt-1 text-sm text-muted-foreground">Tokens can pull only from projects where you have explicit access.</p></div>
         </div>
-        <form class="form-stack mt-5" @submit.prevent="createRegistryToken.mutate()">
+        <form v-if="!hasActiveRegistryToken" class="form-stack mt-5" @submit.prevent="createRegistryToken.mutate()">
           <label class="field-label">Token name<Input v-model="registryTokenName" required maxlength="120" placeholder="Local Docker" /></label>
           <p v-if="registryTokenError" class="error-text" role="alert">{{ registryTokenError }}</p>
           <div class="flex justify-end"><Button type="submit" :loading="createRegistryToken.isPending.value">Create read-only token</Button></div>
         </form>
+        <p v-else class="mt-5 text-sm text-muted-foreground">Revoke the active token before creating another one.</p>
         <div v-if="revealedRegistryToken" class="reveal-token" role="status"><p>Copy this token now. It will not be shown again.</p><code>{{ revealedRegistryToken }}</code><Button variant="outline" size="sm" type="button" @click="copyRegistryToken"><Copy :size="15" /> Copy token</Button></div>
         <p v-if="registryTokens.isLoading.value" class="mt-5 text-sm text-muted-foreground">Loading tokens…</p>
         <ul v-else class="token-list">
-          <li v-for="token in registryTokens.data.value" :key="token.id"><span><strong>{{ token.name }}</strong><small>{{ token.lastUsedAt ? `Last used ${new Date(token.lastUsedAt).toLocaleDateString()}` : 'Not used yet' }}</small></span><Button v-if="!token.revokedAt" variant="ghost" size="icon" :aria-label="`Revoke ${token.name}`" @click="revokeRegistryToken.mutate(token.id)"><Trash2 :size="16" /></Button></li>
+          <li v-for="token in registryTokens.data.value" :key="token.id"><span><strong>{{ token.name }}</strong><small>{{ token.lastUsedAt ? `Last used ${new Date(token.lastUsedAt).toLocaleDateString()}` : 'Not used yet' }}</small></span><Button variant="ghost" size="icon" :aria-label="`Revoke ${token.name}`" @click="revokeRegistryToken.mutate(token.id)"><Trash2 :size="16" /></Button></li>
         </ul>
       </Card>
 

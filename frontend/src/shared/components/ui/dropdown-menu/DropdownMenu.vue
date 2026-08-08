@@ -1,15 +1,40 @@
 <script setup lang="ts">
 import { Button } from '@/shared/components/ui/button'
 import { ChevronDown } from '@lucide/vue'
-import { ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
 defineProps<{ label: string; ariaLabel: string; disabled?: boolean }>()
 const open = ref(false)
+const root = ref<{ contains: (target: unknown) => boolean } | null>(null)
 function close() { open.value = false }
+
+function closeFromOutside(event: unknown) {
+  const target = (event as { target?: unknown }).target
+  if (root.value && !root.value.contains(target)) close()
+}
+
+function closeFromEscape(event: unknown) {
+  if ((event as { key?: string }).key === 'Escape') close()
+}
+
+watch(open, (isOpen) => {
+  if (isOpen) {
+    document.addEventListener('pointerdown', closeFromOutside)
+    document.addEventListener('keydown', closeFromEscape)
+    return
+  }
+  document.removeEventListener('pointerdown', closeFromOutside)
+  document.removeEventListener('keydown', closeFromEscape)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeFromOutside)
+  document.removeEventListener('keydown', closeFromEscape)
+})
 </script>
 
 <template>
-  <div class="dropdown-menu">
+  <div ref="root" class="dropdown-menu">
     <Button size="sm" variant="outline" :disabled="disabled" :class="open ? 'dropdown-menu-trigger dropdown-menu-trigger-open' : 'dropdown-menu-trigger'" :aria-label="ariaLabel" :aria-expanded="open" aria-haspopup="menu" @click="open = !open">
       <slot name="icon" /><span>{{ label }}</span><ChevronDown :size="15" aria-hidden="true" />
     </Button>

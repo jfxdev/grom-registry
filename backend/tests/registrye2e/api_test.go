@@ -167,10 +167,10 @@ func (c *managementClient) createRepository(
 
 func (c *managementClient) repositories(t *testing.T, project string) []openapi.Repository {
 	t.Helper()
-	var repositories []openapi.Repository
+	var repositories openapi.RepositoryPage
 	c.doJSON(t, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/repositories",
 		nil, &repositories, http.StatusOK)
-	return repositories
+	return repositories.Items
 }
 
 func (c *managementClient) tags(t *testing.T, project, repository string) openapi.TagPage {
@@ -184,11 +184,11 @@ func (c *managementClient) tags(t *testing.T, project, repository string) openap
 
 func (c *managementClient) inventory(t *testing.T, project, repository string) []openapi.ManifestInventory {
 	t.Helper()
-	var inventory []openapi.ManifestInventory
+	var inventory openapi.ManifestInventoryPage
 	path := "/api/v1/projects/" + url.PathEscape(project) + "/repository-inventory?repository=" +
 		url.QueryEscape(repository)
 	c.doJSON(t, http.MethodGet, path, nil, &inventory, http.StatusOK)
-	return inventory
+	return inventory.Items
 }
 
 func (c *managementClient) exchangeToken(

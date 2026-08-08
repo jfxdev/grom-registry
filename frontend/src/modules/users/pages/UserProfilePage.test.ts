@@ -102,4 +102,14 @@ describe('UserProfilePage', () => {
     expect(wrapper.text()).toContain('grm_public_secret')
     expect(wrapper.text()).toContain('pull only')
   })
+
+  it('requires a viewer to revoke the active token before creating another one', async () => {
+    mocks.user.systemViewer = true
+    mocks.listViewerRegistryTokens.mockResolvedValue([{ id: 'token-1', publicId: 'public', name: 'Local Docker', createdAt: '2026-08-08T00:00:00Z' }])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Revoke the active token before creating another one.')
+    expect(wrapper.find('input[placeholder="Local Docker"]').exists()).toBe(false)
+  })
 })

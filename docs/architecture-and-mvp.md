@@ -705,7 +705,7 @@ never enables policies, rejects pushes, or changes authorization.
 - **User:** a human account that can sign in to the web interface.
 - **Service account:** a non-human account used by CI, CD, or automation.
 - **API token:** a revocable credential normally owned by a service account. An
-  installation viewer may also create a profile-scoped, read-only registry token.
+  installation viewer may also create one active profile-scoped, read-only registry token.
 
 A user authenticates to the web UI with email and password.
 Docker/OCI clients authenticate with the service-account username and one of its API tokens as the password. Installation viewers may use their username and their own read-only registry token; web passwords are never accepted.
@@ -1402,7 +1402,7 @@ MVP page status:
 | Projects list and create project | Implemented | Broaden browser coverage beyond the first-push journey |
 | Project detail with repositories and members | Implemented | Broaden browser coverage for edit/removal and error states |
 | Repository detail | Implemented | Broaden browser coverage and add config/layer/pull-history data only if promoted |
-| Users for installation administrators | Implemented with gaps | Keep general profile editing post-MVP |
+| Users for installation administrators | Implemented | Keep general profile editing post-MVP |
 | Service accounts and nested access keys | Implemented | Broaden browser coverage for expiration, revocation, and error states |
 | Audit log | Post-MVP | Essential event persistence remains required; browsing UI does not block MVP |
 | Basic settings | Post-MVP | Add only when concrete settings cannot be handled safely through deployment configuration |

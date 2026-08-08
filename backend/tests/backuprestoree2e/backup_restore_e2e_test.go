@@ -133,9 +133,9 @@ func TestBackupRestoreJourney(t *testing.T) {
 	api.doJSON(t, http.MethodGet, "/api/v1/me", nil, nil, http.StatusUnauthorized)
 	api = newAPIClient(t, publicURL)
 	api.login(t)
-	var projects []openapi.Project
+	var projects openapi.ProjectPage
 	api.doJSON(t, http.MethodGet, "/api/v1/projects", nil, &projects, http.StatusOK)
-	if len(projects) != 1 || projects[0].Slug != "recovery" {
+	if len(projects.Items) != 1 || projects.Items[0].Slug != "recovery" {
 		t.Fatalf("restored projects = %#v", projects)
 	}
 	if restoredKeyID := api.signingKeyID(t, account.Username, created.Secret, "recovery/app"); restoredKeyID != sourceSigningKeyID {

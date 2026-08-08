@@ -21,11 +21,8 @@ import (
 
 	"github.com/jfxdev/grom/backend/internal/constants"
 	"github.com/jfxdev/grom/backend/internal/foundation"
-	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
-	identitystore "github.com/jfxdev/grom/backend/internal/identity/infrastructure/persistence/bun"
+	"github.com/jfxdev/grom/backend/internal/identity/infrastructure/password"
 	"github.com/jfxdev/grom/backend/internal/platform/database"
-	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
-	projectstore "github.com/jfxdev/grom/backend/internal/projects/infrastructure/persistence/bun"
 	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
@@ -235,20 +232,25 @@ func createSQLiteFixture(t *testing.T, kind fixtureKind) string {
 				t.Fatalf("initialize supported prior schema fixture: %v", err)
 			}
 		}
-		identityService := identityapp.New(identitystore.New(db), time.Hour)
-		if err := identityService.BootstrapAdmin(ctx, "legacy@grom.local", "legacy-admin", "legacy-password"); err != nil {
+		administratorID := foundation.NewID()
+		passwordHash, err := password.Hash("legacy-password")
+		if err != nil {
+			_ = db.Close()
+			t.Fatalf("hash legacy administrator password: %v", err)
+		}
+		now := time.Now().UTC()
+		if _, err := db.ExecContext(ctx, `INSERT INTO users (id, email, username, password_hash, is_system_admin, created_at) VALUES (?, ?, ?, ?, ?, ?)`, administratorID.String(), "legacy@grom.local", "legacy-admin", passwordHash, true, now); err != nil {
 			_ = db.Close()
 			t.Fatalf("seed legacy administrator: %v", err)
 		}
-		_, administrator, err := identityService.Login(ctx, "legacy@grom.local", "legacy-password")
-		if err != nil {
-			_ = db.Close()
-			t.Fatalf("authenticate legacy administrator: %v", err)
-		}
-		projects := projectapp.New(projectstore.New(db))
-		if _, err := projects.Create(ctx, foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: administrator.ID}, true, "Legacy", "legacy"); err != nil {
+		projectID := foundation.NewID()
+		if _, err := db.ExecContext(ctx, `INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)`, projectID.String(), "legacy", "Legacy", administratorID.String(), now); err != nil {
 			_ = db.Close()
 			t.Fatalf("seed legacy project: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO project_memberships (project_id, principal_kind, principal_id, role, created_at) VALUES (?, ?, ?, ?, ?)`, projectID.String(), constants.PrincipalUser, administratorID.String(), constants.RoleAdmin, now); err != nil {
+			_ = db.Close()
+			t.Fatalf("seed legacy administrator membership: %v", err)
 		}
 	} else {
 		if err := database.Migrate(ctx, db, databaseKind, time.Second, slog.Default()); err != nil {

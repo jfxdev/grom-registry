@@ -4,11 +4,12 @@ import type { ServiceAccount } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
+import { PaginationControls } from '@/shared/components/ui/pagination'
 import { writeClipboardText } from '@/shared/lib/clipboard'
-import { pageItems } from '@/shared/lib/pagination'
+import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Check, Copy, KeyRound, Plus, ShieldAlert, Trash2, X } from '@lucide/vue'
-import { onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import {
   createServiceAccountToken,
   listServiceAccountTokens,
@@ -18,9 +19,10 @@ import {
 
 const props = defineProps<{ account: ServiceAccount }>()
 const queryClient = useQueryClient()
+const pagination = useCursorPagination()
 const keys = useQuery({
-  queryKey: serviceAccountKeys.tokens(props.account.id),
-  queryFn: () => listServiceAccountTokens(props.account.id),
+	queryKey: computed(() => [...serviceAccountKeys.tokens(props.account.id), pagination.cursor.value]),
+  queryFn: () => listServiceAccountTokens(props.account.id, pagination.cursor.value),
 })
 const formOpen = ref(false)
 const name = ref('')
@@ -157,6 +159,15 @@ function closeSecret() {
         </div>
       </div>
     </div>
+    <PaginationControls
+      :page="pagination.page.value"
+      :page-count="keys.data.value?.pageCount ?? 0"
+      :has-previous="pagination.hasPrevious.value"
+      :has-next="Boolean(keys.data.value?.nextCursor)"
+      :disabled="keys.isFetching.value"
+      @previous="pagination.previous()"
+      @next="pagination.next(keys.data.value?.nextCursor)"
+    />
   </section>
 </template>
 

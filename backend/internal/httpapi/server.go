@@ -412,7 +412,15 @@ func (s *Server) listViewerRegistryTokens(w http.ResponseWriter, r *http.Request
 	user := userFromContext(r.Context())
 	tokens, err := s.identity.ListViewerRegistryTokens(r.Context(), user.ID)
 	if err != nil {
-		writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer permission required")
+		if errors.Is(err, identityapp.ErrViewerPermissionRequired) {
+			writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer permission required")
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+			return
+		}
+		s.internalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, tokens)
@@ -429,7 +437,19 @@ func (s *Server) createViewerRegistryToken(w http.ResponseWriter, r *http.Reques
 	user := userFromContext(r.Context())
 	created, err := s.identity.CreateViewerRegistryToken(r.Context(), user.ID, input.Name, input.ExpiresAt)
 	if err != nil {
-		writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer permission required")
+		if errors.Is(err, identityapp.ErrViewerPermissionRequired) {
+			writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer permission required")
+			return
+		}
+		if errors.Is(err, identitydomain.ErrViewerRegistryTokenAlreadyExists) {
+			writeError(w, r, http.StatusConflict, "viewer_token_exists", "Revoke the active registry token before creating another one")
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+			return
+		}
+		s.internalError(w, r, err)
 		return
 	}
 	_ = s.recordAudit(r, principalForUser(user), constants.AuditAccessKeyCreated, constants.AuditResourceUser, user.ID, map[string]any{"tokenId": created.Token.ID, "expiresAt": created.Token.ExpiresAt, "readOnly": true})
@@ -439,7 +459,15 @@ func (s *Server) createViewerRegistryToken(w http.ResponseWriter, r *http.Reques
 func (s *Server) revokeViewerRegistryToken(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
 	if err := s.identity.RevokeViewerRegistryToken(r.Context(), user.ID, foundation.ID(chi.URLParam(r, "tokenId"))); err != nil {
-		writeError(w, r, http.StatusNotFound, "not_found", "Token not found")
+		if errors.Is(err, identityapp.ErrViewerPermissionRequired) {
+			writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer permission required")
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "Token not found")
+			return
+		}
+		s.internalError(w, r, err)
 		return
 	}
 	_ = s.recordAudit(r, principalForUser(user), constants.AuditAccessKeyRevoked, constants.AuditResourceUser, user.ID, map[string]any{"tokenId": chi.URLParam(r, "tokenId"), "readOnly": true})
@@ -471,7 +499,15 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := s.identity.CreateUser(r.Context(), input.Email, input.Username)
 	if err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_user", err.Error())
+		if errors.Is(err, identitydomain.ErrUsernameAlreadyExists) {
+			writeError(w, r, http.StatusConflict, "username_taken", "This username is already in use")
+			return
+		}
+		if errors.Is(err, identitydomain.ErrEmailAlreadyExists) {
+			writeError(w, r, http.StatusConflict, "email_taken", "This email address is already in use")
+			return
+		}
+		writeError(w, r, http.StatusBadRequest, "invalid_user", "Email and username are required")
 		return
 	}
 	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserCreated, constants.AuditResourceUser, created.User.ID, map[string]any{"systemAdmin": false})
@@ -491,7 +527,11 @@ func (s *Server) promoteUserToSystemAdmin(w http.ResponseWriter, r *http.Request
 	targetID := foundation.ID(chi.URLParam(r, "id"))
 	user, err := s.identity.PromoteUserToSystemAdmin(r.Context(), targetID)
 	if err != nil {
-		writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+			return
+		}
+		s.internalError(w, r, err)
 		return
 	}
 	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserPromotedToSystemAdmin, constants.AuditResourceUser, user.ID, nil)
@@ -509,7 +549,7 @@ func (s *Server) promoteUserToSystemViewer(w http.ResponseWriter, r *http.Reques
 			writeError(w, r, http.StatusNotFound, "not_found", "User not found")
 			return
 		}
-		writeError(w, r, http.StatusBadRequest, "invalid_role", err.Error())
+		s.internalError(w, r, err)
 		return
 	}
 	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserPromotedToSystemViewer, constants.AuditResourceUser, user.ID, nil)
@@ -1479,7 +1519,7 @@ func (s *Server) allowedOrigin(origin *url.URL, r *http.Request) bool {
 	// Vite's development proxy can rewrite the request Host to the backend
 	// target. Keep the development exception narrowly limited to its fixed
 	// loopback port rather than accepting arbitrary loopback origins.
-	return origin.Port() == "5173"
+	return s.deploymentProfile == "development" && origin.Port() == "5173"
 }
 
 func requestScheme(r *http.Request) string {

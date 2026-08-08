@@ -170,13 +170,13 @@ function closeViewer() {
 function createUserError(caught: unknown) {
   if (!(caught instanceof APIError)) return 'Could not create user'
 
-  if (caught.message.includes('UNIQUE constraint failed: users.username')) {
+  if (caught.code === 'username_taken') {
     return 'This username is already in use.'
   }
-  if (caught.message.includes('UNIQUE constraint failed: users.email')) {
+  if (caught.code === 'email_taken') {
     return 'This email address is already in use.'
   }
-  return caught.message
+  return 'Could not create user. Please try again.'
 }
 
 async function copyResetLink() {

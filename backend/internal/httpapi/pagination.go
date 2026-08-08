@@ -24,44 +24,41 @@ type pageCursor struct {
 	Offset  int    `json:"o"`
 }
 
-func pageRequest(r *http.Request, scope string) (foundation.PageRequest, error) {
+func pageRequest(r *http.Request, scope string) (foundation.PageRequest, int, error) {
 	limit := defaultPageLimit
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 || parsed > maxPageLimit {
-			return foundation.PageRequest{}, fmt.Errorf("invalid limit")
+			return foundation.PageRequest{}, 0, fmt.Errorf("invalid limit")
 		}
 		limit = parsed
 	}
 	cursor := r.URL.Query().Get("cursor")
 	if cursor == "" {
-		return foundation.PageRequest{Limit: limit}, nil
+		return foundation.PageRequest{Limit: limit}, 0, nil
 	}
 	if len(cursor) > maxPageCursorLen {
-		return foundation.PageRequest{}, fmt.Errorf("invalid cursor")
+		return foundation.PageRequest{}, 0, fmt.Errorf("invalid cursor")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
-		return foundation.PageRequest{}, fmt.Errorf("invalid cursor")
+		return foundation.PageRequest{}, 0, fmt.Errorf("invalid cursor")
 	}
 	var decoded pageCursor
 	if err := json.Unmarshal(raw, &decoded); err != nil || decoded.Version != 1 || decoded.Scope != scope || decoded.Offset < 0 {
-		return foundation.PageRequest{}, fmt.Errorf("invalid cursor")
+		return foundation.PageRequest{}, 0, fmt.Errorf("invalid cursor")
 	}
-	return foundation.PageRequest{Cursor: cursor, Limit: limit}, nil
+	return foundation.PageRequest{Cursor: cursor, Limit: limit}, decoded.Offset, nil
 }
 
+// pageResult paginates an already materialized slice. Its offset cursor is
+// stable for an unchanged list, but it is not a datastore keyset cursor: list
+// mutations can shift subsequent pages. List endpoints should move to
+// datastore-backed keyset pagination before their result sets become large.
 func pageResult[T any](r *http.Request, scope string, values []T) (foundation.PageResult[T], error) {
-	request, err := pageRequest(r, scope)
+	request, offset, err := pageRequest(r, scope)
 	if err != nil {
 		return foundation.PageResult[T]{}, err
-	}
-	offset := 0
-	if request.Cursor != "" {
-		decodedRaw, _ := base64.RawURLEncoding.DecodeString(request.Cursor)
-		var decoded pageCursor
-		_ = json.Unmarshal(decodedRaw, &decoded)
-		offset = decoded.Offset
 	}
 	if offset > len(values) {
 		return foundation.PageResult[T]{}, fmt.Errorf("invalid cursor")

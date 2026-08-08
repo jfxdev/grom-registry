@@ -959,7 +959,7 @@ type User struct {
 	Email        openapi_types.Email `json:"email"`
 	Id           openapi_types.UUID  `json:"id"`
 	SystemAdmin  bool                `json:"systemAdmin"`
-	SystemViewer *bool               `json:"systemViewer,omitempty"`
+	SystemViewer bool                `json:"systemViewer"`
 	Username     string              `json:"username"`
 }
 

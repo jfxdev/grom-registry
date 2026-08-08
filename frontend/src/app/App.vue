@@ -27,6 +27,7 @@ const router = useRouter()
 const session = useSessionStore()
 const menuOpen = ref(false)
 const accountMenuOpen = ref(false)
+const accountMenuTrigger = ref<{ focus: () => void } | null>(null)
 const deployment = ref<Deployment | null>(null)
 const insecureHTTP = computed(() => deployment.value?.insecureHttp === true)
 const isPublic = computed(() => route.meta.public === true)
@@ -47,6 +48,7 @@ const navigation = [
 const visibleNavigation = computed(() => navigation.filter((item) => !item.adminOnly || session.user?.systemAdmin))
 
 async function signOut() {
+	closeAccountMenu()
   await session.signOut()
   await router.push('/signin')
 }
@@ -55,18 +57,20 @@ function closeMenu() {
   menuOpen.value = false
 }
 
-function closeAccountMenu() {
+function closeAccountMenu(restoreFocus = false) {
   accountMenuOpen.value = false
+  if (restoreFocus) accountMenuTrigger.value?.focus()
 }
 
-function toggleAccountMenu() {
+function toggleAccountMenu(event: globalThis.PointerEvent) {
+	accountMenuTrigger.value = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
   accountMenuOpen.value = !accountMenuOpen.value
 }
 
 function handleKeydown(event: globalThis.KeyboardEvent) {
   if (event.key === 'Escape') {
     closeMenu()
-    closeAccountMenu()
+    closeAccountMenu(true)
   }
 }
 
@@ -122,12 +126,12 @@ onBeforeUnmount(() => {
           >
             <span class="avatar">{{ session.user?.username.slice(0, 2).toUpperCase() }}</span>
           </Button>
-          <div v-if="accountMenuOpen" id="mobile-account-menu" class="account-menu-panel" aria-label="Account menu">
-            <RouterLink :to="ROUTES.profile" class="account-menu-item" @click="closeAccountMenu">
+          <div v-if="accountMenuOpen" id="mobile-account-menu" class="account-menu-panel" role="menu" aria-label="Account menu">
+            <RouterLink :to="ROUTES.profile" role="menuitem" class="account-menu-item" @click="closeAccountMenu">
               <UserRound :size="16" />
               Profile
             </RouterLink>
-            <button type="button" class="account-menu-item" @click="signOut">
+            <button type="button" role="menuitem" class="account-menu-item" @click="signOut">
               <LogOut :size="16" />
               Sign out
             </button>
@@ -216,12 +220,12 @@ onBeforeUnmount(() => {
             <span class="avatar">{{ session.user?.username.slice(0, 2).toUpperCase() }}</span>
             <ChevronDown :size="14" :class="{ 'account-menu-chevron-open': accountMenuOpen }" />
           </button>
-          <div v-if="accountMenuOpen" id="desktop-account-menu" class="account-menu-panel" aria-label="Account menu">
-            <RouterLink :to="ROUTES.profile" class="account-menu-item" @click="closeAccountMenu">
+          <div v-if="accountMenuOpen" id="desktop-account-menu" class="account-menu-panel" role="menu" aria-label="Account menu">
+            <RouterLink :to="ROUTES.profile" role="menuitem" class="account-menu-item" @click="closeAccountMenu">
               <UserRound :size="16" />
               Profile
             </RouterLink>
-            <button type="button" class="account-menu-item" @click="signOut">
+            <button type="button" role="menuitem" class="account-menu-item" @click="signOut">
               <LogOut :size="16" />
               Sign out
             </button>

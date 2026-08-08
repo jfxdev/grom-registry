@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	ErrUnauthenticated        = errors.New("authentication failed")
-	ErrInvalidCurrentPassword = errors.New("current password is incorrect")
-	ErrInvalidPasswordReset   = errors.New("password reset link is invalid or expired")
+	ErrUnauthenticated          = errors.New("authentication failed")
+	ErrInvalidCurrentPassword   = errors.New("current password is incorrect")
+	ErrInvalidPasswordReset     = errors.New("password reset link is invalid or expired")
+	ErrViewerPermissionRequired = errors.New("installation viewer permission required")
 )
 
 const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -348,7 +349,7 @@ func (s *Service) CreateViewerRegistryToken(ctx context.Context, userID foundati
 		return nil, err
 	}
 	if !user.SystemViewer {
-		return nil, errors.New("installation viewer permission required")
+		return nil, ErrViewerPermissionRequired
 	}
 	publicID, err := randomString(10)
 	if err != nil {
@@ -378,7 +379,7 @@ func (s *Service) ListViewerRegistryTokens(ctx context.Context, userID foundatio
 		return nil, err
 	}
 	if !user.SystemViewer {
-		return nil, errors.New("installation viewer permission required")
+		return nil, ErrViewerPermissionRequired
 	}
 	return s.repository.ListViewerAPITokens(ctx, userID)
 }
@@ -389,7 +390,7 @@ func (s *Service) RevokeViewerRegistryToken(ctx context.Context, userID, tokenID
 		return err
 	}
 	if !user.SystemViewer {
-		return errors.New("installation viewer permission required")
+		return ErrViewerPermissionRequired
 	}
 	return s.repository.RevokeViewerAPIToken(ctx, userID, tokenID)
 }
@@ -418,17 +419,18 @@ func (s *Service) AuthenticateRegistry(ctx context.Context, username, rawToken s
 		return foundation.PrincipalRef{}, ErrUnauthenticated
 	}
 	principal := token.Principal
-	if principal.Kind == constants.PrincipalServiceAccount {
+	switch principal.Kind {
+	case constants.PrincipalServiceAccount:
 		account, err := s.repository.FindServiceAccountByID(ctx, principal.ID)
 		if err != nil || account.Username != username {
 			return foundation.PrincipalRef{}, ErrUnauthenticated
 		}
-	} else if principal.Kind == constants.PrincipalUser {
+	case constants.PrincipalUser:
 		user, err := s.repository.FindUserByID(ctx, principal.ID)
 		if err != nil || !user.SystemViewer || user.Username != username {
 			return foundation.PrincipalRef{}, ErrUnauthenticated
 		}
-	} else {
+	default:
 		return foundation.PrincipalRef{}, ErrUnauthenticated
 	}
 	_ = s.repository.TouchAPIToken(ctx, token.ID)

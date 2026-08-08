@@ -710,7 +710,7 @@ export interface components {
             email: string;
             username: string;
             systemAdmin: boolean;
-            systemViewer?: boolean;
+            systemViewer: boolean;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

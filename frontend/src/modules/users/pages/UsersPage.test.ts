@@ -154,19 +154,19 @@ describe('UsersPage', () => {
   })
 
   it.each([
-    ['UNIQUE constraint failed: users.username (2067)', 'This username is already in use.'],
-    ['UNIQUE constraint failed: users.email (2067)', 'This email address is already in use.'],
-  ])('shows a clear message for duplicate user %s', async (databaseError, expectedMessage) => {
+    ['username_taken', 'This username is already in use.'],
+    ['email_taken', 'This email address is already in use.'],
+  ])('shows a clear message for duplicate user %s', async (errorCode, expectedMessage) => {
     const wrapper = mountPage()
     await flushPromises()
 
     await wrapper.findAll('button').find((button) => button.text().includes('New user'))!.trigger('click')
-    mocks.createUser.mockRejectedValueOnce(new APIError(400, 'invalid_user', databaseError))
+    mocks.createUser.mockRejectedValueOnce(new APIError(409, errorCode, 'Could not create user'))
     await wrapper.findAll('form').find((form) => form.text().includes('Create user'))!.trigger('submit')
     await flushPromises()
 
     expect(wrapper.text()).toContain(expectedMessage)
-    expect(wrapper.text()).not.toContain('UNIQUE constraint failed')
+    expect(wrapper.text()).not.toContain('Could not create user')
   })
 
   it('does not offer password reset or disable actions for disabled users', async () => {

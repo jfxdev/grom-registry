@@ -1,9 +1,16 @@
 package domain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/jfxdev/grom/backend/internal/foundation"
+)
+
+var (
+	ErrViewerRegistryTokenAlreadyExists = errors.New("an active viewer registry token already exists")
+	ErrUsernameAlreadyExists            = errors.New("username is already in use")
+	ErrEmailAlreadyExists               = errors.New("email is already in use")
 )
 
 type User struct {

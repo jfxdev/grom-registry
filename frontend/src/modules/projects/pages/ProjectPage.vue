@@ -26,9 +26,10 @@ import { Card } from '@/shared/components/ui/card'
 import { DangerZone } from '@/shared/components/ui/danger-zone'
 import { Dialog } from '@/shared/components/ui/dialog'
 import { DockerPushBanner } from '@/shared/components/registry'
+import { PaginationControls } from '@/shared/components/ui/pagination'
 import { ROUTES } from '@/shared/constants'
 import { writeClipboardText } from '@/shared/lib/clipboard'
-import { pageItems } from '@/shared/lib/pagination'
+import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { AlertTriangle, Box, Check, ChevronLeft, Clipboard, Plus, RefreshCw, Settings2, Trash2, Users, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
@@ -83,6 +84,7 @@ const projectDeletionError = ref('')
 const selectedManifest = ref<ManifestInventory | null>(null)
 const repositoryOperationError = ref('')
 const removeRepositoryOpen = ref(false)
+const repositoryPagination = useCursorPagination()
 
 function openProjectDeletion() {
   projectSettingsOpen.value = false
@@ -90,10 +92,9 @@ function openProjectDeletion() {
 }
 
 const project = useQuery({ queryKey: computed(() => projectKeys.detail(slug.value)), queryFn: () => getProject(slug.value) })
-const repositories = useQuery({ queryKey: computed(() => projectKeys.repositories(slug.value)), queryFn: () => listRepositories(slug.value) })
+const repositories = useQuery({ queryKey: computed(() => [...projectKeys.repositories(slug.value), repositoryPagination.cursor.value]), queryFn: () => listRepositories(slug.value, repositoryPagination.cursor.value) })
 const members = useQuery({ queryKey: computed(() => projectKeys.members(slug.value)), queryFn: () => listMembers(slug.value), enabled: computed(() => session.user?.systemViewer !== true) })
 const accounts = useQuery({ queryKey: serviceAccountKeys.list(), queryFn: () => listServiceAccounts(), enabled: computed(() => session.user?.systemViewer !== true) })
-const users = useQuery({ queryKey: userKeys.all, queryFn: () => listUsers(), enabled: computed(() => session.user?.systemAdmin === true) })
 const canManage = computed(() =>
   session.user?.systemViewer !== true && (session.user?.systemAdmin === true ||
   pageItems(members.data.value).some((member) =>
@@ -102,6 +103,7 @@ const canManage = computed(() =>
     member.role === 'admin',
   ) === true),
 )
+const users = useQuery({ queryKey: userKeys.all, queryFn: () => listUsers(), enabled: computed(() => canManage.value) })
 const tags = useQuery({
   queryKey: computed(() => projectKeys.tags(slug.value, selectedRepository.value?.name ?? '')),
   queryFn: () => listTags(slug.value, selectedRepository.value!.name),
@@ -384,6 +386,15 @@ function profileLabel(profile: Repository['profile']) {
           <span class="flex items-center gap-2 text-accent"><Settings2 :size="14" /> →</span>
         </button>
       </div>
+      <PaginationControls
+        :page="repositoryPagination.page.value"
+        :page-count="repositories.data.value?.pageCount ?? 0"
+        :has-previous="repositoryPagination.hasPrevious.value"
+        :has-next="Boolean(repositories.data.value?.nextCursor)"
+        :disabled="repositories.isFetching.value"
+        @previous="repositoryPagination.previous()"
+        @next="repositoryPagination.next(repositories.data.value?.nextCursor)"
+      />
     </section>
 
     <Dialog

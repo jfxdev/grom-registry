@@ -18,6 +18,7 @@ describe('application router', () => {
       email: 'alex@example.com',
       username: 'alex',
       systemAdmin: false,
+      systemViewer: false,
       createdAt: '2026-07-27T00:00:00Z',
     }
 
@@ -34,6 +35,7 @@ describe('application router', () => {
       email: 'alex@example.com',
       username: 'alex',
       systemAdmin: false,
+      systemViewer: false,
       createdAt: '2026-07-27T00:00:00Z',
     }
 
@@ -47,7 +49,7 @@ describe('application router', () => {
     session.checked = true
     session.user = {
       id: '8a24b252-3aa7-4cc7-8384-52441dab9f1d', email: 'alex@example.com', username: 'alex',
-      systemAdmin: false, createdAt: '2026-07-27T00:00:00Z',
+      systemAdmin: false, systemViewer: false, createdAt: '2026-07-27T00:00:00Z',
     }
 
     await router.push('/projects/payments/repositories/repository-1')
