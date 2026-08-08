@@ -376,13 +376,15 @@ func assertProjectVisible(t *testing.T, baseURL, slug string) {
 	if projects.StatusCode != http.StatusOK {
 		t.Fatalf("list preserved projects returned HTTP %d", projects.StatusCode)
 	}
-	var body []struct {
-		Slug string `json:"slug"`
+	var body struct {
+		Items []struct {
+			Slug string `json:"slug"`
+		} `json:"items"`
 	}
 	if err := json.NewDecoder(projects.Body).Decode(&body); err != nil {
 		t.Fatalf("decode preserved projects: %v", err)
 	}
-	for _, project := range body {
+	for _, project := range body.Items {
 		if project.Slug == slug {
 			members, err := client.Get(baseURL + "/api/v1/projects/" + slug + "/members")
 			if err != nil {
@@ -392,14 +394,16 @@ func assertProjectVisible(t *testing.T, baseURL, slug string) {
 			if members.StatusCode != http.StatusOK {
 				t.Fatalf("list preserved memberships returned HTTP %d", members.StatusCode)
 			}
-			var memberships []struct {
-				PrincipalKind string `json:"principalKind"`
-				Role          string `json:"role"`
+			var memberships struct {
+				Items []struct {
+					PrincipalKind string `json:"principalKind"`
+					Role          string `json:"role"`
+				} `json:"items"`
 			}
 			if err := json.NewDecoder(members.Body).Decode(&memberships); err != nil {
 				t.Fatalf("decode preserved memberships: %v", err)
 			}
-			for _, membership := range memberships {
+			for _, membership := range memberships.Items {
 				if membership.PrincipalKind == constants.PrincipalUser && membership.Role == constants.RoleAdmin {
 					return
 				}

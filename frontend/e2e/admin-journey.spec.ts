@@ -40,8 +40,8 @@ test('an administrator completes the first-push journey through the public UI', 
 
   await page.goto(`${runtime.publicURL}/projects/alpha`)
   await expect(page.getByRole('heading', { name: 'Alpha', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: /Members/ }).click()
-  await page.getByRole('button', { name: 'Add service account' }).click()
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  await page.getByRole('button', { name: 'Add member' }).click()
   const memberDialog = page.getByRole('dialog', { name: 'Add service account' })
   const memberSelects = memberDialog.locator('select')
   await expect(memberSelects).toHaveCount(3)
@@ -59,7 +59,6 @@ test('an administrator completes the first-push journey through the public UI', 
   const { digest, cleanup } = await pushFirstImage(runtime, 'alpha-writer', secret!)
   try {
     await page.reload()
-    await page.getByRole('button', { name: /Repositories/ }).click()
     await expect(page.getByRole('button', { name: /app/ })).toBeVisible()
     await page.getByRole('button', { name: /app/ }).click()
     await expect(page.getByText('v1', { exact: true })).toBeVisible()
@@ -81,7 +80,7 @@ test('an administrator confirms destructive access changes through the public UI
   await page.getByRole('button', { name: 'Sign in' }).click()
 
   await page.goto(`${runtime.publicURL}/projects/alpha`)
-  await page.getByRole('button', { name: /Members/ }).click()
+  await page.getByRole('button', { name: 'Project settings' }).click()
   await page.getByRole('button', { name: 'Remove service account member' }).click()
   const memberDialog = page.getByRole('dialog', { name: 'Remove member' })
   await expect(memberDialog).toContainText('loses project access')
@@ -106,6 +105,7 @@ test('an administrator confirms destructive access changes through the public UI
   await expect(account.getByText('Disabled', { exact: true })).toBeVisible()
 
   await page.goto(`${runtime.publicURL}/projects/alpha`)
+  await page.getByRole('button', { name: 'Project settings' }).click()
   await page.getByRole('button', { name: 'Delete project' }).click()
   const projectDialog = page.getByRole('dialog', { name: 'Delete project' })
   const [projectResponse] = await Promise.all([
