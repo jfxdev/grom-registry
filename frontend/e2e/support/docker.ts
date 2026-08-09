@@ -37,10 +37,22 @@ function runDocker(root: string, environment: NodeJS.ProcessEnv, stdin: string |
   })
 }
 
-export async function pushFirstImage(runtime: Runtime, username: string, secret: string) {
+export interface PushImageOptions {
+  project: string
+  repository: string
+  tag: string
+  variant?: 'a' | 'b'
+}
+
+export async function pushImage(
+  runtime: Runtime,
+  username: string,
+  secret: string,
+  { project, repository, tag, variant = 'a' }: PushImageOptions,
+) {
   const registry = runtime.publicURL.replace('http://', '')
-  const source = `grom-admin-e2e-${runtime.project}:source`
-  const target = `${registry}/alpha/app:v1`
+  const source = `grom-admin-e2e-${runtime.project}:${project}-${repository.replaceAll('/', '-')}-${tag}-${variant}`
+  const target = `${registry}/${project}/${repository}:${tag}`
   const dockerConfig = await mkdtemp(join(tmpdir(), 'grom-admin-e2e-docker-'))
   const environment = { ...process.env, DOCKER_CONFIG: dockerConfig }
   const cleanup = async () => {
@@ -51,7 +63,7 @@ export async function pushFirstImage(runtime: Runtime, username: string, secret:
   try {
     await runDocker(runtime.root, environment, undefined, [
       'build', '--pull=false', '--tag', source,
-      join(runtime.root, 'backend/tests/registrye2e/fixtures/variant-a'),
+      join(runtime.root, `backend/tests/registrye2e/fixtures/variant-${variant}`),
     ], '')
     await runDocker(runtime.root, environment, `${secret}\n`, ['login', '--username', username, '--password-stdin', registry], secret)
     await runDocker(runtime.root, environment, undefined, ['tag', source, target], secret)
@@ -64,4 +76,10 @@ export async function pushFirstImage(runtime: Runtime, username: string, secret:
     await cleanup().catch(() => undefined)
     throw error
   }
+}
+
+export async function pushFirstImage(runtime: Runtime, username: string, secret: string) {
+  return pushImage(runtime, username, secret, {
+    project: 'alpha', repository: 'app', tag: 'v1',
+  })
 }
