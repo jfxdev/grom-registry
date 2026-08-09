@@ -46,6 +46,17 @@ func TestCreateUserAlwaysCreatesARegularUser(t *testing.T) {
 	}
 }
 
+func TestCreateUserRejectsMissingRequiredFields(t *testing.T) {
+	created, err := New(&createUserRepository{}, time.Hour).CreateUser(context.Background(), "", "member")
+
+	if !errors.Is(err, ErrInvalidUserInput) {
+		t.Fatalf("expected ErrInvalidUserInput, got %v", err)
+	}
+	if created != nil {
+		t.Fatalf("expected no user, got %#v", created)
+	}
+}
+
 type promoteUserRepository struct {
 	identity.Repository
 	user     *identity.User

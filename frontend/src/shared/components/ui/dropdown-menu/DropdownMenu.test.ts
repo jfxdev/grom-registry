@@ -2,6 +2,7 @@
 
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 import DropdownMenu from './DropdownMenu.vue'
 
 describe('DropdownMenu', () => {
@@ -26,14 +27,24 @@ describe('DropdownMenu', () => {
     expect(wrapper.find('[role="menu"]').exists()).toBe(false)
   })
 
-  it('closes when pressing Escape or clicking outside', async () => {
-    const wrapper = mount(DropdownMenu, { props: { label: 'Set role', ariaLabel: 'Change role' } })
-    await wrapper.get('button').trigger('click')
+  it('returns focus to the trigger when pressing Escape from a menu item', async () => {
+    const wrapper = mount(DropdownMenu, {
+      attachTo: document.body,
+      props: { label: 'Set role', ariaLabel: 'Change role' },
+      slots: { default: '<button class="dropdown-menu-item">Viewer</button>' },
+    })
+    const trigger = wrapper.get('button')
+    await trigger.trigger('click')
+    const item = wrapper.get('.dropdown-menu-item')
+    ;(item.element as HTMLButtonElement).focus()
     await document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+    await nextTick()
+    expect(document.activeElement).toBe(trigger.element)
 
-    await wrapper.get('button').trigger('click')
+    await trigger.trigger('click')
     await document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
     expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

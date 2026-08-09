@@ -82,7 +82,7 @@ describe('UsersPage', () => {
     await search.setValue('ALEX')
     expect(wrapper.text()).toContain('alex@example.com')
     expect(wrapper.text()).not.toContain('sam@registry.test')
-    expect(wrapper.text()).toContain('1 of 2')
+    expect(wrapper.text()).toContain('1 of 2 on this page')
 
     await search.setValue('registry.test')
     expect(wrapper.text()).toContain('sam@registry.test')
@@ -96,7 +96,15 @@ describe('UsersPage', () => {
     await wrapper.get('input[aria-label="Search users"]').setValue('missing')
 
     expect(wrapper.text()).toContain('No matching users')
-    expect(wrapper.text()).toContain('0 of 2')
+    expect(wrapper.text()).toContain('0 of 2 on this page')
+  })
+
+  it('labels the loaded users as the current page rather than a global total', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('2 on this page')
+    expect(wrapper.text()).not.toContain('2 total')
   })
 
   it('confirms and disables a user', async () => {

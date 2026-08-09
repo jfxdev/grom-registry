@@ -574,13 +574,13 @@ Work:
 3. Resolve every `partial`, `unverified`, or `missing` default entry, and
    resolve capability-specific entries for every capability advertised by the
    release.
-5. Run `make test` and `make build` from a clean checkout.
-6. Build and smoke-test the container through the public Grom port.
-7. Update the phase table and acceptance matrix with the release date and
+4. Run `make test` and `make build` from a clean checkout.
+5. Build and smoke-test the container through the public Grom port.
+6. Update the phase table and acceptance matrix with the release date and
    evidence.
-8. Remove stale planned paths, routes, and pages instead of leaving
+7. Remove stale planned paths, routes, and pages instead of leaving
    contradictions in this document.
-9. Confirm `docs/code-map.md`, `docs/domain-model.md`, `docs/product-features.md`,
+8. Confirm `docs/code-map.md`, `docs/domain-model.md`, `docs/product-features.md`,
    and `AGENTS.md` still match the release.
 
 Acceptance:
@@ -705,7 +705,7 @@ never enables policies, rejects pushes, or changes authorization.
 - **User:** a human account that can sign in to the web interface.
 - **Service account:** a non-human account used by CI, CD, or automation.
 - **API token:** a revocable credential normally owned by a service account. An
-  installation viewer may also create one active profile-scoped, read-only registry token.
+  installation viewer may instead own one active, profile-scoped registry token.
 
 A user authenticates to the web UI with email and password.
 Docker/OCI clients authenticate with the service-account username and one of its API tokens as the password. Installation viewers may use their username and their own read-only registry token; web passwords are never accepted.
@@ -713,8 +713,9 @@ Web passwords are never accepted as registry credentials.
 
 Service accounts belong to the installation and can be assigned to one or more projects.
 An installation viewer has no user-management access and gains project visibility
-only from explicit membership. Its registry token is constrained to pull even if
-its membership is Writer or Admin.
+only from explicit membership. Its named registry token is reveal-once at
+creation, revocable by that viewer, and constrained to `pull` even if its
+membership is Writer or Admin; it never grants push or delete.
 This avoids introducing organizations or nested teams.
 
 ### Project roles
@@ -734,10 +735,13 @@ garbage collection remains an explicit operator action.
 
 An installation administrator can manage users and service accounts. Bootstrap
 creates the first user as an installation administrator. Every later user is
-created with regular access and a reveal-once registration link to choose an
-initial password. The account remains disabled until the registration link is
-consumed. Only an installation administrator can promote an active user to
-installation administrator.
+created as a disabled regular user with a reveal-once registration link to
+choose an initial password. Consuming that registration link is the only
+transition that activates the pending account. An administrator-generated
+password-reset link replaces a password and revokes sessions, but never
+re-enables a disabled account. Only an installation administrator can promote
+an active regular user to administrator or viewer; administrator promotion
+clears viewer access, and an administrator cannot become a viewer.
 Only an installation administrator can create a project and becomes its first
 project admin. Only an installation administrator can delete a project, and only
 after every logical repository has been removed. This prevents project deletion
@@ -1120,7 +1124,11 @@ GET    /api/v1/users
 POST   /api/v1/users
 DELETE /api/v1/users/{id}
 PUT    /api/v1/users/{id}/administrator
+PUT    /api/v1/users/{id}/viewer
 POST   /api/v1/users/{id}/password-reset-link
+GET    /api/v1/me/registry-tokens
+POST   /api/v1/me/registry-tokens
+DELETE /api/v1/me/registry-tokens/{tokenId}
 
 GET    /api/v1/service-accounts
 POST   /api/v1/service-accounts
@@ -1128,6 +1136,8 @@ DELETE /api/v1/service-accounts/{id}
 GET    /api/v1/service-accounts/{id}/tokens
 POST   /api/v1/service-accounts/{id}/tokens
 DELETE /api/v1/service-accounts/{id}/tokens/{tokenId}
+
+GET    /api/v1/projects/{project}/repositories/{repositoryId}
 
 GET    /api/v1/projects
 POST   /api/v1/projects
@@ -1672,12 +1682,12 @@ Status vocabulary:
 | 15 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Passing | The public OpenAPI and documentation checks passed through the mandatory `Boot Acceptance E2E (Docker)` workflow in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
 | 16 | CI rejects invalid OpenAPI, stale generated code, and undocumented routes | Default MVP | Passing | Backend contract tests and frontend generated-code freshness check run in CI |
 | 17 | Development, permissive, and strict profiles enforce their documented network rules, with strict as the default | Default MVP | Passing | Configuration tests cover the implemented profile rules |
-| 19 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |
-| 20 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Passing | HTTP/application tests cover event production and sanitization; SQLite persistence tests cover durable storage; failed audit intent blocks backup, project, logical-repository, lifecycle, and manifest-deletion operations |
-| 21 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Passing | The public stale-cookie and disabled-user login checks passed in the mandatory `Registry E2E (Docker)` workflow in [PR #17](https://github.com/jfxdev/grom-registry/pull/17) |
-| 22 | ORAS can push and pull representative generic OCI content | Generic OCI support | Missing | ORAS smoke job before advertising generic OCI support |
-| 23 | An S3-backed installation passes push, pull, restart, and restore checks | S3 support | Missing | Documented S3 compatibility job before advertising S3 support |
-| 24 | A published SQLite/local-storage release upgrades without losing metadata, credentials, or blobs | Default MVP | Passing | [PR #23](https://github.com/jfxdev/grom-registry/pull/23) upgrades the published `v0.0.1` baseline to the checkout candidate, verifies administrator, project, Writer key, inventory, blob, and restart preservation |
+| 18 | A default SQLite/local-storage backup restores an installation that can authenticate, browse, push, and pull | Default MVP | Passing | Backup Restore E2E creates and downloads through the UI-facing API, deletes the local snapshot while preserving the downloaded bundle, destroys the original volumes, restores through the same image's recovery service, invalidates the old browser session, signs in again, browses the recovered project, pulls preserved content, pushes a new tag, and rejects corruption |
+| 19 | Every essential authentication, credential, membership, project, policy, and destructive action creates a sanitized audit event | Default MVP | Passing | HTTP/application tests cover event production and sanitization; SQLite persistence tests cover durable storage; failed audit intent blocks backup, project, logical-repository, lifecycle, and manifest-deletion operations |
+| 20 | An installation administrator disables a user and the user's active sessions stop working | Default MVP | Passing | The public stale-cookie and disabled-user login checks passed in the mandatory `Registry E2E (Docker)` workflow in [PR #17](https://github.com/jfxdev/grom-registry/pull/17) |
+| 21 | ORAS can push and pull representative generic OCI content | Generic OCI support | Missing | ORAS smoke job before advertising generic OCI support |
+| 22 | An S3-backed installation passes push, pull, restart, and restore checks | S3 support | Missing | Documented S3 compatibility job before advertising S3 support |
+| 23 | A published SQLite/local-storage release upgrades without losing metadata, credentials, or blobs | Default MVP | Passing | [PR #23](https://github.com/jfxdev/grom-registry/pull/23) upgrades the published `v0.0.1` baseline to the checkout candidate, verifies administrator, project, Writer key, inventory, blob, and restart preservation |
 
 The default self-hosted MVP is not accepted until every `Default MVP` row is
 `Passing`. Capability-specific rows must pass before that capability is

@@ -12,17 +12,32 @@ import (
 
 func TestAddSingleActiveViewerRegistryTokenIndex(t *testing.T) {
 	ctx := context.Background()
-	sqlDB, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlDB.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	db := bun.NewDB(sqlDB, sqlitedialect.New())
-	t.Cleanup(func() { _ = db.Close() })
-	if _, err := db.ExecContext(ctx, "CREATE TABLE api_tokens (principal_kind TEXT, principal_id TEXT, revoked_at TIMESTAMP)"); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("sqlite", func(t *testing.T) {
+		sqlDB, err := sql.Open(sqliteshim.ShimName, ":memory:")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.SetMaxOpenConns(1)
+		t.Cleanup(func() { _ = sqlDB.Close() })
+		db := bun.NewDB(sqlDB, sqlitedialect.New())
+		t.Cleanup(func() { _ = db.Close() })
+		if _, err := db.ExecContext(ctx, "CREATE TABLE api_tokens (principal_kind TEXT, principal_id TEXT, revoked_at TIMESTAMP)"); err != nil {
+			t.Fatal(err)
+		}
+		assertSingleActiveViewerRegistryTokenIndex(t, ctx, db)
+	})
+
+	t.Run("postgres", func(t *testing.T) {
+		db := openPostgresMigrationTestDB(t, ctx)
+		if _, err := db.ExecContext(ctx, "CREATE TEMP TABLE api_tokens (principal_kind TEXT, principal_id TEXT, revoked_at TIMESTAMP)"); err != nil {
+			t.Fatal(err)
+		}
+		assertSingleActiveViewerRegistryTokenIndex(t, ctx, db)
+	})
+}
+
+func assertSingleActiveViewerRegistryTokenIndex(t *testing.T, ctx context.Context, db *bun.DB) {
+	t.Helper()
 	if err := addSingleActiveViewerRegistryTokenIndex(ctx, db); err != nil {
 		t.Fatal(err)
 	}

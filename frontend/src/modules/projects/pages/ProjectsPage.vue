@@ -88,7 +88,7 @@ function submitCreate() {
             />
           </div>
           <span v-if="!projects.isLoading.value" class="panel-count">
-            {{ searchQuery.trim() ? `${filteredProjects.length} of ${projectCount}` : `${projectCount} total` }}
+            {{ searchQuery.trim() ? `${filteredProjects.length} of ${projectCount} on this page` : `${projectCount} on this page` }}
           </span>
         </div>
       </div>

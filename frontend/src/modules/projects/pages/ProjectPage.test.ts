@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     createdAt: '2026-07-29T00:00:00Z',
   },
   getProject: vi.fn(),
+	getRepository: vi.fn(),
   listRepositories: vi.fn(),
   listMembers: vi.fn(),
   listArtifactDeletions: vi.fn(),
@@ -71,6 +72,7 @@ vi.mock('../api/projects', () => ({
   deleteMember: mocks.deleteMember,
   deleteProject: mocks.deleteProject,
   getProject: mocks.getProject,
+	getRepository: mocks.getRepository,
   listArtifactDeletions: mocks.listArtifactDeletions,
   listMembers: mocks.listMembers,
   listRepositories: mocks.listRepositories,
@@ -128,6 +130,7 @@ describe('ProjectPage membership management', () => {
   beforeEach(() => {
     mocks.sessionUser.systemAdmin = true
     mocks.getProject.mockReset()
+		mocks.getRepository.mockReset()
     mocks.listRepositories.mockReset()
     mocks.listMembers.mockReset()
     mocks.listArtifactDeletions.mockReset()
@@ -148,6 +151,7 @@ describe('ProjectPage membership management', () => {
     mocks.routerPush.mockReset()
     mocks.repositoryId = ''
     mocks.getProject.mockResolvedValue({ id: 'project-1', slug: 'payments', name: 'Payments' })
+		mocks.getRepository.mockResolvedValue(undefined)
     mocks.listRepositories.mockResolvedValue([])
     mocks.listMembers.mockResolvedValue([])
     mocks.listArtifactDeletions.mockResolvedValue([])
@@ -259,6 +263,20 @@ describe('ProjectPage membership management', () => {
     expect(screen.getByRole('dialog', { name: 'Manifest details' })).toBeTruthy()
     expect(screen.getByText('Untagged')).toBeTruthy()
     expect(screen.getByText('sha256:subject')).toBeTruthy()
+  })
+
+  it('loads a routed repository that is outside the current list page', async () => {
+    mocks.repositoryId = 'repository-2'
+    mocks.getRepository.mockResolvedValue({
+      id: 'repository-2', projectId: 'project-1', name: 'worker', description: '', status: 'active',
+      creationSource: 'push', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(mocks.getRepository).toHaveBeenCalledWith('payments', 'repository-2')
+    expect(wrapper.get('#repository-details-title').text()).toBe('worker')
   })
 
   it('archives an active repository and removes an archived repository', async () => {

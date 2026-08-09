@@ -52,6 +52,14 @@ port, temporary Docker credential directories, and exact test image tags; never
 replace cleanup with a broad Docker prune. The administrative journey drives
 the frontend embedded in the container through Playwright; it disables browser
 traces, screenshots, and video because it handles a reveal-once access key.
+Keep its scenarios independent and wait for each browser-visible state caused
+by a mutation before navigating or starting the next action. In particular,
+wait for sign-in to reach the Projects page before invoking another protected
+route, and blur/await a generated form value before replacing it in Playwright.
+This prevents a navigation from cancelling an in-flight session request or a
+slug field from receiving both its generated and test-entered values. Give each
+scenario distinct project, account, and credential names; do not rely on state
+left by a preceding scenario.
 Docker daemon permission failures are reported before startup. Distribution
 applies clock-skew tolerance to expired JWTs, so the expiry assertion is bounded
 but can take about one minute. Authenticate E2E principals immediately before
@@ -133,6 +141,10 @@ already downloaded bundle.
 - Do not use ORM `AutoMigrate` or model-driven runtime schema diffing.
 - A migration failure must fail startup.
 - Test repository and migration changes against both SQLite and PostgreSQL.
+- Test every migration with a minimal pre-migration table in both engines. A
+  PostgreSQL test may skip only when `GROM_TEST_POSTGRES_URL` is absent; use a
+  single connection and temporary tables when the migration names fixed tables
+  or indexes, so it neither collides with nor mutates shared test state.
 
 ## HTTP and OpenAPI
 
@@ -141,6 +153,9 @@ already downloaded bundle.
 - Generated Go transport code belongs in `backend/internal/generated/openapi`.
 - Generated frontend API code belongs in `frontend/src/shared/api/generated`.
 - Never edit generated files manually.
+- Request schemas must reject retired and unknown properties with
+  `additionalProperties: false` when their fields are closed. Keep the handler
+  decoder equally strict, regenerate types, and test the rejection.
 - Domain entities must not be generated from or coupled to OpenAPI transport schemas.
 - CI must validate the contract, generated-code freshness, implementation compatibility, and frontend types.
 - OpenAPI 3.0.x is intentional while `oapi-codegen` stable generation targets that version.
@@ -168,6 +183,9 @@ already downloaded bundle.
 - Frontend-wide constants belong in `frontend/src/shared/constants`.
 - Server-owned roles, statuses, actions, and enum values come from generated OpenAPI types; do not duplicate them manually.
 - Keep strict TypeScript and cover critical flows with Vitest/Vue Testing Library and Playwright.
+- For focus-managed components, test the actual focused element and its
+  restoration path (for example Escape from a dropdown item returning focus to
+  its trigger), not only whether markup disappears.
 
 ## Product constraints
 

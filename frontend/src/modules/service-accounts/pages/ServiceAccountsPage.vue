@@ -131,7 +131,7 @@ function confirmDisable() {
             />
           </div>
           <span v-if="!accounts.isLoading.value" class="list-count">
-            {{ searchQuery.trim() ? `${filteredAccounts.length} of ${statusAccounts.length}` : `${statusAccounts.length} total` }}
+            {{ searchQuery.trim() ? `${filteredAccounts.length} of ${statusAccounts.length} on this page` : `${statusAccounts.length} on this page` }}
           </span>
         </div>
       </div>

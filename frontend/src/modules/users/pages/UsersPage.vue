@@ -38,7 +38,7 @@ const promoteTarget = ref<User | null>(null)
 const promoteError = ref('')
 const viewerTarget = ref<User | null>(null)
 const viewerError = ref('')
-const userCount = computed(() => pageItems(users.data.value).length)
+const currentPageUserCount = computed(() => pageItems(users.data.value).length)
 const filteredUsers = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
   if (!query) return pageItems(users.data.value)
@@ -238,7 +238,7 @@ async function copyRegistrationLink() {
             />
           </div>
           <span v-if="!users.isLoading.value" class="list-count">
-            {{ searchQuery.trim() ? `${filteredUsers.length} of ${userCount}` : `${userCount} total` }}
+            {{ searchQuery.trim() ? `${filteredUsers.length} of ${currentPageUserCount} on this page` : `${currentPageUserCount} on this page` }}
           </span>
         </div>
       </div>
@@ -246,7 +246,7 @@ async function copyRegistrationLink() {
       <div v-if="users.isLoading.value" class="empty-state list-empty-state" role="status">
         <p class="text-sm text-muted-foreground">Loading users…</p>
       </div>
-      <div v-else-if="!userCount" class="empty-state list-empty-state">
+      <div v-else-if="!currentPageUserCount" class="empty-state list-empty-state">
         <div>
           <UserRound class="mx-auto mb-3 text-accent" :size="28" />
           <p class="font-medium text-foreground">No users yet</p>

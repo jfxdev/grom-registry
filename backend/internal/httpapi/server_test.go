@@ -237,6 +237,12 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 		t.Fatalf("expected successful login, got %d", successLogin.Code)
 	}
 
+	invalidCreateUserResponse := httptest.NewRecorder()
+	server.createUser(invalidCreateUserResponse, withUser(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/users", strings.NewReader(`{"email":"target@example.com","username":"target","systemAdmin":true}`)), admin))
+	if invalidCreateUserResponse.Code != http.StatusBadRequest {
+		t.Fatalf("expected unknown create-user field to be rejected, got %d: %s", invalidCreateUserResponse.Code, invalidCreateUserResponse.Body.String())
+	}
+
 	createUserResponse := httptest.NewRecorder()
 	server.createUser(createUserResponse, withUser(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/users", strings.NewReader(`{"email":"target@example.com","username":"target"}`)), admin))
 	if createUserResponse.Code != http.StatusCreated {

@@ -38,8 +38,9 @@ import {
 	archiveRepository,
   deleteArtifact,
   deleteMember,
-  deleteProject,
-  getProject,
+	deleteProject,
+	getRepository,
+	getProject,
   listArtifactDeletions,
   listMembers,
   listRepositories,
@@ -104,6 +105,11 @@ const canManage = computed(() =>
   ) === true),
 )
 const users = useQuery({ queryKey: userKeys.all, queryFn: () => listUsers(), enabled: computed(() => canManage.value) })
+const routedRepository = useQuery({
+  queryKey: computed(() => [...projectKeys.repositories(slug.value), repositoryId.value]),
+  queryFn: () => getRepository(slug.value, repositoryId.value),
+  enabled: computed(() => Boolean(repositoryId.value) && repositories.isSuccess.value && !pageItems(repositories.data.value).some((repository) => repository.id === repositoryId.value)),
+})
 const tags = useQuery({
   queryKey: computed(() => projectKeys.tags(slug.value, selectedRepository.value?.name ?? '')),
   queryFn: () => listTags(slug.value, selectedRepository.value!.name),
@@ -125,12 +131,12 @@ const inventory = useQuery({
   enabled: computed(() => selectedRepository.value !== null),
 })
 
-watch([repositoryId, () => repositories.data.value], ([id, page]) => {
+watch([repositoryId, () => repositories.data.value, () => routedRepository.data.value], ([id, page, routed]) => {
   if (!id) {
     selectedRepository.value = null
     return
   }
-  selectedRepository.value = pageItems(page).find((repository) => repository.id === id) ?? null
+  selectedRepository.value = pageItems(page).find((repository) => repository.id === id) ?? routed ?? null
 }, { immediate: true })
 
 async function openRepository(repository: Repository) {

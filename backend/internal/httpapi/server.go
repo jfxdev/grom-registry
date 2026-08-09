@@ -185,6 +185,7 @@ func (s *Server) routes() chi.Router {
 			protected.Delete("/projects/{project}/members/{principalKind}/{principalId}", s.deleteMembership)
 			protected.Get("/projects/{project}/repositories", s.listRepositories)
 			protected.Post("/projects/{project}/repositories", s.createRepository)
+			protected.Get("/projects/{project}/repositories/{repositoryId}", s.getRepository)
 			protected.Post("/projects/{project}/repositories/{repositoryId}/archive", s.archiveRepository)
 			protected.Delete("/projects/{project}/repositories/{repositoryId}", s.removeRepository)
 			protected.Get("/projects/{project}/repositories/{repositoryId}/policies", s.getRepositoryPolicies)
@@ -507,7 +508,11 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusConflict, "email_taken", "This email address is already in use")
 			return
 		}
-		writeError(w, r, http.StatusBadRequest, "invalid_user", "Email and username are required")
+		if errors.Is(err, identityapp.ErrInvalidUserInput) {
+			writeError(w, r, http.StatusBadRequest, "invalid_user", "Email and username are required")
+			return
+		}
+		s.internalError(w, r, err)
 		return
 	}
 	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserCreated, constants.AuditResourceUser, created.User.ID, map[string]any{"systemAdmin": false})
@@ -895,6 +900,33 @@ func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writePage(w, r, "repositories:"+project.Slug, repositories)
+}
+
+func (s *Server) getRepository(w http.ResponseWriter, r *http.Request) {
+	project, err := s.projects.Find(r.Context(), chi.URLParam(r, "project"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	user := userFromContext(r.Context())
+	if !s.projects.CanView(r.Context(), principalForUser(user), user.SystemAdmin, project) {
+		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	repository, err := s.repositories.FindByID(r.Context(), foundation.ID(chi.URLParam(r, "repositoryId")))
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if repository.ProjectID != project.ID {
+		writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, repository)
 }
 
 func (s *Server) createRepository(w http.ResponseWriter, r *http.Request) {

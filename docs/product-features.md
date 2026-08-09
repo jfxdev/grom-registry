@@ -64,7 +64,7 @@ keys are not web-login credentials.
 
 An installation administrator can:
 
-- create regular users and promote active users to installation administrators;
+- create regular users and promote active users to installation administrators or viewers;
 - disable users, revoking their active web sessions;
 - generate a password-reset link for a user;
 - create and disable service accounts;
@@ -78,7 +78,20 @@ The first user is bootstrapped at startup from configuration and is an
 installation administrator. Bootstrap is idempotent after a user already
 exists.
 
-### 3.3 Project roles
+### 3.3 Installation viewer
+
+An installation administrator may promote an active regular user to installation
+viewer. Viewers cannot administer users and see projects only through explicit
+membership. A viewer may create one active, named registry token in their
+profile. Its secret is shown once, may be revoked by that viewer, and always
+grants only `pull` for projects with membership; it never grants push or delete,
+even when the membership role is Writer or Admin.
+
+User creation produces a disabled regular account and a single-use registration
+link; consuming it activates the account. A password-reset link changes a
+password and revokes sessions, but does not activate a disabled user.
+
+### 3.4 Project roles
 
 | Role | View project and repositories | Pull | Push | Manage members, repositories, policies, and lifecycle |
 |---|---:|---:|---:|---:|

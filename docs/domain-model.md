@@ -27,17 +27,20 @@ These structs must remain free of Bun persistence tags and HTTP framework depend
 | `PasswordReset` | Entity | Expiring, single-use password setup or reset capability stored only as a public identifier and secret hash |
 | `ServiceAccount` | Entity | Non-human automation identity |
 | `APIToken` | Child entity | Revocable long-lived registry credential owned by exactly one `ServiceAccount` through `ServiceAccountID` |
+| `ViewerRegistryToken` | Child entity | The installation viewer's single active, profile-scoped, reveal-once registry credential |
 | `Session` | Entity | Web authentication session |
 | `Username` | Value object | Normalized registry login name |
 | `Email` | Value object | Normalized human email |
 | `TokenSecret` | Value object | Reveal-once plaintext used only at creation/verification boundaries |
 
 The bootstrap path creates the first user as the installation administrator.
-Every later user is created with regular access and a reveal-once registration
-link to choose an initial password. The user stays disabled until that link is
-consumed; only an active installation administrator may promote a user to
-installation administrator. Identity verifies credentials but does not decide
-repository access. On the
+Every later user is created as a disabled regular user with a reveal-once
+registration link to choose an initial password. Consuming that link activates
+the user; a password-reset link changes a password and revokes sessions but
+never activates a disabled user. Only an active installation administrator may
+promote an active regular user to administrator or viewer; administrator
+promotion clears viewer access, and administrators cannot become viewers.
+Identity verifies credentials but does not decide repository access. On the
 first boot after a recovery restore, Identity atomically invalidates all
 restored web sessions and password-reset capabilities. Service-account API
 tokens remain durable credentials at the selected recovery point.
@@ -55,8 +58,9 @@ tokens remain durable credentials at the selected recovery point.
 Projects owns the authorization policy that maps memberships and roles to allowed actions.
 Installation viewers are global read-only users: they cannot access user management,
 and only receive project or registry visibility through an explicit project membership.
-Their single active, profile-scoped registry API token authenticates as the user
-but is always reduced to `pull`, irrespective of the membership role.
+Their single active, profile-scoped registry token authenticates as the user,
+is reveal-once when created and revocable by its owner, but is always reduced
+to `pull`, irrespective of the membership role. It never grants push or delete.
 Only installation administrators create or delete projects. Deletion is rejected
 while Registry reports any logical repository for the project; an accepted
 deletion cascades only the now-empty project's memberships.

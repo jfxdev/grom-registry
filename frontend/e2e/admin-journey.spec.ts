@@ -5,11 +5,7 @@ import { readRuntime } from './support/runtime'
 
 test('an administrator completes the first-push journey through the public UI', async ({ page }) => {
   const runtime = await readRuntime()
-  await page.goto(`${runtime.publicURL}/signin`)
-  await page.getByLabel('Email').fill(ADMIN_E2E_ADMIN.email)
-  await page.getByRole('textbox', { name: 'Password' }).fill(ADMIN_E2E_ADMIN.password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
+  await signIn(page, runtime.publicURL)
 
   const secret = await createProjectWithWriter(page, runtime.publicURL, 'Alpha', 'alpha', 'Alpha writer', 'alpha-writer')
 
@@ -31,10 +27,7 @@ test('an administrator completes the first-push journey through the public UI', 
 
 test('an administrator confirms destructive access changes through the public UI', async ({ page }) => {
   const runtime = await readRuntime()
-  await page.goto(`${runtime.publicURL}/signin`)
-  await page.getByLabel('Email').fill(ADMIN_E2E_ADMIN.email)
-  await page.getByRole('textbox', { name: 'Password' }).fill(ADMIN_E2E_ADMIN.password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await signIn(page, runtime.publicURL)
 
   await createProjectWithWriter(page, runtime.publicURL, 'Destructive', 'destructive', 'Destructive writer', 'destructive-writer')
   await page.goto(`${runtime.publicURL}/projects/destructive`)
@@ -75,11 +68,23 @@ test('an administrator confirms destructive access changes through the public UI
   await expect(projectDialog).toContainText('Remove every repository before deleting this project')
 })
 
+async function signIn(page: import('@playwright/test').Page, publicURL: string) {
+  await page.goto(`${publicURL}/signin`)
+  await page.getByLabel('Email').fill(ADMIN_E2E_ADMIN.email)
+  await page.getByRole('textbox', { name: 'Password' }).fill(ADMIN_E2E_ADMIN.password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
+}
+
 async function createProjectWithWriter(page: import('@playwright/test').Page, publicURL: string, projectName: string, slug: string, accountName: string, username: string) {
   await page.goto(`${publicURL}/projects`)
   await page.getByRole('button', { name: 'New project' }).click()
   await page.getByLabel('Name').fill(projectName)
-  await page.getByLabel('Slug').fill(slug)
+  const nameInput = page.getByLabel('Name')
+  const slugInput = page.getByLabel('Slug')
+  await nameInput.blur()
+  await expect(slugInput).toHaveValue(slug)
+  await slugInput.fill(slug)
   await page.getByRole('button', { name: 'Create project' }).click()
   await expect(page.getByRole('link', { name: new RegExp(projectName) })).toBeVisible()
 

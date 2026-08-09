@@ -18,6 +18,7 @@ import (
 var (
 	ErrUnauthenticated          = errors.New("authentication failed")
 	ErrInvalidCurrentPassword   = errors.New("current password is incorrect")
+	ErrInvalidUserInput         = errors.New("email and username are required")
 	ErrInvalidPasswordReset     = errors.New("password reset link is invalid or expired")
 	ErrViewerPermissionRequired = errors.New("installation viewer permission required")
 )
@@ -135,7 +136,7 @@ func (s *Service) CreateUser(ctx context.Context, email, username string) (*Crea
 	email = strings.ToLower(strings.TrimSpace(email))
 	username = strings.TrimSpace(username)
 	if email == "" || username == "" {
-		return nil, errors.New("email and username are required")
+		return nil, ErrInvalidUserInput
 	}
 	placeholderPassword, err := randomString(32)
 	if err != nil {

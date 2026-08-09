@@ -1,20 +1,26 @@
 <script setup lang="ts">
 import { Button } from '@/shared/components/ui/button'
 import { ChevronDown } from '@lucide/vue'
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 defineProps<{ label: string; ariaLabel: string; disabled?: boolean }>()
 const open = ref(false)
-const root = ref<{ contains: (target: unknown) => boolean } | null>(null)
-function close() { open.value = false }
+const root = ref<InstanceType<typeof globalThis.HTMLElement> | null>(null)
+
+function close(restoreFocus = false) {
+  open.value = false
+  if (restoreFocus) {
+    void nextTick(() => root.value?.querySelector<InstanceType<typeof globalThis.HTMLButtonElement>>('.dropdown-menu-trigger')?.focus())
+  }
+}
 
 function closeFromOutside(event: unknown) {
-  const target = (event as { target?: unknown }).target
-  if (root.value && !root.value.contains(target)) close()
+  const target = (event as { target?: InstanceType<typeof globalThis.EventTarget> | null }).target
+  if (root.value && (!(target instanceof globalThis.Node) || !root.value.contains(target))) close()
 }
 
 function closeFromEscape(event: unknown) {
-  if ((event as { key?: string }).key === 'Escape') close()
+  if ((event as { key?: string }).key === 'Escape' && root.value?.contains(document.activeElement)) close(true)
 }
 
 watch(open, (isOpen) => {

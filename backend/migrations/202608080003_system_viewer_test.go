@@ -12,16 +12,31 @@ import (
 
 func TestAddSystemViewerColumn(t *testing.T) {
 	ctx := context.Background()
-	sqlDB, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	db := bun.NewDB(sqlDB, sqlitedialect.New())
-	t.Cleanup(func() { _ = db.Close() })
-	if _, err := db.ExecContext(ctx, "CREATE TABLE users (id TEXT PRIMARY KEY)"); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("sqlite", func(t *testing.T) {
+		sqlDB, err := sql.Open(sqliteshim.ShimName, ":memory:")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = sqlDB.Close() })
+		db := bun.NewDB(sqlDB, sqlitedialect.New())
+		t.Cleanup(func() { _ = db.Close() })
+		if _, err := db.ExecContext(ctx, "CREATE TABLE users (id TEXT PRIMARY KEY)"); err != nil {
+			t.Fatal(err)
+		}
+		assertSystemViewerColumn(t, ctx, db)
+	})
+
+	t.Run("postgres", func(t *testing.T) {
+		db := openPostgresMigrationTestDB(t, ctx)
+		if _, err := db.ExecContext(ctx, "CREATE TEMP TABLE users (id TEXT PRIMARY KEY)"); err != nil {
+			t.Fatal(err)
+		}
+		assertSystemViewerColumn(t, ctx, db)
+	})
+}
+
+func assertSystemViewerColumn(t *testing.T, ctx context.Context, db *bun.DB) {
+	t.Helper()
 	if err := addSystemViewerColumn(ctx, db); err != nil {
 		t.Fatal(err)
 	}

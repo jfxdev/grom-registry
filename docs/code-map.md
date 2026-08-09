@@ -52,7 +52,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 
 | Context | Owns | Does not own |
 |---|---|---|
-| `identity` | Users (including installation viewers), sessions, service accounts, and token credentials | Project membership decisions |
+| `identity` | Users (including installation viewers), sessions, service accounts, service-account tokens, and the viewer's single active profile token | Project membership decisions |
 | `projects` | Projects, memberships, roles, authorization policies | Credential verification |
 | `registry` | Logical repositories, behavior policies, Docker token grants, catalog reconciliation, safe deletion, `/v2` gateway | Blob persistence or OCI protocol implementation |
 | `audit` | Immutable security event recording | Business transaction state or audit presentation/querying in the current MVP |
@@ -115,10 +115,11 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 |---|---|
 | `/api/v1/session`, `/api/v1/me`, `/api/v1/me/password`, `/api/v1/password-resets` | Identity session, self-service password management, and public reset completion |
 | `/api/v1/service-accounts`, `/api/v1/service-accounts/{id}/tokens` | Identity |
-| `/api/v1/users`, `/api/v1/users/{id}`, `/api/v1/users/{id}/administrator`, `/api/v1/users/{id}/password-reset-link` | Identity administration, regular-user creation with reveal-once registration links, installation-administrator promotion, user disabling with session revocation, and password-reset-link creation |
+| `/api/v1/users`, `/api/v1/users/{id}`, `/api/v1/users/{id}/administrator`, `/api/v1/users/{id}/viewer`, `/api/v1/users/{id}/password-reset-link` | Identity administration, regular-user creation with reveal-once registration links, administrator/viewer promotion, user disabling with session revocation, and password-reset-link creation |
+| `/api/v1/me/registry-tokens`, `/api/v1/me/registry-tokens/{tokenId}` | Viewer profile token: one active, reveal-once, revocable credential that grants pull only through explicit membership |
 | `/api/v1/projects` | Project listing and installation-admin creation |
 | `/api/v1/projects/{project}` | Project detail and installation-admin deletion of empty projects |
-| `/api/v1/projects/{project}/repositories`, `/api/v1/projects/{project}/repository-tags` | Registry browsing and logical repository creation |
+| `/api/v1/projects/{project}/repositories`, `/api/v1/projects/{project}/repositories/{repositoryId}`, `/api/v1/projects/{project}/repository-tags` | Registry browsing, direct repository detail lookup, and logical repository creation |
 | `/api/v1/projects/{project}/repositories/{repositoryId}/archive`, `/api/v1/projects/{project}/repositories/{repositoryId}` | Project-admin archival and logical-repository removal; removal drains registry and management mutations, then revalidates the Distribution catalog and inventory before deleting the logical record |
 | `/api/v1/projects/{project}/repositories/{repositoryId}/policies` | Optimistically versioned repository-policy reads and replacement |
 | `/api/v1/registry-policy-presets` | Global read-only repository-policy recommendations |

@@ -50,6 +50,8 @@ export const deleteMember = (slug: string, kind: PrincipalKind, id: string) =>
   })
 export const listRepositories = (slug: string, cursor = '') =>
   apiRequest<RepositoryPage>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
+export const getRepository = (slug: string, repositoryId: string) =>
+  apiRequest<Repository>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}`)
 export const createRepository = (slug: string, input: CreateRepositoryRequest) =>
   apiRequest<Repository>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories`, {
     method: 'POST',
