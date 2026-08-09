@@ -150,7 +150,7 @@ describe('ProjectPage membership management', () => {
     mocks.executeLifecycle.mockReset()
     mocks.routerPush.mockReset()
     mocks.repositoryId = ''
-    mocks.getProject.mockResolvedValue({ id: 'project-1', slug: 'payments', name: 'Payments' })
+		mocks.getProject.mockResolvedValue({ id: 'project-1', slug: 'payments', name: 'Payments', canManage: true })
 		mocks.getRepository.mockResolvedValue(undefined)
     mocks.listRepositories.mockResolvedValue([])
     mocks.listMembers.mockResolvedValue([])
@@ -170,6 +170,7 @@ describe('ProjectPage membership management', () => {
 
   it('hides project settings from non-managers', async () => {
     mocks.sessionUser.systemAdmin = false
+		mocks.getProject.mockResolvedValue({ id: 'project-1', slug: 'payments', name: 'Payments', canManage: false })
     const wrapper = mountPage()
     await flushPromises()
 

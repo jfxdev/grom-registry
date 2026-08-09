@@ -1,14 +1,19 @@
 import { apiRequest } from '@/shared/api/client'
-import type { APITokenPage, CreatedToken, ServiceAccount, ServiceAccountPage } from '@/shared/api/models'
+import type { APITokenPage, CreatedToken, ServiceAccount, ServiceAccountPage, ServiceAccountStatus } from '@/shared/api/models'
 
 export const serviceAccountKeys = {
   all: ['service-accounts'] as const,
-  list: (includeDisabled = false) => ['service-accounts', includeDisabled ? 'all' : 'active'] as const,
+	list: (query = '', status: ServiceAccountStatus = 'active', cursor = '') =>
+    ['service-accounts', query, status, cursor] as const,
   tokens: (serviceAccountId: string) => ['service-accounts', serviceAccountId, 'tokens'] as const,
 }
 
-export const listServiceAccounts = (includeDisabled = false, cursor = '') =>
-  apiRequest<ServiceAccountPage>(`/api/v1/service-accounts?includeDisabled=${includeDisabled}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+export const listServiceAccounts = (query = '', status: ServiceAccountStatus = 'active', cursor = '') => {
+  const params = new URLSearchParams({ status })
+  if (query) params.set('q', query)
+  if (cursor) params.set('cursor', cursor)
+  return apiRequest<ServiceAccountPage>(`/api/v1/service-accounts?${params}`)
+}
 export const createServiceAccount = (input: { name: string; username: string; description: string }) =>
   apiRequest<ServiceAccount>('/api/v1/service-accounts', { method: 'POST', body: JSON.stringify(input) })
 export const disableServiceAccount = (id: string) =>

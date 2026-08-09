@@ -433,10 +433,13 @@ Evidence:
 ### Completion step 6: finish the Phase 2 management experience
 
 **Pagination update on August 9, 2026:** cursor pagination is implemented for
-tags, manifest inventory, deletion history, and lifecycle runs. Tags preserve
-Distribution's native continuation behind Grom cursors; the persisted lists use
-database keysets. The remaining browser-test limitation is tracked separately
-in the detailed acceptance plan below.
+tags, manifest inventory, deletion history, lifecycle runs, and the
+administrative user, service-account, access-key, project, membership, and
+logical-repository lists. Tags and the repository catalog preserve
+Distribution's native continuation behind Grom cursors; persisted lists use
+database keysets. Administrative search and service-account status filtering
+run on the server before pagination. Page responses expose only items and an
+optional next cursor, never a total or page count.
 
 **Planning update on August 3, 2026:** the detailed acceptance plan for the
 remaining browser journey and boot/contract smoke checks is maintained in
@@ -1568,8 +1571,8 @@ registry protocol with Docker.
   persistence and sanitization coverage; failed audit intent blocks destructive
   operations. Audit presentation remains intentionally outside the default MVP.
 - **Partial:** useful empty/error states exist in implemented screens;
-  pagination requirements and browser-level acceptance beyond the accepted
-  first-push journey remain unresolved.
+  browser-level acceptance beyond the accepted first-push journey remains
+  unresolved.
 
 Exit criterion: a new administrator can create a project, add a service account, push an image, and inspect it without using the database or editing configuration.
 

@@ -136,6 +136,13 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/PageLimit"
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive search across email and username.
+          schema:
+            type: string
+            maxLength: 200
       responses:
         "200":
           description: Installation users
@@ -312,13 +319,21 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/PageLimit"
-        - name: includeDisabled
+        - name: q
           in: query
           required: false
           schema:
-            type: boolean
-            default: false
-          description: Include disabled service accounts in the administrative listing.
+            type: string
+            maxLength: 200
+          description: Case-insensitive search across name, username, and description.
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, disabled, all]
+            default: active
+          description: Administrative account status filter.
       responses:
         "200":
           description: Service accounts
@@ -1354,7 +1369,7 @@ components:
           nullable: true
     UserPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1362,12 +1377,9 @@ components:
             $ref: "#/components/schemas/User"
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     ServiceAccountPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1375,12 +1387,9 @@ components:
             $ref: "#/components/schemas/ServiceAccount"
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     APITokenPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1388,12 +1397,9 @@ components:
             $ref: "#/components/schemas/APIToken"
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     ProjectPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1401,12 +1407,9 @@ components:
             $ref: "#/components/schemas/Project"
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     MembershipPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1414,12 +1417,9 @@ components:
             $ref: "#/components/schemas/Membership"
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     RepositoryPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1427,12 +1427,9 @@ components:
             $ref: "#/components/schemas/Repository"
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     TagPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1440,12 +1437,9 @@ components:
             type: string
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     ArtifactDeletionPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1453,12 +1447,9 @@ components:
             $ref: "#/components/schemas/ArtifactDeletion"
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     ManifestInventoryPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1466,12 +1457,9 @@ components:
             $ref: "#/components/schemas/ManifestInventory"
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     LifecycleRunPage:
       type: object
-      required: [items, pageCount]
+      required: [items]
       properties:
         items:
           type: array
@@ -1479,9 +1467,6 @@ components:
             $ref: "#/components/schemas/LifecycleRun"
         nextCursor:
           type: string
-        pageCount:
-          type: integer
-          minimum: 0
     CreateUserRequest:
       type: object
       additionalProperties: false
@@ -1683,6 +1668,9 @@ components:
         createdAt:
           type: string
           format: date-time
+        canManage:
+          type: boolean
+          description: Whether the signed-in actor may manage this project.
     CreateProjectRequest:
       type: object
       required: [name, slug]

@@ -11,6 +11,7 @@ type Store interface {
 	CreateRepository(ctx context.Context, repository *Repository) error
 	EnsureRepository(ctx context.Context, repository *Repository) (*Repository, bool, error)
 	ListRepositories(ctx context.Context, projectID foundation.ID) ([]Repository, error)
+	ListRepositoriesPage(ctx context.Context, projectID foundation.ID, request foundation.PageRequest) (foundation.PageResult[Repository], error)
 	FindRepository(ctx context.Context, projectID foundation.ID, name string) (*Repository, error)
 	FindRepositoryByID(ctx context.Context, repositoryID foundation.ID) (*Repository, error)
 	RepositoryExists(ctx context.Context, projectID foundation.ID, name string) (bool, error)

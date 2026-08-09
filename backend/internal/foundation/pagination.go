@@ -15,7 +15,6 @@ type PageRequest struct {
 type PageResult[T any] struct {
 	Items      []T    `json:"items"`
 	NextCursor string `json:"nextCursor,omitempty"`
-	PageCount  int    `json:"pageCount"`
 }
 
 // PageCursor is an opaque, scoped continuation token. Offset remains for
@@ -27,6 +26,7 @@ type PageCursor struct {
 	Timestamp string `json:"t,omitempty"`
 	ID        string `json:"i,omitempty"`
 	Marker    string `json:"m,omitempty"`
+	Name      string `json:"n,omitempty"`
 }
 
 func EncodePageCursor(cursor PageCursor) (string, error) {

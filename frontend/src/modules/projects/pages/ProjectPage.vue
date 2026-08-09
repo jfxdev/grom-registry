@@ -86,14 +86,11 @@ const selectedManifest = ref<ManifestInventory | null>(null)
 const repositoryOperationError = ref('')
 const removeRepositoryOpen = ref(false)
 const repositoryPagination = useCursorPagination()
+const memberPagination = useCursorPagination()
 const tagPagination = useCursorPagination()
 const inventoryPagination = useCursorPagination()
 const deletionPagination = useCursorPagination()
 const lifecyclePagination = useCursorPagination()
-
-function knownPageCount(value: number | null | undefined, page: number) {
-  return value && value >= page ? value : undefined
-}
 
 function openProjectDeletion() {
   projectSettingsOpen.value = false
@@ -102,15 +99,10 @@ function openProjectDeletion() {
 
 const project = useQuery({ queryKey: computed(() => projectKeys.detail(slug.value)), queryFn: () => getProject(slug.value) })
 const repositories = useQuery({ queryKey: computed(() => [...projectKeys.repositories(slug.value), repositoryPagination.cursor.value]), queryFn: () => listRepositories(slug.value, repositoryPagination.cursor.value) })
-const members = useQuery({ queryKey: computed(() => projectKeys.members(slug.value)), queryFn: () => listMembers(slug.value), enabled: computed(() => session.user?.systemViewer !== true) })
+const members = useQuery({ queryKey: computed(() => [...projectKeys.members(slug.value), memberPagination.cursor.value]), queryFn: () => listMembers(slug.value, memberPagination.cursor.value), enabled: computed(() => session.user?.systemViewer !== true) })
 const accounts = useQuery({ queryKey: serviceAccountKeys.list(), queryFn: () => listServiceAccounts(), enabled: computed(() => session.user?.systemViewer !== true) })
 const canManage = computed(() =>
-  session.user?.systemViewer !== true && (session.user?.systemAdmin === true ||
-  pageItems(members.data.value).some((member) =>
-    member.principalKind === 'user' &&
-    member.principalId === session.user?.id &&
-    member.role === 'admin',
-  ) === true),
+  session.user?.systemViewer !== true && project.data.value?.canManage === true,
 )
 const users = useQuery({ queryKey: userKeys.all, queryFn: () => listUsers(), enabled: computed(() => canManage.value) })
 const routedRepository = useQuery({
@@ -409,7 +401,6 @@ function profileLabel(profile: Repository['profile']) {
       </div>
       <PaginationControls
         :page="repositoryPagination.page.value"
-        :page-count="repositories.data.value?.pageCount ?? 0"
         :has-previous="repositoryPagination.hasPrevious.value"
         :has-next="Boolean(repositories.data.value?.nextCursor)"
         :disabled="repositories.isFetching.value"
@@ -459,6 +450,14 @@ function profileLabel(profile: Repository['profile']) {
               </div>
             </div>
           </div>
+          <PaginationControls
+            :page="memberPagination.page.value"
+            :has-previous="memberPagination.hasPrevious.value"
+            :has-next="Boolean(members.data.value?.nextCursor)"
+            :disabled="members.isFetching.value"
+            @previous="memberPagination.previous()"
+            @next="memberPagination.next(members.data.value?.nextCursor)"
+          />
         </section>
         <DangerZone
           v-if="session.user?.systemAdmin"
@@ -578,7 +577,6 @@ function profileLabel(profile: Repository['profile']) {
       </div>
       <PaginationControls
         :page="tagPagination.page.value"
-        :page-count="knownPageCount(tags.data.value?.pageCount, tagPagination.page.value)"
         :has-previous="tagPagination.hasPrevious.value"
         :has-next="Boolean(tags.data.value?.nextCursor)"
         :disabled="tags.isFetching.value"
@@ -596,7 +594,6 @@ function profileLabel(profile: Repository['profile']) {
         </Card>
         <PaginationControls
           :page="inventoryPagination.page.value"
-          :page-count="knownPageCount(inventory.data.value?.pageCount, inventoryPagination.page.value)"
           :has-previous="inventoryPagination.hasPrevious.value"
           :has-next="Boolean(inventory.data.value?.nextCursor)"
           :disabled="inventory.isFetching.value"
@@ -619,7 +616,6 @@ function profileLabel(profile: Repository['profile']) {
         </Card>
         <PaginationControls
           :page="deletionPagination.page.value"
-          :page-count="knownPageCount(artifactDeletionHistory.data.value?.pageCount, deletionPagination.page.value)"
           :has-previous="deletionPagination.hasPrevious.value"
           :has-next="Boolean(artifactDeletionHistory.data.value?.nextCursor)"
           :disabled="artifactDeletionHistory.isFetching.value"
@@ -635,7 +631,6 @@ function profileLabel(profile: Repository['profile']) {
         </Card>
         <PaginationControls
           :page="lifecyclePagination.page.value"
-          :page-count="knownPageCount(lifecycleHistory.data.value?.pageCount, lifecyclePagination.page.value)"
           :has-previous="lifecyclePagination.hasPrevious.value"
           :has-next="Boolean(lifecycleHistory.data.value?.nextCursor)"
           :disabled="lifecycleHistory.isFetching.value"

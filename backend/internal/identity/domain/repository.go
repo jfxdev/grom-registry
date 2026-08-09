@@ -44,3 +44,12 @@ type Repository interface {
 	RevokeViewerAPIToken(ctx context.Context, userID, tokenID foundation.ID) error
 	TouchAPIToken(ctx context.Context, id foundation.ID) error
 }
+
+// PagedRepository is intentionally separate from Repository while older
+// identity test doubles are migrated. Production persistence implements this
+// capability for every administrative list.
+type PagedRepository interface {
+	ListUsersPage(ctx context.Context, query string, request foundation.PageRequest) (foundation.PageResult[User], error)
+	ListServiceAccountsPage(ctx context.Context, query, status string, request foundation.PageRequest) (foundation.PageResult[ServiceAccount], error)
+	ListServiceAccountAPITokensPage(ctx context.Context, serviceAccountID foundation.ID, request foundation.PageRequest) (foundation.PageResult[APIToken], error)
+}

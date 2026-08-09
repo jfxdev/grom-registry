@@ -52,6 +52,84 @@ func TestListServiceAccountsCanIncludeDisabledAccounts(t *testing.T) {
 	})
 }
 
+func TestAdministrativePagesFilterAndAdvanceWithKeysets(t *testing.T) {
+	ctx := context.Background()
+	t.Run("sqlite", func(t *testing.T) {
+		db := openSQLiteRepositoryTestDB(t)
+		for _, statement := range []string{
+			`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, is_system_admin BOOLEAN NOT NULL, is_system_viewer BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
+			`CREATE TABLE service_accounts (id TEXT PRIMARY KEY, name TEXT NOT NULL, username TEXT NOT NULL, description TEXT NOT NULL, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
+		} {
+			if _, err := db.ExecContext(ctx, statement); err != nil {
+				t.Fatal(err)
+			}
+		}
+		assertAdministrativePagesFilterAndAdvanceWithKeysets(t, ctx, db)
+	})
+
+	t.Run("postgres", func(t *testing.T) {
+		databaseURL := os.Getenv("GROM_TEST_POSTGRES_URL")
+		if databaseURL == "" {
+			t.Skip("GROM_TEST_POSTGRES_URL is not configured")
+		}
+		db, kind, err := database.Open(ctx, databaseURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if err := database.Migrate(ctx, db, kind, 5*time.Second, slog.Default()); err != nil {
+			t.Fatal(err)
+		}
+		assertAdministrativePagesFilterAndAdvanceWithKeysets(t, ctx, db)
+	})
+}
+
+func assertAdministrativePagesFilterAndAdvanceWithKeysets(t *testing.T, ctx context.Context, db *bun.DB) {
+	t.Helper()
+	repository := New(db)
+	base := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	userOneID := foundation.NewID()
+	userTwoID := foundation.NewID()
+	activeID := foundation.NewID()
+	disabledID := foundation.NewID()
+	t.Cleanup(func() {
+		_, _ = db.NewDelete().Model((*userModel)(nil)).Where("id IN (?)", bun.List([]string{userOneID.String(), userTwoID.String()})).Exec(context.Background())
+		_, _ = db.NewDelete().Model((*serviceAccountModel)(nil)).Where("id IN (?)", bun.List([]string{activeID.String(), disabledID.String()})).Exec(context.Background())
+	})
+	for i, user := range []identity.User{
+		{ID: userOneID, Email: userOneID.String() + "@example.com", Username: "alex-" + userOneID.String(), PasswordHash: "hash", CreatedAt: base},
+		{ID: userTwoID, Email: userTwoID.String() + "@example.com", Username: "sam-" + userTwoID.String(), PasswordHash: "hash", CreatedAt: base.Add(time.Minute)},
+	} {
+		if err := repository.CreateUser(ctx, &user); err != nil {
+			t.Fatalf("user %d: %v", i, err)
+		}
+	}
+	first, err := repository.ListUsersPage(ctx, "example", foundation.PageRequest{Limit: 1, Scope: "users:q=example"})
+	if err != nil || len(first.Items) != 1 || first.Items[0].ID != userTwoID || first.NextCursor == "" {
+		t.Fatalf("first user page: %#v, %v", first, err)
+	}
+	second, err := repository.ListUsersPage(ctx, "example", foundation.PageRequest{Limit: 1, Scope: "users:q=example", Cursor: first.NextCursor})
+	if err != nil || len(second.Items) != 1 || second.Items[0].ID != userOneID {
+		t.Fatalf("second user page: %#v, %v", second, err)
+	}
+
+	active := &identity.ServiceAccount{ID: activeID, Name: "Build", Username: "build-" + activeID.String(), Description: "CI", CreatedAt: base}
+	disabled := &identity.ServiceAccount{ID: disabledID, Name: "Mirror", Username: "mirror-" + disabledID.String(), Description: "sync", CreatedAt: base.Add(time.Minute)}
+	if err := repository.CreateServiceAccount(ctx, active); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.CreateServiceAccount(ctx, disabled); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.DisableServiceAccount(ctx, disabled.ID); err != nil {
+		t.Fatal(err)
+	}
+	accounts, err := repository.ListServiceAccountsPage(ctx, "mirror", "disabled", foundation.PageRequest{Limit: 1, Scope: "service-accounts:status=disabled:q=mirror"})
+	if err != nil || len(accounts.Items) != 1 || accounts.Items[0].ID != disabled.ID {
+		t.Fatalf("filtered accounts: %#v, %v", accounts, err)
+	}
+}
+
 func TestDisableUserRevokesSessionsAtomically(t *testing.T) {
 	ctx := context.Background()
 	db := openSQLiteRepositoryTestDB(t)

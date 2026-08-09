@@ -1,8 +1,17 @@
 import { apiRequest } from '@/shared/api/client'
 import type { CreateUserResponse, User, UserPage } from '@/shared/api/models'
 
-export const userKeys = { all: ['users'] as const }
-export const listUsers = (cursor = '') => apiRequest<UserPage>(`/api/v1/users${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
+export const userKeys = {
+  all: ['users'] as const,
+  list: (query: string, cursor = '') => ['users', query, cursor] as const,
+}
+export const listUsers = (query = '', cursor = '') => {
+  const params = new URLSearchParams()
+  if (query) params.set('q', query)
+  if (cursor) params.set('cursor', cursor)
+  const suffix = params.toString()
+  return apiRequest<UserPage>(`/api/v1/users${suffix ? `?${suffix}` : ''}`)
+}
 export const createUser = (input: {
   email: string
   username: string

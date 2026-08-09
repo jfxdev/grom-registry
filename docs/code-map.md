@@ -43,7 +43,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/release-operations.md` | Operator installation by digest, upgrade, rollback, signing-key posture, and supported matrix |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
 | `docs/mvp-acceptance-implementation-plan.md` | Implemented and accepted public-browser first-push, boot/readiness/API-docs, session-revocation, and restart-preservation acceptance work |
-| `docs/pagination-and-destructive-browser-acceptance-plan.md` | Planned one-shot delivery for cursor pagination of administrative/registry lists and public-browser acceptance of destructive flows |
+| `docs/pagination-and-destructive-browser-acceptance-plan.md` | Planned public-browser acceptance of destructive flows |
 | `docs/visual-identity.md` | Approved visual direction, responsive rules, and UI acceptance criteria |
 | `docs/visual-implementation-plan.md` | Detailed frontend delivery phases, interaction behavior, and validation plan |
 | `docs/assets/visual-identity/` | Visual concept references used by the identity guide |
@@ -84,7 +84,9 @@ only if an actual split is implemented.
 | `backend/migrations/` | Ordered migrations applied automatically during boot |
 | `backend/api/openapi.yaml` | Canonical HTTP API contract |
 | `backend/internal/generated/openapi/` | Generated Go transport contracts; never edit manually |
-| `backend/internal/registry/infrastructure/persistence/bun/` | Logical repository, policy, inventory, deletion, lifecycle persistence, and keyset-paginated registry history |
+| `backend/internal/registry/infrastructure/persistence/bun/` | Logical repository, policy, inventory, deletion, lifecycle persistence, and keyset-paginated registry history and repository lists |
+| `backend/internal/identity/infrastructure/persistence/bun/pagination.go` | Keyset-paginated, server-filtered administrative users, service accounts, and access keys |
+| `backend/internal/projects/infrastructure/persistence/bun/pagination.go` | Keyset-paginated visible projects and principal-keyset project memberships |
 
 ## Frontend modules
 
@@ -142,7 +144,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `backend/internal/registry/application/artifact_deletion_service.go` | Manual deletion preview, OCI relationship protection, revalidation, persistence, and audit |
 | `backend/internal/registry/application/lifecycle_service.go` | Retention planning, live revalidation, and manual execution |
 | `backend/internal/registry/infrastructure/distribution/gateway.go` | Public `/v2` reverse proxy, forwarding headers, manifest policy enforcement, and push observation |
-| `backend/internal/registry/infrastructure/distribution/client.go` | Internal Distribution metadata client; encapsulates native tag pagination behind Grom cursors |
+| `backend/internal/registry/infrastructure/distribution/client.go` | Internal Distribution metadata client; encapsulates native catalog and tag pagination behind Grom cursors |
 | `backend/internal/registry/infrastructure/persistence/bun/lifecycle.go` | Inventory, preview, run, and execution-lock persistence |
 | `backend/internal/audit/` | Immutable lifecycle audit event recording |
 | `backend/tests/registrye2e/` | Opt-in public-endpoint registry authorization, slow streaming blob upload, user-session revocation, and full-stack restart-preservation journeys; isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |

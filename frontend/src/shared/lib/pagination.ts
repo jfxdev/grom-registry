@@ -1,4 +1,4 @@
-export type Page<T> = { items: T[]; nextCursor?: string; pageCount?: number }
+export type Page<T> = { items: T[]; nextCursor?: string }
 
 // Component mocks can remain concise arrays while callers migrate to Page<T>.
 export function pageItems<T>(value: Page<T> | { tags?: T[] } | T[] | undefined | null): T[] {

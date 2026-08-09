@@ -132,6 +132,14 @@ func (s *Service) ListUsers(ctx context.Context) ([]identity.User, error) {
 	return s.repository.ListUsers(ctx)
 }
 
+func (s *Service) ListUsersPage(ctx context.Context, query string, request foundation.PageRequest) (foundation.PageResult[identity.User], error) {
+	paged, ok := s.repository.(identity.PagedRepository)
+	if !ok {
+		return foundation.PageResult[identity.User]{}, errors.New("identity pagination is not configured")
+	}
+	return paged.ListUsersPage(ctx, strings.TrimSpace(query), request)
+}
+
 func (s *Service) CreateUser(ctx context.Context, email, username string) (*CreatedUser, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	username = strings.TrimSpace(username)
@@ -305,6 +313,14 @@ func (s *Service) ListServiceAccounts(ctx context.Context, includeDisabled bool)
 	return s.repository.ListServiceAccounts(ctx, includeDisabled)
 }
 
+func (s *Service) ListServiceAccountsPage(ctx context.Context, query, status string, request foundation.PageRequest) (foundation.PageResult[identity.ServiceAccount], error) {
+	paged, ok := s.repository.(identity.PagedRepository)
+	if !ok {
+		return foundation.PageResult[identity.ServiceAccount]{}, errors.New("identity pagination is not configured")
+	}
+	return paged.ListServiceAccountsPage(ctx, strings.TrimSpace(query), status, request)
+}
+
 func (s *Service) FindServiceAccount(ctx context.Context, id foundation.ID) (*identity.ServiceAccount, error) {
 	return s.repository.FindServiceAccountByID(ctx, id)
 }
@@ -401,6 +417,17 @@ func (s *Service) ListServiceAccountAPITokens(ctx context.Context, serviceAccoun
 		return nil, err
 	}
 	return s.repository.ListServiceAccountAPITokens(ctx, serviceAccountID)
+}
+
+func (s *Service) ListServiceAccountAPITokensPage(ctx context.Context, serviceAccountID foundation.ID, request foundation.PageRequest) (foundation.PageResult[identity.APIToken], error) {
+	if _, err := s.repository.FindServiceAccountByID(ctx, serviceAccountID); err != nil {
+		return foundation.PageResult[identity.APIToken]{}, err
+	}
+	paged, ok := s.repository.(identity.PagedRepository)
+	if !ok {
+		return foundation.PageResult[identity.APIToken]{}, errors.New("identity pagination is not configured")
+	}
+	return paged.ListServiceAccountAPITokensPage(ctx, serviceAccountID, request)
 }
 
 func (s *Service) RevokeServiceAccountAPIToken(ctx context.Context, serviceAccountID, tokenID foundation.ID) error {
