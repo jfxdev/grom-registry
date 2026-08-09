@@ -113,6 +113,9 @@ func TestListProjectRepositoriesPageSkipsUnrelatedCatalogPages(t *testing.T) {
 	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		requests.Add(1)
 		header := make(http.Header)
+		if got := r.URL.Query().Get("n"); got != "2" {
+			return &http.Response{StatusCode: http.StatusBadRequest, Status: "400 Bad Request", Header: header, Body: io.NopCloser(strings.NewReader("unexpected page")), Request: r}, nil
+		}
 		switch r.URL.Query().Get("last") {
 		case "":
 			header.Set("Link", `</v2/_catalog?n=2&last=other%2Ftwo>; rel="next"`)

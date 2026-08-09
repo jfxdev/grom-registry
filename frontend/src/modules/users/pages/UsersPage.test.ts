@@ -48,31 +48,38 @@ describe('UsersPage', () => {
     mocks.listUsers.mockReset()
     mocks.promoteUserToSystemAdmin.mockReset()
     mocks.promoteUserToSystemViewer.mockReset()
-    const pages = {
-		'': [
-        {
-          id: 'user-1',
-          email: 'alex@example.com',
-          username: 'alex',
-          systemAdmin: true,
-          createdAt: '2026-07-29T10:00:00Z',
-        },
-        {
-          id: 'user-2',
-          email: 'sam@registry.test',
-          username: 'sam',
-          systemAdmin: false,
-          createdAt: '2026-07-29T10:00:00Z',
-        },
-		],
-		'next-page': [{
-			id: 'user-3', email: 'pat@example.com', username: 'pat', systemAdmin: false, createdAt: '2026-07-29T10:00:00Z',
-		}],
-	}
-	mocks.listUsers.mockImplementation((query = '', cursor = '') => Promise.resolve({
-		items: pages[cursor as keyof typeof pages].filter((user) => `${user.username} ${user.email}`.toLowerCase().includes(query.toLowerCase())),
-		nextCursor: cursor ? undefined : 'next-page',
-	}))
+    const users = [
+      {
+        id: 'user-1',
+        email: 'alex@example.com',
+        username: 'alex',
+        systemAdmin: true,
+        createdAt: '2026-07-29T10:00:00Z',
+      },
+      {
+        id: 'user-2',
+        email: 'sam@registry.test',
+        username: 'sam',
+        systemAdmin: false,
+        createdAt: '2026-07-29T10:00:00Z',
+      },
+      {
+        id: 'user-3',
+        email: 'pat@example.com',
+        username: 'pat',
+        systemAdmin: false,
+        createdAt: '2026-07-29T10:00:00Z',
+      },
+    ]
+    mocks.listUsers.mockImplementation((query = '', cursor = '') => {
+      const filtered = users.filter((user) => `${user.username} ${user.email}`.toLowerCase().includes(query.toLowerCase()))
+      const start = cursor === 'next-page' ? 2 : 0
+      const items = filtered.slice(start, start + 2)
+      return Promise.resolve({
+        items,
+        nextCursor: start + items.length < filtered.length ? 'next-page' : undefined,
+      })
+    })
   })
 
   it('shows a loading state before users resolve', () => {
@@ -119,25 +126,25 @@ describe('UsersPage', () => {
     expect(wrapper.text()).not.toContain('2 total')
   })
 
-	it('navigates pages and resets the cursor when the search changes', async () => {
-		const wrapper = mountPage()
-		await flushPromises()
+  it('navigates pages and resets the cursor when the search changes', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
 
-		await wrapper.findAll('button').find((button) => button.text() === 'Next')!.trigger('click')
-		await flushPromises()
-		expect(wrapper.text()).toContain('pat@example.com')
-		expect(mocks.listUsers).toHaveBeenLastCalledWith('', 'next-page')
+    await wrapper.findAll('button').find((button) => button.text() === 'Next')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('pat@example.com')
+    expect(mocks.listUsers).toHaveBeenLastCalledWith('', 'next-page')
 
-		await wrapper.findAll('button').find((button) => button.text() === 'Previous')!.trigger('click')
-		await flushPromises()
-		expect(wrapper.text()).toContain('alex@example.com')
+    await wrapper.findAll('button').find((button) => button.text() === 'Previous')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('alex@example.com')
 
-		await wrapper.findAll('button').find((button) => button.text() === 'Next')!.trigger('click')
-		await flushPromises()
-		await wrapper.get('input[aria-label="Search users"]').setValue('alex')
-		await flushPromises()
-		expect(mocks.listUsers).toHaveBeenLastCalledWith('alex', '')
-	})
+    await wrapper.findAll('button').find((button) => button.text() === 'Next')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('input[aria-label="Search users"]').setValue('alex')
+    await flushPromises()
+    expect(mocks.listUsers).toHaveBeenLastCalledWith('alex', '')
+  })
 
   it('confirms and disables a user', async () => {
     const wrapper = mountPage()
