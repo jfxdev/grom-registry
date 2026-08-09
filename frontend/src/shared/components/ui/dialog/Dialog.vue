@@ -33,7 +33,10 @@ onBeforeUnmount(() => {
   if (dialog.value?.open && typeof dialog.value.close === 'function') {
     dialog.value.close()
   }
-  if (previousFocusedElement.value?.isConnected) previousFocusedElement.value.focus()
+  const focusTarget = previousFocusedElement.value
+  void nextTick(() => {
+    if (focusTarget?.isConnected) focusTarget.focus()
+  })
 })
 </script>
 
