@@ -42,11 +42,13 @@ test('an administrator confirms destructive access changes through the public UI
   ])
   expect(memberResponse.status()).toBe(204)
   await expect(page.getByRole('button', { name: 'Remove service account member' })).toBeHidden()
+  await page.getByRole('button', { name: 'Close project settings' }).click()
+  await expect(page.getByRole('dialog', { name: 'Project settings' })).toBeHidden()
 
   await page.getByRole('link', { name: 'Service accounts' }).click()
   const account = page.locator('.account-item', { hasText: 'destructive-writer' })
   await account.getByRole('button', { name: 'Disable service account Destructive writer' }).click()
-  const disableDialog = page.getByRole('dialog', { name: 'Disable service account' })
+  const disableDialog = page.getByRole('form', { name: 'Disable service account' })
   await expect(disableDialog.getByRole('button', { name: 'Disable service account' })).toBeDisabled()
   await disableDialog.getByLabel('Service account name confirmation').fill('Destructive writer')
   const [disableResponse] = await Promise.all([
@@ -54,18 +56,20 @@ test('an administrator confirms destructive access changes through the public UI
     disableDialog.getByRole('button', { name: 'Disable service account' }).click(),
   ])
   expect(disableResponse.status()).toBe(204)
+  await page.getByRole('combobox', { name: 'Filter service accounts by status' }).selectOption('disabled')
   await expect(account.getByText('Disabled', { exact: true })).toBeVisible()
 
   await page.goto(`${runtime.publicURL}/projects/destructive`)
   await page.getByRole('button', { name: 'Project settings' }).click()
+  await page.getByRole('button', { name: /Danger zone/ }).click()
   await page.getByRole('button', { name: 'Delete project' }).click()
   const projectDialog = page.getByRole('dialog', { name: 'Delete project' })
   const [projectResponse] = await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().endsWith('/api/v1/projects/destructive')),
     projectDialog.getByRole('button', { name: 'Delete project' }).click(),
   ])
-  expect(projectResponse.status()).toBe(409)
-  await expect(projectDialog).toContainText('Remove every repository before deleting this project')
+  expect(projectResponse.status()).toBe(204)
+  await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
 })
 
 async function signIn(page: import('@playwright/test').Page, publicURL: string) {
