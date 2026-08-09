@@ -165,7 +165,7 @@ func (s *Store) UpsertDiscoveredRepository(ctx context.Context, repository *regi
 	model := fromRepository(repository)
 	_, err := s.db.NewInsert().Model(model).
 		On("CONFLICT (project_id, name) DO UPDATE").
-		Set("status = CASE WHEN registry_repositories.status = ? THEN registry_repositories.status ELSE EXCLUDED.status END", constants.RepositoryStatusArchived).
+		Set("status = CASE WHEN status = ? THEN status ELSE EXCLUDED.status END", constants.RepositoryStatusArchived).
 		Set("updated_at = EXCLUDED.updated_at").Exec(ctx)
 	return err
 }

@@ -59,12 +59,3 @@ func pageResult[T any](r *http.Request, scope string, values []T) (foundation.Pa
 	}
 	return result, nil
 }
-
-func writePage[T any](w http.ResponseWriter, r *http.Request, scope string, values []T) {
-	result, err := pageResult(r, scope, values)
-	if err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
-}
