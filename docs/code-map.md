@@ -84,7 +84,7 @@ only if an actual split is implemented.
 | `backend/migrations/` | Ordered migrations applied automatically during boot |
 | `backend/api/openapi.yaml` | Canonical HTTP API contract |
 | `backend/internal/generated/openapi/` | Generated Go transport contracts; never edit manually |
-| `backend/internal/registry/infrastructure/persistence/bun/` | Logical repository and repository-policy persistence |
+| `backend/internal/registry/infrastructure/persistence/bun/` | Logical repository, policy, inventory, deletion, lifecycle persistence, and keyset-paginated registry history |
 
 ## Frontend modules
 
@@ -142,6 +142,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `backend/internal/registry/application/artifact_deletion_service.go` | Manual deletion preview, OCI relationship protection, revalidation, persistence, and audit |
 | `backend/internal/registry/application/lifecycle_service.go` | Retention planning, live revalidation, and manual execution |
 | `backend/internal/registry/infrastructure/distribution/gateway.go` | Public `/v2` reverse proxy, forwarding headers, manifest policy enforcement, and push observation |
+| `backend/internal/registry/infrastructure/distribution/client.go` | Internal Distribution metadata client; encapsulates native tag pagination behind Grom cursors |
 | `backend/internal/registry/infrastructure/persistence/bun/lifecycle.go` | Inventory, preview, run, and execution-lock persistence |
 | `backend/internal/audit/` | Immutable lifecycle audit event recording |
 | `backend/tests/registrye2e/` | Opt-in public-endpoint registry authorization, slow streaming blob upload, user-session revocation, and full-stack restart-preservation journeys; isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |

@@ -432,6 +432,12 @@ Evidence:
 
 ### Completion step 6: finish the Phase 2 management experience
 
+**Pagination update on August 9, 2026:** cursor pagination is implemented for
+tags, manifest inventory, deletion history, and lifecycle runs. Tags preserve
+Distribution's native continuation behind Grom cursors; the persisted lists use
+database keysets. The remaining browser-test limitation is tracked separately
+in the detailed acceptance plan below.
+
 **Planning update on August 3, 2026:** the detailed acceptance plan for the
 remaining browser journey and boot/contract smoke checks is maintained in
 [`mvp-acceptance-implementation-plan.md`](mvp-acceptance-implementation-plan.md).
@@ -449,8 +455,8 @@ Work:
 5. Maintain copyable push guidance alongside the existing pull command.
 6. Remove recent-audit overview and basic settings from the default MVP unless
    a concrete first-release use case promotes them back into scope.
-7. Decide where pagination is required based on current unbounded list
-   endpoints, then update OpenAPI, repositories, and UI together.
+7. Maintain the implemented cursor pagination for administrative and Registry
+   lists.
 8. Add request-level frontend integration tests.
 9. Add Playwright coverage for sign-in, project creation, membership
    management, reveal-once key handling, first push, repository browsing, safe

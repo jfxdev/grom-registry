@@ -247,3 +247,18 @@ func (s *ArtifactDeletionService) List(
 	}
 	return deletions, nil
 }
+
+func (s *ArtifactDeletionService) ListPage(ctx context.Context, projectID foundation.ID, repository string, request foundation.PageRequest) (foundation.PageResult[registrydomain.ArtifactDeletion], error) {
+	target, err := s.store.FindRepository(ctx, projectID, repository)
+	if err != nil {
+		return foundation.PageResult[registrydomain.ArtifactDeletion]{}, err
+	}
+	result, err := s.store.ListArtifactDeletionsPage(ctx, target.ID, request)
+	if err != nil {
+		return foundation.PageResult[registrydomain.ArtifactDeletion]{}, err
+	}
+	for i := range result.Items {
+		result.Items[i].Repository = target.Name
+	}
+	return result, nil
+}

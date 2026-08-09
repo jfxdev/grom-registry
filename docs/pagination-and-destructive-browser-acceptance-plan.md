@@ -2,7 +2,7 @@
 
 ## Status e objetivo
 
-**Status: planejado.**
+**Status: parcialmente implementado (9 de agosto de 2026).**
 
 Esta é uma entrega única. Ela fecha as lacunas restantes da experiência de
 administração ao:
@@ -26,10 +26,14 @@ coleta de blobs continua uma operação distinta.
 
 ## Estado atual
 
-`backend/internal/foundation/pagination.go` já define os tipos independentes
-de persistência e transporte `PageRequest` e `PageResult[T]`. Backups já
-expõem paginação opaca e fixa em cinco recovery points. As demais listas da
-API de administração ainda retornam arrays completos.
+`backend/internal/foundation/pagination.go` define os tipos independentes de
+persistência e transporte `PageRequest`, `PageResult[T]` e `PageCursor`.
+Backups já expõem paginação opaca e fixa em cinco recovery points. As listas
+administrativas e de repositórios já possuem a primeira entrega de cursor.
+Tags, inventário de manifests, histórico de exclusões e execuções de lifecycle
+agora usam páginas: tags delegam a continuação para Distribution e as três
+listas persistidas usam keyset por timestamp/ID. A ampliação da aceitação
+Playwright destrutiva permanece pendente.
 
 O Playwright já tem uma jornada pública instalada em
 `frontend/e2e/admin-journey.spec.ts`: ele inicia um projeto Compose isolado,

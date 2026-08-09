@@ -75,3 +75,40 @@ func TestListProjectRepositoriesFollowsCatalogPagination(t *testing.T) {
 		t.Fatalf("expected two catalog requests, got %d", requests.Load())
 	}
 }
+
+func TestListTagsPageReturnsOnlyTheRequestedDistributionPage(t *testing.T) {
+	var requests atomic.Int32
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requests.Add(1)
+		if got := r.URL.Query().Get("n"); got != "2" {
+			t.Errorf("expected page size 2, got %q", got)
+		}
+		if got := r.URL.Query().Get("last"); got != "stable" {
+			t.Errorf("expected marker stable, got %q", got)
+		}
+		header := make(http.Header)
+		header.Set("Link", `</v2/project/api/tags/list?n=2&last=v2>; rel="next"`)
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(`{"name":"project/api","tags":["v1","v2"]}`)), Request: r}, nil
+	})
+	temp := t.TempDir()
+	signer, err := signing.LoadOrCreate(temp+"/key.pem", temp+"/cert.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient("http://distribution.local", registryapp.NewTokenService(nil, nil, signer, time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = transport
+
+	page, err := client.ListTagsPage(context.Background(), "project/api", 2, "stable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Name != "project/api" || len(page.Tags) != 2 || page.NextMarker != "v2" {
+		t.Fatalf("unexpected tag page: %#v", page)
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("expected one request, got %d", requests.Load())
+	}
+}

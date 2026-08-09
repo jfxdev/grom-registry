@@ -13,6 +13,7 @@ Target package: `backend/internal/foundation`.
 | `PrincipalRef` | Reference to a user or service account across contexts | Principal kind and ID |
 | `PageRequest` | Validated pagination input | Cursor and limit |
 | `PageResult[T]` | Generic paginated result | Items and next cursor |
+| `PageCursor` | Opaque, scope-bound continuation token | Scope plus legacy offset, keyset boundary, or upstream marker |
 | `Timestamps` | Common creation/update metadata where both are meaningful | CreatedAt and UpdatedAt |
 | `FieldError` | Stable field-level validation failure | Field, code, message |
 | `AppError` | Application-wide classified error | Code, message, fields, cause |

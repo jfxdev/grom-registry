@@ -4,13 +4,13 @@ import { computed } from 'vue'
 
 const props = defineProps<{
   page: number
-  pageCount: number
+  pageCount?: number
   hasPrevious: boolean
   hasNext: boolean
   disabled?: boolean
 }>()
 
-const displayedPageCount = computed(() => Math.max(1, props.pageCount))
+const displayedPageCount = computed(() => props.pageCount && props.pageCount >= props.page ? props.pageCount : undefined)
 
 defineEmits<{ previous: []; next: [] }>()
 </script>
@@ -18,7 +18,7 @@ defineEmits<{ previous: []; next: [] }>()
 <template>
   <nav class="pagination-controls" aria-label="Pagination">
     <Button variant="outline" size="sm" :disabled="disabled || !hasPrevious" @click="$emit('previous')">Previous</Button>
-    <span class="pagination-status" aria-live="polite">Page {{ page }} of {{ displayedPageCount }}</span>
+    <span class="pagination-status" aria-live="polite">Page {{ page }}<template v-if="displayedPageCount"> of {{ displayedPageCount }}</template></span>
     <Button variant="outline" size="sm" :disabled="disabled || !hasNext" @click="$emit('next')">Next</Button>
   </nav>
 </template>

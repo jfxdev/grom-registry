@@ -21,6 +21,17 @@ type deletionTestStore struct {
 	completeErr error
 }
 
+func (s *deletionTestStore) ListManifestInventoryPage(_ context.Context, _ foundation.ID, _ foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
+	return foundation.PageResult[registrydomain.ManifestInventory]{Items: s.inventory}, nil
+}
+
+func (s *deletionTestStore) ListArtifactDeletionsPage(_ context.Context, _ foundation.ID, _ foundation.PageRequest) (foundation.PageResult[registrydomain.ArtifactDeletion], error) {
+	if s.deletion == nil {
+		return foundation.PageResult[registrydomain.ArtifactDeletion]{}, nil
+	}
+	return foundation.PageResult[registrydomain.ArtifactDeletion]{Items: []registrydomain.ArtifactDeletion{*s.deletion}}, nil
+}
+
 func (s *deletionTestStore) FindRepository(
 	_ context.Context,
 	projectID foundation.ID,
@@ -344,5 +355,18 @@ func TestArtifactDeletionDoesNotReachDistributionWhenStartAuditFails(t *testing.
 	}
 	if store.deletion == nil || store.deletion.Status != constants.ArtifactDeletionFailed {
 		t.Fatalf("expected persisted failed deletion operation, got %#v", store.deletion)
+	}
+}
+
+func TestArtifactDeletionListPageAddsRepositoryName(t *testing.T) {
+	repository := &registrydomain.Repository{ID: foundation.NewID(), ProjectID: foundation.NewID(), Name: "api"}
+	store := &deletionTestStore{repository: repository, deletion: &registrydomain.ArtifactDeletion{ID: foundation.NewID(), RepositoryID: repository.ID, Digest: "sha256:test"}}
+	service := NewArtifactDeletionService(store, nil, nil, nil, nil)
+	page, err := service.ListPage(context.Background(), repository.ProjectID, "api", foundation.PageRequest{Limit: 25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Repository != "api" {
+		t.Fatalf("unexpected page: %#v", page)
 	}
 }

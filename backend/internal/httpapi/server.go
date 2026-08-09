@@ -1154,12 +1154,17 @@ func (s *Server) listArtifactDeletions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository is required")
 		return
 	}
-	deletions, err := s.artifactDeletions.List(r.Context(), project.ID, repository)
+	request, _, err := pageRequest(r, "artifact-deletions:"+project.Slug+":"+repository)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	deletions, err := s.artifactDeletions.ListPage(r.Context(), project.ID, repository, request)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "artifact_deletions_unavailable", err.Error())
 		return
 	}
-	writePage(w, r, "artifact-deletions:"+project.Slug+":"+repository, deletions)
+	writeJSON(w, http.StatusOK, deletions)
 }
 
 func stringValue(value *string) string {
@@ -1227,12 +1232,17 @@ func (s *Server) listRepositoryInventory(w http.ResponseWriter, r *http.Request)
 		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository is required")
 		return
 	}
-	items, err := s.inventory.List(r.Context(), project.ID, repository)
+	request, _, err := pageRequest(r, "repository-inventory:"+project.Slug+":"+repository)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	items, err := s.inventory.ListPage(r.Context(), project.ID, repository, request)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "inventory_unavailable", err.Error())
 		return
 	}
-	writePage(w, r, "repository-inventory:"+project.Slug+":"+repository, items)
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (s *Server) reconcileRepositoryInventory(w http.ResponseWriter, r *http.Request) {
@@ -1336,12 +1346,17 @@ func (s *Server) listLifecycleRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository is required")
 		return
 	}
-	runs, err := s.lifecycle.ListRuns(r.Context(), project.ID, repository)
+	request, _, err := pageRequest(r, "lifecycle-runs:"+project.Slug+":"+repository)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	runs, err := s.lifecycle.ListRunsPage(r.Context(), project.ID, repository, request)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "lifecycle_runs_unavailable", err.Error())
 		return
 	}
-	writePage(w, r, "lifecycle-runs:"+project.Slug+":"+repository, runs)
+	writeJSON(w, http.StatusOK, runs)
 }
 
 func (s *Server) getLifecycleRun(w http.ResponseWriter, r *http.Request) {
@@ -1379,12 +1394,35 @@ func (s *Server) listTags(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository path is invalid")
 		return
 	}
-	tags, err := s.distributionClient.ListTags(r.Context(), project.Slug+"/"+repository)
+	scope := "repository-tags:" + project.Slug + ":" + repository
+	request, _, err := pageRequest(r, scope)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	marker := ""
+	if request.Cursor != "" {
+		cursor, decodeErr := foundation.DecodePageCursor(request.Cursor, scope)
+		if decodeErr != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+			return
+		}
+		marker = cursor.Marker
+		if marker == "" {
+			writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+			return
+		}
+	}
+	tags, err := s.distributionClient.ListTagsPage(r.Context(), project.Slug+"/"+repository, request.Limit, marker)
 	if err != nil {
 		writeError(w, r, http.StatusBadGateway, "registry_unavailable", "Registry metadata is unavailable")
 		return
 	}
-	writePage(w, r, "repository-tags:"+project.Slug+":"+repository, tags.Tags)
+	result := foundation.PageResult[string]{Items: tags.Tags}
+	if tags.NextMarker != "" {
+		result.NextCursor, _ = foundation.EncodePageCursor(foundation.PageCursor{Scope: scope, Marker: tags.NextMarker})
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) exchangeRegistryToken(w http.ResponseWriter, r *http.Request) {

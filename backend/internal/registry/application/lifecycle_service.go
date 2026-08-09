@@ -513,6 +513,21 @@ func (s *LifecycleService) ListRuns(ctx context.Context, projectID foundation.ID
 	return runs, nil
 }
 
+func (s *LifecycleService) ListRunsPage(ctx context.Context, projectID foundation.ID, repository string, request foundation.PageRequest) (foundation.PageResult[registrydomain.LifecycleRun], error) {
+	target, err := s.store.FindRepository(ctx, projectID, repository)
+	if err != nil {
+		return foundation.PageResult[registrydomain.LifecycleRun]{}, err
+	}
+	result, err := s.store.ListLifecycleRunsPage(ctx, target.ID, request)
+	if err != nil {
+		return foundation.PageResult[registrydomain.LifecycleRun]{}, err
+	}
+	for i := range result.Items {
+		result.Items[i].Repository = repository
+	}
+	return result, nil
+}
+
 func (s *LifecycleService) FindRun(ctx context.Context, runID foundation.ID) (*registrydomain.LifecycleRun, error) {
 	return s.store.FindLifecycleRun(ctx, runID)
 }

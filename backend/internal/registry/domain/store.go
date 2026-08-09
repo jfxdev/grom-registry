@@ -24,10 +24,12 @@ type Store interface {
 	UpsertManifestObservation(ctx context.Context, repositoryID foundation.ID, observation ManifestObservation, observedAt time.Time) error
 	CompleteInventoryReconciliation(ctx context.Context, repositoryID foundation.ID, seenTags, seenDigests []string, observedAt time.Time) error
 	ListManifestInventory(ctx context.Context, repositoryID foundation.ID) ([]ManifestInventory, error)
+	ListManifestInventoryPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest) (foundation.PageResult[ManifestInventory], error)
 	MarkManifestDeleted(ctx context.Context, repositoryID foundation.ID, digest string, deletedAt time.Time) error
 	CreateArtifactDeletion(ctx context.Context, deletion *ArtifactDeletion) error
 	CompleteArtifactDeletion(ctx context.Context, deletionID foundation.ID, status, message string, completedAt time.Time) error
 	ListArtifactDeletions(ctx context.Context, repositoryID foundation.ID) ([]ArtifactDeletion, error)
+	ListArtifactDeletionsPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest) (foundation.PageResult[ArtifactDeletion], error)
 	CreateLifecyclePreview(ctx context.Context, preview *LifecyclePreview) error
 	FindLifecyclePreview(ctx context.Context, previewID foundation.ID) (*LifecyclePreview, error)
 	SetLifecyclePreviewStatus(ctx context.Context, previewID foundation.ID, status string) error
@@ -37,5 +39,6 @@ type Store interface {
 	UpdateLifecycleRunItem(ctx context.Context, item *LifecycleRunItem) error
 	CompleteLifecycleRun(ctx context.Context, runID foundation.ID, status string, completedAt time.Time) error
 	ListLifecycleRuns(ctx context.Context, repositoryID foundation.ID) ([]LifecycleRun, error)
+	ListLifecycleRunsPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest) (foundation.PageResult[LifecycleRun], error)
 	FindLifecycleRun(ctx context.Context, runID foundation.ID) (*LifecycleRun, error)
 }

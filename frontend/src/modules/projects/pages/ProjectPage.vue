@@ -86,6 +86,14 @@ const selectedManifest = ref<ManifestInventory | null>(null)
 const repositoryOperationError = ref('')
 const removeRepositoryOpen = ref(false)
 const repositoryPagination = useCursorPagination()
+const tagPagination = useCursorPagination()
+const inventoryPagination = useCursorPagination()
+const deletionPagination = useCursorPagination()
+const lifecyclePagination = useCursorPagination()
+
+function knownPageCount(value: number | null | undefined, page: number) {
+  return value && value >= page ? value : undefined
+}
 
 function openProjectDeletion() {
   projectSettingsOpen.value = false
@@ -111,23 +119,23 @@ const routedRepository = useQuery({
   enabled: computed(() => Boolean(repositoryId.value) && repositories.isSuccess.value && !pageItems(repositories.data.value).some((repository) => repository.id === repositoryId.value)),
 })
 const tags = useQuery({
-  queryKey: computed(() => projectKeys.tags(slug.value, selectedRepository.value?.name ?? '')),
-  queryFn: () => listTags(slug.value, selectedRepository.value!.name),
+  queryKey: computed(() => [...projectKeys.tags(slug.value, selectedRepository.value?.name ?? ''), tagPagination.cursor.value]),
+  queryFn: () => listTags(slug.value, selectedRepository.value!.name, tagPagination.cursor.value),
   enabled: computed(() => selectedRepository.value !== null),
 })
 const artifactDeletionHistory = useQuery({
-  queryKey: computed(() => projectKeys.artifactDeletions(slug.value, selectedRepository.value?.name ?? '')),
-  queryFn: () => listArtifactDeletions(slug.value, selectedRepository.value!.name),
+  queryKey: computed(() => [...projectKeys.artifactDeletions(slug.value, selectedRepository.value?.name ?? ''), deletionPagination.cursor.value]),
+  queryFn: () => listArtifactDeletions(slug.value, selectedRepository.value!.name, deletionPagination.cursor.value),
   enabled: computed(() => canManage.value && selectedRepository.value !== null),
 })
 const lifecycleHistory = useQuery({
-  queryKey: computed(() => registryKeys.lifecycleRuns(slug.value, selectedRepository.value?.name ?? '')),
-  queryFn: () => listLifecycleRuns(slug.value, selectedRepository.value!.name),
+  queryKey: computed(() => [...registryKeys.lifecycleRuns(slug.value, selectedRepository.value?.name ?? ''), lifecyclePagination.cursor.value]),
+  queryFn: () => listLifecycleRuns(slug.value, selectedRepository.value!.name, lifecyclePagination.cursor.value),
   enabled: computed(() => canManage.value && selectedRepository.value !== null),
 })
 const inventory = useQuery({
-  queryKey: computed(() => registryKeys.inventory(slug.value, selectedRepository.value?.name ?? '')),
-  queryFn: () => listInventory(slug.value, selectedRepository.value!.name),
+  queryKey: computed(() => [...registryKeys.inventory(slug.value, selectedRepository.value?.name ?? ''), inventoryPagination.cursor.value]),
+  queryFn: () => listInventory(slug.value, selectedRepository.value!.name, inventoryPagination.cursor.value),
   enabled: computed(() => selectedRepository.value !== null),
 })
 
@@ -138,6 +146,13 @@ watch([repositoryId, () => repositories.data.value, () => routedRepository.data.
   }
   selectedRepository.value = pageItems(page).find((repository) => repository.id === id) ?? routed ?? null
 }, { immediate: true })
+
+watch(repositoryId, () => {
+  tagPagination.reset()
+  inventoryPagination.reset()
+  deletionPagination.reset()
+  lifecyclePagination.reset()
+})
 
 async function openRepository(repository: Repository) {
   await router.push({ name: 'repository-detail', params: { project: slug.value, repositoryId: repository.id } })
@@ -561,6 +576,15 @@ function profileLabel(profile: Repository['profile']) {
           </div>
         </Card>
       </div>
+      <PaginationControls
+        :page="tagPagination.page.value"
+        :page-count="knownPageCount(tags.data.value?.pageCount, tagPagination.page.value)"
+        :has-previous="tagPagination.hasPrevious.value"
+        :has-next="Boolean(tags.data.value?.nextCursor)"
+        :disabled="tags.isFetching.value"
+        @previous="tagPagination.previous()"
+        @next="tagPagination.next(tags.data.value?.nextCursor)"
+      />
       <DockerPushBanner :registry-host="registryHost" :project="slug" :repository="selectedRepository.name" />
       <div class="operation-history">
         <h3 class="text-sm font-semibold">Manifest inventory</h3>
@@ -570,6 +594,15 @@ function profileLabel(profile: Repository['profile']) {
           <div class="flex items-center justify-between gap-3"><code class="truncate text-xs">{{ manifest.digest }}</code><Badge>{{ manifest.observedKind.replaceAll('_', ' ') }}</Badge></div>
           <p class="mt-1 text-xs text-muted-foreground">{{ manifest.tags.length ? manifest.tags.join(', ') : 'Untagged' }} · {{ manifest.manifestSize.toLocaleString() }} bytes</p>
         </Card>
+        <PaginationControls
+          :page="inventoryPagination.page.value"
+          :page-count="knownPageCount(inventory.data.value?.pageCount, inventoryPagination.page.value)"
+          :has-previous="inventoryPagination.hasPrevious.value"
+          :has-next="Boolean(inventory.data.value?.nextCursor)"
+          :disabled="inventory.isFetching.value"
+          @previous="inventoryPagination.previous()"
+          @next="inventoryPagination.next(inventory.data.value?.nextCursor)"
+        />
       </div>
       <p v-if="copyError" class="error-text" role="alert">{{ copyError }}</p>
       <p v-if="repositoryOperationError" class="error-text" role="alert">{{ repositoryOperationError }}</p>
@@ -577,20 +610,38 @@ function profileLabel(profile: Repository['profile']) {
       <p v-if="lifecycleError && !lifecyclePreview" class="error-text">{{ lifecycleError }}</p>
       <div v-if="canManage && (pageItems(artifactDeletionHistory.data.value).length || pageItems(lifecycleHistory.data.value).length)" class="operation-history">
         <h3 class="text-sm font-semibold">Deletion history</h3>
-        <Card v-for="deletion in pageItems(artifactDeletionHistory.data.value).slice(0, 5)" :key="deletion.id" class="p-3">
+        <Card v-for="deletion in pageItems(artifactDeletionHistory.data.value)" :key="deletion.id" class="p-3">
           <div class="flex items-center justify-between gap-3">
             <code class="break-all text-xs">{{ deletion.digest }}</code>
             <Badge :tone="deletion.status === 'completed' ? 'success' : 'danger'">{{ deletion.status }}</Badge>
           </div>
           <p class="mt-1 text-xs text-muted-foreground">Manual · {{ new Date(deletion.startedAt).toLocaleString() }} · {{ deletion.reason || 'No reason' }}</p>
         </Card>
-        <Card v-for="run in pageItems(lifecycleHistory.data.value).slice(0, 5)" :key="run.id" class="p-3">
+        <PaginationControls
+          :page="deletionPagination.page.value"
+          :page-count="knownPageCount(artifactDeletionHistory.data.value?.pageCount, deletionPagination.page.value)"
+          :has-previous="deletionPagination.hasPrevious.value"
+          :has-next="Boolean(artifactDeletionHistory.data.value?.nextCursor)"
+          :disabled="artifactDeletionHistory.isFetching.value"
+          @previous="deletionPagination.previous()"
+          @next="deletionPagination.next(artifactDeletionHistory.data.value?.nextCursor)"
+        />
+        <Card v-for="run in pageItems(lifecycleHistory.data.value)" :key="run.id" class="p-3">
           <div class="flex items-center justify-between gap-3">
             <span class="text-xs">Lifecycle · {{ run.items.length }} candidates</span>
             <Badge :tone="run.status === 'completed' ? 'success' : run.status === 'failed' ? 'danger' : 'warning'">{{ run.status }}</Badge>
           </div>
           <p class="mt-1 text-xs text-muted-foreground">{{ new Date(run.startedAt).toLocaleString() }} · {{ run.reason }}</p>
         </Card>
+        <PaginationControls
+          :page="lifecyclePagination.page.value"
+          :page-count="knownPageCount(lifecycleHistory.data.value?.pageCount, lifecyclePagination.page.value)"
+          :has-previous="lifecyclePagination.hasPrevious.value"
+          :has-next="Boolean(lifecycleHistory.data.value?.nextCursor)"
+          :disabled="lifecycleHistory.isFetching.value"
+          @previous="lifecyclePagination.previous()"
+          @next="lifecyclePagination.next(lifecycleHistory.data.value?.nextCursor)"
+        />
       </div>
     </section>
 

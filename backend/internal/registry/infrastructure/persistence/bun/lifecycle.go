@@ -228,6 +228,60 @@ func (s *Store) ListManifestInventory(ctx context.Context, repositoryID foundati
 	return result, nil
 }
 
+func (s *Store) ListManifestInventoryPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
+	boundary, err := keysetBoundary(request)
+	if err != nil {
+		return foundation.PageResult[registrydomain.ManifestInventory]{}, err
+	}
+	var models []manifestModel
+	query := s.db.NewSelect().Model(&models).Where("repository_id = ?", repositoryID.String())
+	if boundary != nil {
+		query = query.Where("(first_seen_at < ? OR (first_seen_at = ? AND id < ?))", boundary.at, boundary.at, boundary.id)
+	}
+	if err := query.OrderExpr("first_seen_at DESC, id DESC").Limit(request.Limit + 1).Scan(ctx); err != nil {
+		return foundation.PageResult[registrydomain.ManifestInventory]{}, err
+	}
+	more := len(models) > request.Limit
+	if more {
+		models = models[:request.Limit]
+	}
+	items, err := s.manifestInventoryFromModels(ctx, repositoryID, models)
+	if err != nil {
+		return foundation.PageResult[registrydomain.ManifestInventory]{}, err
+	}
+	result := foundation.PageResult[registrydomain.ManifestInventory]{Items: items}
+	if more {
+		result.NextCursor, err = encodeKeysetCursor(request.Scope, models[len(models)-1].FirstSeenAt, models[len(models)-1].ID)
+		if err != nil {
+			return result, err
+		}
+	}
+	return result, nil
+}
+
+func (s *Store) manifestInventoryFromModels(ctx context.Context, repositoryID foundation.ID, manifests []manifestModel) ([]registrydomain.ManifestInventory, error) {
+	ids := make([]string, len(manifests))
+	for i := range manifests {
+		ids[i] = manifests[i].ID
+	}
+	tagsByManifest := make(map[string][]string, len(ids))
+	if len(ids) > 0 {
+		var tags []tagModel
+		if err := s.db.NewSelect().Model(&tags).Where("manifest_id IN (?)", bun.List(ids)).Where("detached_at IS NULL").OrderExpr("name ASC").Scan(ctx); err != nil {
+			return nil, err
+		}
+		for _, tag := range tags {
+			tagsByManifest[tag.ManifestID] = append(tagsByManifest[tag.ManifestID], tag.Name)
+		}
+	}
+	result := make([]registrydomain.ManifestInventory, 0, len(manifests))
+	for i := range manifests {
+		m := manifests[i]
+		result = append(result, registrydomain.ManifestInventory{ID: foundation.ID(m.ID), RepositoryID: repositoryID, Digest: m.Digest, MediaType: m.MediaType, ArtifactType: m.ArtifactType, SubjectDigest: m.SubjectDigest, ObservedKind: m.ObservedKind, ArtifactRelationship: m.ArtifactRelationship, ClassificationSource: m.ClassificationSource, ClassificationConfidence: m.ClassificationConfidence, ManifestSize: m.ManifestSize, Tags: tagsByManifest[m.ID], State: m.State, FirstSeenAt: m.FirstSeenAt, LastPushedAt: m.LastPushedAt, LastSeenAt: m.LastSeenAt, UntaggedAt: m.UntaggedAt, DeletedAt: m.DeletedAt})
+	}
+	return result, nil
+}
+
 func (s *Store) MarkManifestDeleted(ctx context.Context, repositoryID foundation.ID, digest string, deletedAt time.Time) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		var manifests []manifestModel
@@ -304,6 +358,41 @@ func (s *Store) ListArtifactDeletions(
 			Reason: models[i].Reason, Status: models[i].Status, Message: models[i].Message,
 			StartedAt: models[i].StartedAt, CompletedAt: models[i].CompletedAt,
 		})
+	}
+	return result, nil
+}
+
+func (s *Store) ListArtifactDeletionsPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest) (foundation.PageResult[registrydomain.ArtifactDeletion], error) {
+	boundary, err := keysetBoundary(request)
+	if err != nil {
+		return foundation.PageResult[registrydomain.ArtifactDeletion]{}, err
+	}
+	var models []artifactDeletionModel
+	query := s.db.NewSelect().Model(&models).Where("repository_id = ?", repositoryID.String())
+	if boundary != nil {
+		query = query.Where("(started_at < ? OR (started_at = ? AND id < ?))", boundary.at, boundary.at, boundary.id)
+	}
+	if err := query.OrderExpr("started_at DESC, id DESC").Limit(request.Limit + 1).Scan(ctx); err != nil {
+		return foundation.PageResult[registrydomain.ArtifactDeletion]{}, err
+	}
+	more := len(models) > request.Limit
+	if more {
+		models = models[:request.Limit]
+	}
+	items := make([]registrydomain.ArtifactDeletion, 0, len(models))
+	for _, model := range models {
+		var tags []string
+		if err := json.Unmarshal([]byte(model.AffectedTags), &tags); err != nil {
+			return foundation.PageResult[registrydomain.ArtifactDeletion]{}, err
+		}
+		items = append(items, registrydomain.ArtifactDeletion{ID: foundation.ID(model.ID), RepositoryID: foundation.ID(model.RepositoryID), Digest: model.Digest, AffectedTags: tags, ActorID: foundation.ID(model.ActorID), Reason: model.Reason, Status: model.Status, Message: model.Message, StartedAt: model.StartedAt, CompletedAt: model.CompletedAt})
+	}
+	result := foundation.PageResult[registrydomain.ArtifactDeletion]{Items: items}
+	if more {
+		result.NextCursor, err = encodeKeysetCursor(request.Scope, models[len(models)-1].StartedAt, models[len(models)-1].ID)
+		if err != nil {
+			return result, err
+		}
 	}
 	return result, nil
 }
@@ -506,6 +595,65 @@ func (s *Store) ListLifecycleRuns(ctx context.Context, repositoryID foundation.I
 		result = append(result, *run)
 	}
 	return result, nil
+}
+
+func (s *Store) ListLifecycleRunsPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest) (foundation.PageResult[registrydomain.LifecycleRun], error) {
+	boundary, err := keysetBoundary(request)
+	if err != nil {
+		return foundation.PageResult[registrydomain.LifecycleRun]{}, err
+	}
+	var models []lifecycleRunModel
+	query := s.db.NewSelect().Model(&models).Where("repository_id = ?", repositoryID.String())
+	if boundary != nil {
+		query = query.Where("(started_at < ? OR (started_at = ? AND id < ?))", boundary.at, boundary.at, boundary.id)
+	}
+	if err := query.OrderExpr("started_at DESC, id DESC").Limit(request.Limit + 1).Scan(ctx); err != nil {
+		return foundation.PageResult[registrydomain.LifecycleRun]{}, err
+	}
+	more := len(models) > request.Limit
+	if more {
+		models = models[:request.Limit]
+	}
+	items := make([]registrydomain.LifecycleRun, 0, len(models))
+	for i := range models {
+		run, err := s.findLifecycleRunFromModel(ctx, &models[i])
+		if err != nil {
+			return foundation.PageResult[registrydomain.LifecycleRun]{}, err
+		}
+		items = append(items, *run)
+	}
+	result := foundation.PageResult[registrydomain.LifecycleRun]{Items: items}
+	if more {
+		result.NextCursor, err = encodeKeysetCursor(request.Scope, models[len(models)-1].StartedAt, models[len(models)-1].ID)
+		if err != nil {
+			return result, err
+		}
+	}
+	return result, nil
+}
+
+type keysetCursor struct {
+	at time.Time
+	id string
+}
+
+func keysetBoundary(request foundation.PageRequest) (*keysetCursor, error) {
+	if request.Cursor == "" {
+		return nil, nil
+	}
+	cursor, err := foundation.DecodePageCursor(request.Cursor, request.Scope)
+	if err != nil || cursor.Timestamp == "" || cursor.ID == "" {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+	at, err := time.Parse(time.RFC3339Nano, cursor.Timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+	return &keysetCursor{at: at, id: cursor.ID}, nil
+}
+
+func encodeKeysetCursor(scope string, at time.Time, id string) (string, error) {
+	return foundation.EncodePageCursor(foundation.PageCursor{Scope: scope, Timestamp: at.UTC().Format(time.RFC3339Nano), ID: id})
 }
 
 func (s *Store) FindLifecycleRun(ctx context.Context, runID foundation.ID) (*registrydomain.LifecycleRun, error) {
