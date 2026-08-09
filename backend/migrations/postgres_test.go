@@ -23,7 +23,7 @@ func openPostgresMigrationTestDB(t *testing.T, ctx context.Context) *bun.DB {
 		_ = db.Close()
 		t.Fatal(err)
 	}
-	db.DB.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
