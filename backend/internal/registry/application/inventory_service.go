@@ -193,3 +193,11 @@ func (s *InventoryService) List(ctx context.Context, projectID foundation.ID, re
 	}
 	return s.store.ListManifestInventory(ctx, target.ID)
 }
+
+func (s *InventoryService) ListPage(ctx context.Context, projectID foundation.ID, repository string, request foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
+	target, err := s.store.FindRepository(ctx, projectID, repository)
+	if err != nil {
+		return foundation.PageResult[registrydomain.ManifestInventory]{}, err
+	}
+	return s.store.ListManifestInventoryPage(ctx, target.ID, request)
+}

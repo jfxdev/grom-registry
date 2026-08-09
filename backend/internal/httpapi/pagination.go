@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -16,14 +14,6 @@ const (
 	maxPageCursorLen = 512
 )
 
-// pageCursor is deliberately opaque to clients. Its scope prevents a cursor
-// created for one list or filter from being replayed against another one.
-type pageCursor struct {
-	Version int    `json:"v"`
-	Scope   string `json:"s"`
-	Offset  int    `json:"o"`
-}
-
 func pageRequest(r *http.Request, scope string) (foundation.PageRequest, int, error) {
 	limit := defaultPageLimit
 	if raw := r.URL.Query().Get("limit"); raw != "" {
@@ -35,20 +25,16 @@ func pageRequest(r *http.Request, scope string) (foundation.PageRequest, int, er
 	}
 	cursor := r.URL.Query().Get("cursor")
 	if cursor == "" {
-		return foundation.PageRequest{Limit: limit}, 0, nil
+		return foundation.PageRequest{Limit: limit, Scope: scope}, 0, nil
 	}
 	if len(cursor) > maxPageCursorLen {
 		return foundation.PageRequest{}, 0, fmt.Errorf("invalid cursor")
 	}
-	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	decoded, err := foundation.DecodePageCursor(cursor, scope)
 	if err != nil {
 		return foundation.PageRequest{}, 0, fmt.Errorf("invalid cursor")
 	}
-	var decoded pageCursor
-	if err := json.Unmarshal(raw, &decoded); err != nil || decoded.Version != 1 || decoded.Scope != scope || decoded.Offset < 0 {
-		return foundation.PageRequest{}, 0, fmt.Errorf("invalid cursor")
-	}
-	return foundation.PageRequest{Cursor: cursor, Limit: limit}, decoded.Offset, nil
+	return foundation.PageRequest{Cursor: cursor, Limit: limit, Scope: scope}, decoded.Offset, nil
 }
 
 // pageResult paginates an already materialized slice. Its offset cursor is
@@ -70,8 +56,7 @@ func pageResult[T any](r *http.Request, scope string, values []T) (foundation.Pa
 	pageCount := (len(values) + request.Limit - 1) / request.Limit
 	result := foundation.PageResult[T]{Items: values[offset:end], PageCount: pageCount}
 	if end < len(values) {
-		nextRaw, _ := json.Marshal(pageCursor{Version: 1, Scope: scope, Offset: end})
-		result.NextCursor = base64.RawURLEncoding.EncodeToString(nextRaw)
+		result.NextCursor, _ = foundation.EncodePageCursor(foundation.PageCursor{Scope: scope, Offset: end})
 	}
 	return result, nil
 }

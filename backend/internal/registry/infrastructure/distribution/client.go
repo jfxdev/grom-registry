@@ -28,6 +28,12 @@ type TagList struct {
 	Tags []string `json:"tags"`
 }
 
+type TagPage struct {
+	Name       string
+	Tags       []string
+	NextMarker string
+}
+
 type manifestDocument struct {
 	MediaType    string `json:"mediaType"`
 	ArtifactType string `json:"artifactType"`
@@ -101,6 +107,36 @@ func (c *Client) ListTags(ctx context.Context, repository string) (*TagList, err
 		return nil, err
 	}
 	return &response, nil
+}
+
+// ListTagsPage follows Distribution's native lexical tag pagination but
+// returns only its marker, never its private Link header or URL.
+func (c *Client) ListTagsPage(ctx context.Context, repository string, limit int, marker string) (*TagPage, error) {
+	var response TagList
+	token, err := c.tokens.IssueInternal("grom-internal", []registryapp.Access{{Type: "repository", Name: repository, Actions: []string{"pull"}}})
+	if err != nil {
+		return nil, err
+	}
+	query := url.Values{"n": []string{fmt.Sprintf("%d", limit)}}
+	if marker != "" {
+		query.Set("last", marker)
+	}
+	nextPath, err := c.getWithLink(ctx, "/v2/"+repository+"/tags/list?"+query.Encode(), token, &response)
+	if err != nil {
+		return nil, err
+	}
+	page := &TagPage{Name: response.Name, Tags: response.Tags}
+	if nextPath != "" {
+		nextURL, parseErr := url.Parse(nextPath)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		page.NextMarker = nextURL.Query().Get("last")
+		if page.NextMarker == "" {
+			return nil, fmt.Errorf("distribution pagination link has no tag marker")
+		}
+	}
+	return page, nil
 }
 
 func (c *Client) ListRepositoryTags(ctx context.Context, repository string) ([]string, error) {

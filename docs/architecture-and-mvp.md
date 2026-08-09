@@ -449,8 +449,9 @@ Work:
 5. Maintain copyable push guidance alongside the existing pull command.
 6. Remove recent-audit overview and basic settings from the default MVP unless
    a concrete first-release use case promotes them back into scope.
-7. Decide where pagination is required based on current unbounded list
-   endpoints, then update OpenAPI, repositories, and UI together.
+7. Maintain cursor pagination for administrative and Registry lists. Tags use
+   Distribution's native continuation encapsulated by Grom; manifest inventory,
+   deletion history, and lifecycle runs use database keyset cursors.
 8. Add request-level frontend integration tests.
 9. Add Playwright coverage for sign-in, project creation, membership
    management, reveal-once key handling, first push, repository browsing, safe

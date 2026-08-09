@@ -21,6 +21,10 @@ type lifecycleExecutionStore struct {
 	previewStatusErr error
 }
 
+func (s *lifecycleExecutionStore) ListLifecycleRunsPage(_ context.Context, _ foundation.ID, _ foundation.PageRequest) (foundation.PageResult[registrydomain.LifecycleRun], error) {
+	return foundation.PageResult[registrydomain.LifecycleRun]{Items: []registrydomain.LifecycleRun{{ID: foundation.NewID(), RepositoryID: s.repository.ID}}}, nil
+}
+
 func (s *lifecycleExecutionStore) FindRepository(
 	context.Context,
 	foundation.ID,
@@ -428,5 +432,17 @@ func TestLifecycleExecutionDoesNotReachDistributionWhenStartAuditFails(t *testin
 	}
 	if run != nil || distribution.deletionCalls != 0 {
 		t.Fatalf("lifecycle execution reached Distribution despite audit failure: run=%#v deletions=%d", run, distribution.deletionCalls)
+	}
+}
+
+func TestLifecycleListRunsPageAddsRepositoryName(t *testing.T) {
+	repository := &registrydomain.Repository{ID: foundation.NewID(), ProjectID: foundation.NewID(), Name: "api"}
+	service := NewLifecycleService(&lifecycleExecutionStore{repository: repository}, nil, nil, nil)
+	page, err := service.ListRunsPage(context.Background(), repository.ProjectID, "api", foundation.PageRequest{Limit: 25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Repository != "api" {
+		t.Fatalf("unexpected page: %#v", page)
 	}
 }
