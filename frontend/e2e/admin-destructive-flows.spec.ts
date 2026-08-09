@@ -90,6 +90,7 @@ test('an administrator executes a reviewed retention lifecycle through the publi
     const policies = page.getByRole('dialog', { name: 'Policies for app' })
     await policies.locator('select').selectOption('retention')
     await policies.getByRole('button', { name: 'Add policy' }).click()
+    await policies.getByLabel('Expire after days').fill('')
     await policies.getByLabel('Keep last').fill('1')
     const [policyResponse] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === 'PUT' && response.url().includes('/policies')),
@@ -98,17 +99,18 @@ test('an administrator executes a reviewed retention lifecycle through the publi
     expect(policyResponse.status()).toBe(200)
     await page.getByRole('button', { name: 'Review lifecycle' }).click()
     const preview = page.getByRole('dialog', { name: 'app' })
-    await expect(preview).toContainText('eligible')
+    await expect(preview).toContainText('1 eligible')
     const runButton = preview.getByRole('button', { name: /Delete \d+ eligible/ })
     await expect(runButton).toBeDisabled()
     await preview.getByLabel('Execution reason').fill('Administrative acceptance test')
+    await expect(runButton).toBeEnabled()
     const [runResponse] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/lifecycle-runs')),
       runButton.click(),
     ])
-    expect(runResponse.status()).toBe(201)
+    expect(runResponse.status()).toBe(200)
     await expect(preview).toContainText('Run completed')
-    await expect(page.getByRole('heading', { name: 'Deletion history' })).toContainText('Lifecycle')
+    await expect(page.getByText('Lifecycle · 1 candidates', { exact: true })).toBeVisible()
   } finally {
     await first.cleanup()
     await second.cleanup()
@@ -125,7 +127,7 @@ test('an administrator archives/removes empty repositories and observes project 
     page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/archive')),
     page.getByRole('button', { name: 'Archive' }).click(),
   ])
-  expect(archiveResponse.status()).toBe(200)
+  expect(archiveResponse.status()).toBe(204)
   await page.getByRole('button', { name: 'Remove logical record' }).click()
   const removeDialog = page.getByRole('dialog', { name: 'Remove logical repository' })
   const [removeResponse] = await Promise.all([
@@ -165,12 +167,16 @@ test('an administrator disables a live user session and deletes a recovery point
   const userPage = await completeRegistration(browser, registrationURL!)
   try {
     await expect(userPage.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: `Disable user ${username}` }).click()
+    await page.reload()
+    const disableUser = page.getByRole('button', { name: `Disable user ${username}` })
+    await expect(disableUser).toBeVisible()
+    await disableUser.click()
     const [disableResponse] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === 'DELETE' && /\/api\/v1\/users\//.test(response.url())),
-      page.getByRole('button', { name: 'Disable user' }).click(),
+      page.getByRole('form', { name: `Disable ${username}` }).getByRole('button', { name: 'Disable user', exact: true }).click(),
     ])
     expect(disableResponse.status()).toBe(204)
+    await userPage.goto(`${runtime.publicURL}/projects`)
     await expect(userPage).toHaveURL(/signin/)
     await expect(page.getByLabel('Inactive user')).toBeVisible()
   } finally {
@@ -275,7 +281,7 @@ async function completeRegistration(browser: Browser, registrationURL: string) {
   const context = await browser.newContext()
   const page = await context.newPage()
   await page.goto(registrationURL)
-  await page.getByLabel('New password').fill('disabled-e2e-password')
+  await page.getByRole('textbox', { name: 'New password', exact: true }).fill('disabled-e2e-password')
   await page.getByLabel('Confirm new password').fill('disabled-e2e-password')
   await page.getByRole('button', { name: 'Reset password' }).click()
   await page.getByRole('link', { name: 'Continue to sign in' }).click()
