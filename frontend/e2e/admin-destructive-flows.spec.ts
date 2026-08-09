@@ -12,8 +12,10 @@ test('an administrator removes access, revokes a key, and disables a service acc
 
   await page.goto(`${runtime.publicURL}/projects/access-changes`)
   await page.getByRole('button', { name: 'Project settings' }).click()
-  await page.getByRole('button', { name: 'Remove service account member' }).click()
+  const removeMemberTrigger = page.getByRole('button', { name: 'Remove service account member' })
+  await removeMemberTrigger.click()
   const memberDialog = page.getByRole('dialog', { name: 'Remove member' })
+  await assertDialogFocusManagement(page, memberDialog, removeMemberTrigger, 'Close member removal')
   await expect(memberDialog).toContainText('loses project access')
   const [memberResponse] = await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().includes('/members/service_account/')),
@@ -58,8 +60,10 @@ test('an administrator reviews and deletes an artifact through the public UI', a
   const pushed = await pushImage(runtime, account.username, account.secret, { project: 'artifact-deletion', repository: 'app', tag: 'v1' })
   try {
     await openRepository(page, runtime.publicURL, 'artifact-deletion', 'app')
-    await page.getByRole('button', { name: 'Delete v1' }).click()
+    const deleteArtifactTrigger = page.getByRole('button', { name: 'Delete v1' })
+    await deleteArtifactTrigger.click()
     const deletion = page.getByRole('dialog', { name: 'Delete artifact' })
+    await assertDialogFocusManagement(page, deletion, deleteArtifactTrigger, 'Close deletion')
     await expect(deletion).toContainText(pushed.digest)
     await expect(deletion).toContainText('v1')
     const [response] = await Promise.all([
@@ -128,8 +132,10 @@ test('an administrator archives/removes empty repositories and observes project 
     page.getByRole('button', { name: 'Archive' }).click(),
   ])
   expect(archiveResponse.status()).toBe(204)
-  await page.getByRole('button', { name: 'Remove logical record' }).click()
+  const removeRepositoryTrigger = page.getByRole('button', { name: 'Remove logical record' })
+  await removeRepositoryTrigger.click()
   const removeDialog = page.getByRole('dialog', { name: 'Remove logical repository' })
+  await assertDialogFocusManagement(page, removeDialog, removeRepositoryTrigger, 'Close logical repository removal')
   const [removeResponse] = await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().includes('/repositories/')),
     removeDialog.getByRole('button', { name: 'Remove record' }).click(),
@@ -141,8 +147,10 @@ test('an administrator archives/removes empty repositories and observes project 
   await page.goto(`${runtime.publicURL}/projects/repository-removal`)
   await page.getByRole('button', { name: 'Project settings' }).click()
   await page.getByRole('button', { name: 'Danger zone' }).click()
-  await page.getByRole('button', { name: 'Delete project' }).click()
+  const deleteProjectTrigger = page.getByRole('button', { name: 'Delete project' })
+  await deleteProjectTrigger.click()
   const projectDialog = page.getByRole('dialog', { name: 'Delete project' })
+  await assertDialogFocusManagement(page, projectDialog, deleteProjectTrigger, 'Close project deletion')
   const [conflictResponse] = await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().endsWith('/api/v1/projects/repository-removal')),
     projectDialog.getByRole('button', { name: 'Delete project' }).click(),
@@ -184,15 +192,20 @@ test('an administrator disables a live user session and deletes a recovery point
   }
 
   await page.goto(`${runtime.publicURL}/backups`)
+  const existingBackupIDs = new Set(await page.locator('.backup-id').allTextContents())
   await page.getByRole('button', { name: 'Create backup' }).click()
   const [backupResponse] = await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/api/v1/backups')),
     page.getByRole('button', { name: 'Begin backup' }).click(),
   ])
   expect(backupResponse.status()).toBe(202)
-  const backupRow = page.locator('.backup-row').filter({ has: page.getByRole('button', { name: /Delete backup/ }) }).first()
-  await expect(backupRow).toBeVisible({ timeout: 90_000 })
-  await backupRow.getByRole('button', { name: /Delete backup/ }).click()
+  let backupID = ''
+  await expect.poll(async () => {
+    backupID = (await page.locator('.backup-id').allTextContents()).find((candidate) => !existingBackupIDs.has(candidate)) ?? ''
+    return backupID
+  }, { timeout: 90_000 }).not.toBe('')
+  const backupRow = page.locator('.backup-row', { hasText: backupID })
+  await backupRow.getByRole('button', { name: `Delete backup ${backupID}` }).click()
   const backupDeletion = page.getByRole('form', { name: /Delete this recovery point/ })
   await expect(backupDeletion.getByRole('button', { name: 'Delete snapshot' })).toBeDisabled()
   await backupDeletion.getByLabel('Type DELETE to confirm').fill('DELETE')
@@ -210,6 +223,16 @@ async function signIn(page: Page, publicURL: string) {
   await page.getByRole('textbox', { name: 'Password' }).fill(ADMIN_E2E_ADMIN.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
+}
+
+async function assertDialogFocusManagement(page: Page, dialog: ReturnType<Page['getByRole']>, trigger: ReturnType<Page['getByRole']>, initialFocusName: string) {
+  const initialFocus = dialog.getByRole('button', { name: initialFocusName })
+  await expect(initialFocus).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+  await trigger.click()
+  await expect(dialog).toBeVisible()
 }
 
 async function createProject(page: Page, publicURL: string, name: string, slug: string) {
