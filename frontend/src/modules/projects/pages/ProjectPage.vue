@@ -91,6 +91,10 @@ const inventoryPagination = useCursorPagination()
 const deletionPagination = useCursorPagination()
 const lifecyclePagination = useCursorPagination()
 
+function knownPageCount(value: number | null | undefined, page: number) {
+  return value && value >= page ? value : undefined
+}
+
 function openProjectDeletion() {
   projectSettingsOpen.value = false
   projectDeletionOpen.value = true
@@ -574,7 +578,7 @@ function profileLabel(profile: Repository['profile']) {
       </div>
       <PaginationControls
         :page="tagPagination.page.value"
-        :page-count="tags.data.value?.pageCount ?? 0"
+        :page-count="knownPageCount(tags.data.value?.pageCount, tagPagination.page.value)"
         :has-previous="tagPagination.hasPrevious.value"
         :has-next="Boolean(tags.data.value?.nextCursor)"
         :disabled="tags.isFetching.value"
@@ -592,7 +596,7 @@ function profileLabel(profile: Repository['profile']) {
         </Card>
         <PaginationControls
           :page="inventoryPagination.page.value"
-          :page-count="inventory.data.value?.pageCount ?? 0"
+          :page-count="knownPageCount(inventory.data.value?.pageCount, inventoryPagination.page.value)"
           :has-previous="inventoryPagination.hasPrevious.value"
           :has-next="Boolean(inventory.data.value?.nextCursor)"
           :disabled="inventory.isFetching.value"
@@ -615,7 +619,7 @@ function profileLabel(profile: Repository['profile']) {
         </Card>
         <PaginationControls
           :page="deletionPagination.page.value"
-          :page-count="artifactDeletionHistory.data.value?.pageCount ?? 0"
+          :page-count="knownPageCount(artifactDeletionHistory.data.value?.pageCount, deletionPagination.page.value)"
           :has-previous="deletionPagination.hasPrevious.value"
           :has-next="Boolean(artifactDeletionHistory.data.value?.nextCursor)"
           :disabled="artifactDeletionHistory.isFetching.value"
@@ -631,7 +635,7 @@ function profileLabel(profile: Repository['profile']) {
         </Card>
         <PaginationControls
           :page="lifecyclePagination.page.value"
-          :page-count="lifecycleHistory.data.value?.pageCount ?? 0"
+          :page-count="knownPageCount(lifecycleHistory.data.value?.pageCount, lifecyclePagination.page.value)"
           :has-previous="lifecyclePagination.hasPrevious.value"
           :has-next="Boolean(lifecycleHistory.data.value?.nextCursor)"
           :disabled="lifecycleHistory.isFetching.value"

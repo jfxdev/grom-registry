@@ -32,7 +32,10 @@ func TestRegistryHistoryKeysetPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, digest := range []string{"sha256:one", "sha256:two", "sha256:three"} {
-		at := now.Add(time.Duration(i) * time.Minute)
+		at := now
+		if i == 2 {
+			at = now.Add(time.Minute)
+		}
 		if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: digest, MediaType: "application/vnd.oci.image.manifest.v1+json", Tag: "v" + string(rune('1'+i))}, at); err != nil {
 			t.Fatal(err)
 		}
@@ -49,31 +52,69 @@ func TestRegistryHistoryKeysetPages(t *testing.T) {
 		}
 	}
 
-	assertKeysetPage(t, func(request foundation.PageRequest) (int, string, error) {
+	assertKeysetPage(t, func(request foundation.PageRequest) ([]string, string, error) {
 		page, err := store.ListManifestInventoryPage(ctx, repositoryID, request)
-		return len(page.Items), page.NextCursor, err
+		return manifestIDs(page.Items), page.NextCursor, err
 	}, "inventory:"+repositoryID.String())
-	assertKeysetPage(t, func(request foundation.PageRequest) (int, string, error) {
+	assertKeysetPage(t, func(request foundation.PageRequest) ([]string, string, error) {
 		page, err := store.ListArtifactDeletionsPage(ctx, repositoryID, request)
-		return len(page.Items), page.NextCursor, err
+		return deletionIDs(page.Items), page.NextCursor, err
 	}, "deletions:"+repositoryID.String())
-	assertKeysetPage(t, func(request foundation.PageRequest) (int, string, error) {
+	assertKeysetPage(t, func(request foundation.PageRequest) ([]string, string, error) {
 		page, err := store.ListLifecycleRunsPage(ctx, repositoryID, request)
-		return len(page.Items), page.NextCursor, err
+		return lifecycleRunIDs(page.Items), page.NextCursor, err
 	}, "runs:"+repositoryID.String())
 }
 
-func assertKeysetPage(t *testing.T, list func(foundation.PageRequest) (int, string, error), scope string) {
+func assertKeysetPage(t *testing.T, list func(foundation.PageRequest) ([]string, string, error), scope string) {
 	t.Helper()
-	firstCount, cursor, err := list(foundation.PageRequest{Limit: 2, Scope: scope})
-	if err != nil || firstCount != 2 || cursor == "" {
-		t.Fatalf("unexpected first page: count=%d cursor=%q err=%v", firstCount, cursor, err)
+	expected, _, err := list(foundation.PageRequest{Limit: 10, Scope: scope})
+	if err != nil || len(expected) != 3 {
+		t.Fatalf("unexpected complete page: ids=%v err=%v", expected, err)
 	}
-	secondCount, next, err := list(foundation.PageRequest{Limit: 2, Scope: scope, Cursor: cursor})
-	if err != nil || secondCount != 1 || next != "" {
-		t.Fatalf("unexpected second page: count=%d cursor=%q err=%v", secondCount, next, err)
+	first, cursor, err := list(foundation.PageRequest{Limit: 2, Scope: scope})
+	if err != nil || len(first) != 2 || cursor == "" {
+		t.Fatalf("unexpected first page: ids=%v cursor=%q err=%v", first, cursor, err)
+	}
+	second, next, err := list(foundation.PageRequest{Limit: 2, Scope: scope, Cursor: cursor})
+	if err != nil || len(second) != 1 || next != "" {
+		t.Fatalf("unexpected second page: ids=%v cursor=%q err=%v", second, next, err)
+	}
+	seen := make(map[string]bool, len(expected))
+	for _, id := range append(first, second...) {
+		if seen[id] {
+			t.Fatalf("duplicate item %q across pages", id)
+		}
+		seen[id] = true
+	}
+	for _, id := range expected {
+		if !seen[id] {
+			t.Fatalf("missing item %q across pages", id)
+		}
 	}
 	if _, _, err := list(foundation.PageRequest{Limit: 2, Scope: scope, Cursor: "not-a-cursor"}); err == nil {
 		t.Fatal("expected invalid cursor rejection")
 	}
+}
+
+func manifestIDs(items []registrydomain.ManifestInventory) []string {
+	ids := make([]string, len(items))
+	for i := range items {
+		ids[i] = items[i].ID.String()
+	}
+	return ids
+}
+func deletionIDs(items []registrydomain.ArtifactDeletion) []string {
+	ids := make([]string, len(items))
+	for i := range items {
+		ids[i] = items[i].ID.String()
+	}
+	return ids
+}
+func lifecycleRunIDs(items []registrydomain.LifecycleRun) []string {
+	ids := make([]string, len(items))
+	for i := range items {
+		ids[i] = items[i].ID.String()
+	}
+	return ids
 }

@@ -267,7 +267,7 @@ func (s *Store) manifestInventoryFromModels(ctx context.Context, repositoryID fo
 	tagsByManifest := make(map[string][]string, len(ids))
 	if len(ids) > 0 {
 		var tags []tagModel
-		if err := s.db.NewSelect().Model(&tags).Where("manifest_id IN (?)", bun.In(ids)).Where("detached_at IS NULL").OrderExpr("name ASC").Scan(ctx); err != nil {
+		if err := s.db.NewSelect().Model(&tags).Where("manifest_id IN (?)", bun.List(ids)).Where("detached_at IS NULL").OrderExpr("name ASC").Scan(ctx); err != nil {
 			return nil, err
 		}
 		for _, tag := range tags {
