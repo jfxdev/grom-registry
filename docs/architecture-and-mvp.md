@@ -1571,8 +1571,8 @@ registry protocol with Docker.
   persistence and sanitization coverage; failed audit intent blocks destructive
   operations. Audit presentation remains intentionally outside the default MVP.
 - **Partial:** useful empty/error states exist in implemented screens;
-  pagination requirements and browser-level acceptance beyond the accepted
-  first-push journey remain unresolved.
+  browser-level acceptance beyond the accepted first-push journey remains
+  unresolved.
 
 Exit criterion: a new administrator can create a project, add a service account, push an image, and inspect it without using the database or editing configuration.
 

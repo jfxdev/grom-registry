@@ -1668,6 +1668,9 @@ components:
         createdAt:
           type: string
           format: date-time
+        canManage:
+          type: boolean
+          description: Whether the signed-in actor may manage this project.
     CreateProjectRequest:
       type: object
       required: [name, slug]

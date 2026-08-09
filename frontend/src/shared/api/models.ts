@@ -1,4 +1,4 @@
-import type { components } from './generated/schema'
+import type { components, operations } from './generated/schema'
 
 export type User = components['schemas']['User']
 export type UserPage = components['schemas']['UserPage']
@@ -6,6 +6,7 @@ export type CreateUserResponse = components['schemas']['CreateUserResponse']
 export type Deployment = components['schemas']['Deployment']
 export type ServiceAccount = components['schemas']['ServiceAccount']
 export type ServiceAccountPage = components['schemas']['ServiceAccountPage']
+export type ServiceAccountStatus = NonNullable<operations['listServiceAccounts']['parameters']['query']>['status']
 export type APIToken = components['schemas']['APIToken']
 export type APITokenPage = components['schemas']['APITokenPage']
 export type CreatedToken = components['schemas']['CreatedToken']

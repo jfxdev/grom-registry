@@ -108,6 +108,45 @@ func TestListProjectRepositoriesPageFiltersAndReturnsOnlyOpaqueMarker(t *testing
 	}
 }
 
+func TestListProjectRepositoriesPageSkipsUnrelatedCatalogPages(t *testing.T) {
+	var requests atomic.Int32
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requests.Add(1)
+		header := make(http.Header)
+		switch r.URL.Query().Get("last") {
+		case "":
+			header.Set("Link", `</v2/_catalog?n=2&last=other%2Ftwo>; rel="next"`)
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(`{"repositories":["other/one","other/two"]}`)), Request: r}, nil
+		case "other/two":
+			header.Set("Link", `</v2/_catalog?n=2&last=project%2Ftwo>; rel="next"`)
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(`{"repositories":["project/one","project/two"]}`)), Request: r}, nil
+		default:
+			return &http.Response{StatusCode: http.StatusBadRequest, Status: "400 Bad Request", Header: header, Body: io.NopCloser(strings.NewReader("unexpected page")), Request: r}, nil
+		}
+	})
+	temp := t.TempDir()
+	signer, err := signing.LoadOrCreate(temp+"/key.pem", temp+"/cert.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient("http://distribution.local", registryapp.NewTokenService(nil, nil, signer, time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = transport
+
+	page, err := client.ListProjectRepositoriesPage(context.Background(), "project", 2, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := page.Repositories; len(got) != 2 || got[0] != "one" || got[1] != "two" || page.NextMarker != "project/two" {
+		t.Fatalf("unexpected page: %#v", page)
+	}
+	if requests.Load() != 2 {
+		t.Fatalf("expected two catalog requests, got %d", requests.Load())
+	}
+}
+
 func TestListTagsPageReturnsOnlyTheRequestedDistributionPage(t *testing.T) {
 	var requests atomic.Int32
 	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {

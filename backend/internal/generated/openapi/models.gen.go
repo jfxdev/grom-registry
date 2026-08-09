@@ -812,6 +812,8 @@ type PrincipalKind string
 
 // Project defines model for Project.
 type Project struct {
+	// CanManage Whether the signed-in actor may manage this project.
+	CanManage *bool              `json:"canManage,omitempty"`
 	CreatedAt time.Time          `json:"createdAt"`
 	CreatedBy openapi_types.UUID `json:"createdBy"`
 	Id        openapi_types.UUID `json:"id"`

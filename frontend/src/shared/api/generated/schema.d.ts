@@ -862,6 +862,8 @@ export interface components {
             createdBy: string;
             /** Format: date-time */
             createdAt: string;
+            /** @description Whether the signed-in actor may manage this project. */
+            canManage?: boolean;
         };
         CreateProjectRequest: {
             name: string;

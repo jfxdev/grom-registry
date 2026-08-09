@@ -43,7 +43,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/release-operations.md` | Operator installation by digest, upgrade, rollback, signing-key posture, and supported matrix |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
 | `docs/mvp-acceptance-implementation-plan.md` | Implemented and accepted public-browser first-push, boot/readiness/API-docs, session-revocation, and restart-preservation acceptance work |
-| `docs/pagination-and-destructive-browser-acceptance-plan.md` | Planned one-shot delivery for cursor pagination of administrative/registry lists and public-browser acceptance of destructive flows |
+| `docs/pagination-and-destructive-browser-acceptance-plan.md` | Planned public-browser acceptance of destructive flows |
 | `docs/visual-identity.md` | Approved visual direction, responsive rules, and UI acceptance criteria |
 | `docs/visual-implementation-plan.md` | Detailed frontend delivery phases, interaction behavior, and validation plan |
 | `docs/assets/visual-identity/` | Visual concept references used by the identity guide |

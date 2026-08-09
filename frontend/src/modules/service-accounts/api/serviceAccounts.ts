@@ -1,14 +1,14 @@
 import { apiRequest } from '@/shared/api/client'
-import type { APITokenPage, CreatedToken, ServiceAccount, ServiceAccountPage } from '@/shared/api/models'
+import type { APITokenPage, CreatedToken, ServiceAccount, ServiceAccountPage, ServiceAccountStatus } from '@/shared/api/models'
 
 export const serviceAccountKeys = {
   all: ['service-accounts'] as const,
-  list: (query = '', status: 'active' | 'disabled' | 'all' = 'active', cursor = '') =>
+	list: (query = '', status: ServiceAccountStatus = 'active', cursor = '') =>
     ['service-accounts', query, status, cursor] as const,
   tokens: (serviceAccountId: string) => ['service-accounts', serviceAccountId, 'tokens'] as const,
 }
 
-export const listServiceAccounts = (query = '', status: 'active' | 'disabled' | 'all' = 'active', cursor = '') => {
+export const listServiceAccounts = (query = '', status: ServiceAccountStatus = 'active', cursor = '') => {
   const params = new URLSearchParams({ status })
   if (query) params.set('q', query)
   if (cursor) params.set('cursor', cursor)

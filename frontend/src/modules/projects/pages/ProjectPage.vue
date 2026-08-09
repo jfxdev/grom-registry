@@ -102,12 +102,7 @@ const repositories = useQuery({ queryKey: computed(() => [...projectKeys.reposit
 const members = useQuery({ queryKey: computed(() => [...projectKeys.members(slug.value), memberPagination.cursor.value]), queryFn: () => listMembers(slug.value, memberPagination.cursor.value), enabled: computed(() => session.user?.systemViewer !== true) })
 const accounts = useQuery({ queryKey: serviceAccountKeys.list(), queryFn: () => listServiceAccounts(), enabled: computed(() => session.user?.systemViewer !== true) })
 const canManage = computed(() =>
-  session.user?.systemViewer !== true && (session.user?.systemAdmin === true ||
-  pageItems(members.data.value).some((member) =>
-    member.principalKind === 'user' &&
-    member.principalId === session.user?.id &&
-    member.role === 'admin',
-  ) === true),
+  session.user?.systemViewer !== true && project.data.value?.canManage === true,
 )
 const users = useQuery({ queryKey: userKeys.all, queryFn: () => listUsers(), enabled: computed(() => canManage.value) })
 const routedRepository = useQuery({

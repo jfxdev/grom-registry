@@ -16,6 +16,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -479,6 +480,10 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	if !requireSystemAdmin(w, r) {
 		return
 	}
+	if !validListQuery(r, "cursor", "limit", "q") {
+		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
+		return
+	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	request, _, err := pageRequest(r, "users:q="+strings.ToLower(query))
 	if err != nil {
@@ -660,6 +665,10 @@ func (s *Server) listServiceAccounts(w http.ResponseWriter, r *http.Request) {
 	if !requireSystemAdmin(w, r) {
 		return
 	}
+	if !validListQuery(r, "cursor", "limit", "q", "status") {
+		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
+		return
+	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	status := r.URL.Query().Get("status")
 	if status == "" {
@@ -818,7 +827,10 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, project)
+	writeJSON(w, http.StatusOK, struct {
+		*projectdomain.Project
+		CanManage bool `json:"canManage"`
+	}{Project: project, CanManage: s.projects.CanManage(r.Context(), principalForUser(user), user.SystemAdmin, project)})
 }
 
 func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
@@ -939,10 +951,19 @@ func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
 		}
 		marker = cursor.Marker
 	}
-	discovered, err := s.distributionClient.ListProjectRepositoriesPage(r.Context(), project.Slug, request.Limit, marker)
-	if err != nil {
-		s.logger.Warn("distribution catalog unavailable", "error", err)
-		discovered = &distribution.ProjectRepositoryPage{}
+	discovered := &distribution.ProjectRepositoryPage{}
+	for len(discovered.Repositories) < request.Limit {
+		page, err := s.distributionClient.ListProjectRepositoriesPage(r.Context(), project.Slug, request.Limit-len(discovered.Repositories), marker)
+		if err != nil {
+			s.logger.Warn("distribution catalog unavailable", "error", err)
+			break
+		}
+		discovered.Repositories = append(discovered.Repositories, page.Repositories...)
+		discovered.NextMarker = page.NextMarker
+		if page.NextMarker == "" {
+			break
+		}
+		marker = page.NextMarker
 	}
 	if err := s.repositories.ReconcileDiscoveredPage(r.Context(), project.ID, discovered.Repositories); err != nil {
 		s.internalError(w, r, err)
@@ -958,10 +979,25 @@ func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
 		if repositories.NextCursor != "" {
 			decoded, _ := foundation.DecodePageCursor(repositories.NextCursor, scope)
 			cursor.Name = decoded.Name
+		} else if len(repositories.Items) > 0 {
+			cursor.Name = repositories.Items[len(repositories.Items)-1].Name
 		}
 		repositories.NextCursor, _ = foundation.EncodePageCursor(cursor)
 	}
 	writeJSON(w, http.StatusOK, repositories)
+}
+
+func validListQuery(r *http.Request, allowed ...string) bool {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, name := range allowed {
+		allowedSet[name] = struct{}{}
+	}
+	for name, values := range r.URL.Query() {
+		if _, ok := allowedSet[name]; !ok || len(values) != 1 {
+			return false
+		}
+	}
+	return utf8.RuneCountInString(r.URL.Query().Get("q")) <= 200
 }
 
 func (s *Server) getRepository(w http.ResponseWriter, r *http.Request) {

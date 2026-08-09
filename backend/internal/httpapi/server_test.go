@@ -698,6 +698,30 @@ func TestListServiceAccountsRequiresInstallationAdministrator(t *testing.T) {
 	}
 }
 
+func TestAdministrativeListQueriesRejectOverlongAndUnknownParameters(t *testing.T) {
+	admin := &identitydomain.User{SystemAdmin: true}
+	for _, test := range []struct {
+		name    string
+		handler func(http.ResponseWriter, *http.Request)
+		path    string
+	}{
+		{name: "users rejects overlong query", handler: (&Server{}).listUsers, path: "/api/v1/users?q=" + strings.Repeat("a", 201)},
+		{name: "users rejects unknown query", handler: (&Server{}).listUsers, path: "/api/v1/users?unexpected=value"},
+		{name: "service accounts rejects overlong query", handler: (&Server{}).listServiceAccounts, path: "/api/v1/service-accounts?q=" + strings.Repeat("a", 201)},
+		{name: "service accounts rejects unknown query", handler: (&Server{}).listServiceAccounts, path: "/api/v1/service-accounts?unexpected=value"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, test.path, nil)
+			request = request.WithContext(context.WithValue(request.Context(), currentUserKey{}, admin))
+			response := httptest.NewRecorder()
+			test.handler(response, request)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("expected bad request, got %d", response.Code)
+			}
+		})
+	}
+}
+
 func TestBackupHandlersRequireInstallationAdministrator(t *testing.T) {
 	server := &Server{}
 	for _, test := range []struct {

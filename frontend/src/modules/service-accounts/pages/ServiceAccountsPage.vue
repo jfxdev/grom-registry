@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useSessionStore } from '@/modules/auth/store/session'
 import { APIError } from '@/shared/api/client'
-import type { ServiceAccount } from '@/shared/api/models'
+import type { ServiceAccount, ServiceAccountStatus } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
 import { ActionButton, Button, CancelButton, DeleteButton } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -22,7 +22,7 @@ const queryClient = useQueryClient()
 const session = useSessionStore()
 const pagination = useCursorPagination()
 const searchQuery = ref('')
-const statusFilter = ref<'active' | 'disabled' | 'all'>('active')
+const statusFilter = ref<ServiceAccountStatus>('active')
 const accounts = useQuery({
   queryKey: computed(() => serviceAccountKeys.list(searchQuery.value.trim(), statusFilter.value, pagination.cursor.value)),
   queryFn: () => listServiceAccounts(searchQuery.value.trim(), statusFilter.value, pagination.cursor.value),
