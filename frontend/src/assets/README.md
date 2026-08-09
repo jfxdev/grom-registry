@@ -1,7 +1,7 @@
 # Frontend assets
 
 - `icons/`: product-specific SVG or raster icons that are not available in the shared Lucide icon set.
-- `logos/`: Grom and integration-provider logos.
+- `logos/`: Grom product logos.
 - `raw/`: source identity material that must not be imported by production UI code.
 
 Prefer SVG for scalable interface artwork and use descriptive lowercase kebab-case filenames.

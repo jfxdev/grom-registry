@@ -193,9 +193,9 @@ func replaceEnvironment(environment []string, key, value string) []string {
 
 func assertUpgradeProject(t *testing.T, api *managementClient) {
 	t.Helper()
-	var projects []openapi.Project
+	var projects openapi.ProjectPage
 	api.doJSON(t, http.MethodGet, "/api/v1/projects", nil, &projects, http.StatusOK)
-	if len(projects) != 1 || projects[0].Slug != "upgrade" {
+	if len(projects.Items) != 1 || projects.Items[0].Slug != "upgrade" {
 		t.Fatalf("upgraded projects = %#v", projects)
 	}
 }

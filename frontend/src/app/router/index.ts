@@ -32,6 +32,11 @@ export const router = createRouter({
       component: () => import('@/modules/users/pages/UserProfilePage.vue'),
     },
     {
+      path: `${ROUTES.projects}/:project/repositories/:repositoryId`,
+      name: 'repository-detail',
+      component: () => import('@/modules/projects/pages/ProjectPage.vue'),
+    },
+    {
       path: `${ROUTES.projects}/:project`,
       name: 'project-detail',
       component: () => import('@/modules/projects/pages/ProjectPage.vue'),
@@ -46,11 +51,6 @@ export const router = createRouter({
       path: ROUTES.serviceAccounts,
       name: 'service-accounts',
       component: () => import('@/modules/service-accounts/pages/ServiceAccountsPage.vue'),
-    },
-    {
-      path: ROUTES.integrations,
-      name: 'integrations',
-      component: () => import('@/modules/integrations/pages/IntegrationsPage.vue'),
     },
     {
       path: ROUTES.backups,

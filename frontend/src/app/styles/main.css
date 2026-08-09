@@ -208,20 +208,6 @@ select {
   outline-offset: 2px;
 }
 
-.sidebar-footer {
-  border-top: 1px solid var(--border);
-  padding: 0.85rem 0.75rem 1rem;
-}
-
-.user-chip {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  border: 1px solid transparent;
-  border-radius: 0.55rem;
-  padding: 0.5rem;
-}
-
 .avatar {
   display: grid;
   width: 2rem;

@@ -29,10 +29,13 @@ which could replace the selected published digest with a local build.
 4. Verify `/readyz`, administrator sign-in, project browsing, and a pull plus
    push through the public registry endpoint.
 
-Forward upgrades are not yet accepted for the supported SQLite/local-storage
-matrix: tagged-release evidence still needs to cover a clean install, upgrade,
-restart, recovery, and preservation of metadata and blobs. Do not attempt a
-database downgrade by replacing only the image.
+Forward upgrades are accepted for the supported SQLite/local-storage matrix.
+The [release-upgrade acceptance journey](https://github.com/jfxdev/grom-registry/pull/23)
+upgrades the published `v0.0.1` baseline to a locally built candidate while
+preserving SQLite and local-registry volumes; it verifies administrator access,
+projects, Writer credentials, inventory, blobs, and a subsequent restart. Each
+future stable baseline must pass the same journey before its upgrade path is
+advertised. Do not attempt a database downgrade by replacing only the image.
 
 ## Rollback
 

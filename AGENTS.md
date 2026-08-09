@@ -52,6 +52,14 @@ port, temporary Docker credential directories, and exact test image tags; never
 replace cleanup with a broad Docker prune. The administrative journey drives
 the frontend embedded in the container through Playwright; it disables browser
 traces, screenshots, and video because it handles a reveal-once access key.
+Keep its scenarios independent and wait for each browser-visible state caused
+by a mutation before navigating or starting the next action. In particular,
+wait for sign-in to reach the Projects page before invoking another protected
+route, and blur/await a generated form value before replacing it in Playwright.
+This prevents a navigation from cancelling an in-flight session request or a
+slug field from receiving both its generated and test-entered values. Give each
+scenario distinct project, account, and credential names; do not rely on state
+left by a preceding scenario.
 Docker daemon permission failures are reported before startup. Distribution
 applies clock-skew tolerance to expired JWTs, so the expiry assertion is bounded
 but can take about one minute. Authenticate E2E principals immediately before
@@ -117,7 +125,7 @@ already downloaded bundle.
 ## Architecture
 
 - Backend: Go with pragmatic DDD and vertical bounded contexts under `backend/internal`.
-- Contexts: Identity, Projects, Registry, Audit, and Integrations.
+- Contexts: Identity, Projects, Registry, and Audit.
 - Domain packages must not depend on Bun, HTTP frameworks, generated transport types, or another context's infrastructure.
 - Repository interfaces express domain capabilities; Bun implementations live under the owning context's `infrastructure/persistence/bun`.
 - Cross-context behavior uses narrow application interfaces, never direct access to another context's tables.
@@ -133,6 +141,12 @@ already downloaded bundle.
 - Do not use ORM `AutoMigrate` or model-driven runtime schema diffing.
 - A migration failure must fail startup.
 - Test repository and migration changes against both SQLite and PostgreSQL.
+- Test every migration with a minimal pre-migration table in both engines. A
+  PostgreSQL test may skip only when `GROM_TEST_POSTGRES_URL` is absent; use a
+  single connection and temporary tables when the migration names fixed tables
+  or indexes, so it neither collides with nor mutates shared test state.
+  The `Backend Tests` CI job provisions this database and sets the URL so these
+  checks cannot be skipped in CI.
 
 ## HTTP and OpenAPI
 
@@ -141,6 +155,9 @@ already downloaded bundle.
 - Generated Go transport code belongs in `backend/internal/generated/openapi`.
 - Generated frontend API code belongs in `frontend/src/shared/api/generated`.
 - Never edit generated files manually.
+- Request schemas must reject retired and unknown properties with
+  `additionalProperties: false` when their fields are closed. Keep the handler
+  decoder equally strict, regenerate types, and test the rejection.
 - Domain entities must not be generated from or coupled to OpenAPI transport schemas.
 - CI must validate the contract, generated-code freshness, implementation compatibility, and frontend types.
 - OpenAPI 3.0.x is intentional while `oapi-codegen` stable generation targets that version.
@@ -168,6 +185,9 @@ already downloaded bundle.
 - Frontend-wide constants belong in `frontend/src/shared/constants`.
 - Server-owned roles, statuses, actions, and enum values come from generated OpenAPI types; do not duplicate them manually.
 - Keep strict TypeScript and cover critical flows with Vitest/Vue Testing Library and Playwright.
+- For focus-managed components, test the actual focused element and its
+  restoration path (for example Escape from a dropdown item returning focus to
+  its trigger), not only whether markup disappears.
 
 ## Product constraints
 
@@ -188,14 +208,20 @@ already downloaded bundle.
 - Repository profiles are inferred passively from tagged primary OCI manifests. Referrers such as SBOMs and signatures never change the repository profile.
 - Passive profile inference must not enable policies or reject pushes. Conflicting specific primary types produce the `mixed` profile with `profileNeedsReview=true`.
 - Registry clients use API tokens, never web passwords.
+- Bootstrap creates the only initially defined installation administrator. Every
+  later user is created as a regular user with a reveal-once registration link
+  to choose an initial password and remains disabled until the link is consumed;
+  only an active installation administrator may promote a user to installation
+  administrator. The account and registration token must be created atomically;
+  registration tokens may enable pending users, while password-reset tokens
+  must not re-enable disabled users.
 - User password changes require the current password. Administrator resets use
   a system-generated reveal-once magic URL whose token is hashed, expires after
   30 minutes, and is carried in the URL fragment. Completing the reset revokes
   the target user's sessions. Authenticated users cannot access or consume reset
   links; they must change the password from their profile or sign out first.
   Never log or persist the plaintext reset token.
-- API tokens are credentials owned exclusively by service accounts. Management endpoints and UI flows stay nested under the owning service account; do not reintroduce a global token page or user-owned registry tokens.
-- Integrations are read-only planned catalog entries in the MVP; do not implement scanners, jobs, or secret storage without a roadmap decision.
+- API tokens are normally credentials owned by service accounts. The sole exception is an installation viewer's profile-scoped, reveal-once registry token: it is revocable by that viewer and must always grant only `pull` from projects with explicit membership. It must never grant `push` or `delete`, even if the viewer has a Writer or Admin project membership. Do not add tokens for other user roles or a global user-token page.
 - Avoid Redis, message brokers, dependency-injection frameworks, and background-job frameworks in the MVP.
 
 ## Required documentation maintenance

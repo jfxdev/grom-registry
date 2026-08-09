@@ -22,7 +22,6 @@ interface for managing projects, access, images, and recovery.
 - OCI manifest inventory, passive artifact classification, retention previews, and audited manual lifecycle actions.
 - Built-in backup creation, download, and loopback-only disaster recovery for the default installation.
 - Explicit development, permissive, and strict deployment profiles.
-- Read-only integrations catalog for planned future capabilities.
 
 ## Quick start
 

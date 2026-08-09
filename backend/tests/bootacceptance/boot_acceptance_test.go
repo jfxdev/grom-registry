@@ -21,11 +21,8 @@ import (
 
 	"github.com/jfxdev/grom/backend/internal/constants"
 	"github.com/jfxdev/grom/backend/internal/foundation"
-	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
-	identitystore "github.com/jfxdev/grom/backend/internal/identity/infrastructure/persistence/bun"
+	"github.com/jfxdev/grom/backend/internal/identity/infrastructure/password"
 	"github.com/jfxdev/grom/backend/internal/platform/database"
-	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
-	projectstore "github.com/jfxdev/grom/backend/internal/projects/infrastructure/persistence/bun"
 	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
@@ -235,20 +232,25 @@ func createSQLiteFixture(t *testing.T, kind fixtureKind) string {
 				t.Fatalf("initialize supported prior schema fixture: %v", err)
 			}
 		}
-		identityService := identityapp.New(identitystore.New(db), time.Hour)
-		if err := identityService.BootstrapAdmin(ctx, "legacy@grom.local", "legacy-admin", "legacy-password"); err != nil {
+		administratorID := foundation.NewID()
+		passwordHash, err := password.Hash("legacy-password")
+		if err != nil {
+			_ = db.Close()
+			t.Fatalf("hash legacy administrator password: %v", err)
+		}
+		now := time.Now().UTC()
+		if _, err := db.ExecContext(ctx, `INSERT INTO users (id, email, username, password_hash, is_system_admin, created_at) VALUES (?, ?, ?, ?, ?, ?)`, administratorID.String(), "legacy@grom.local", "legacy-admin", passwordHash, true, now); err != nil {
 			_ = db.Close()
 			t.Fatalf("seed legacy administrator: %v", err)
 		}
-		_, administrator, err := identityService.Login(ctx, "legacy@grom.local", "legacy-password")
-		if err != nil {
-			_ = db.Close()
-			t.Fatalf("authenticate legacy administrator: %v", err)
-		}
-		projects := projectapp.New(projectstore.New(db))
-		if _, err := projects.Create(ctx, foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: administrator.ID}, true, "Legacy", "legacy"); err != nil {
+		projectID := foundation.NewID()
+		if _, err := db.ExecContext(ctx, `INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)`, projectID.String(), "legacy", "Legacy", administratorID.String(), now); err != nil {
 			_ = db.Close()
 			t.Fatalf("seed legacy project: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO project_memberships (project_id, principal_kind, principal_id, role, created_at) VALUES (?, ?, ?, ?, ?)`, projectID.String(), constants.PrincipalUser, administratorID.String(), constants.RoleAdmin, now); err != nil {
+			_ = db.Close()
+			t.Fatalf("seed legacy administrator membership: %v", err)
 		}
 	} else {
 		if err := database.Migrate(ctx, db, databaseKind, time.Second, slog.Default()); err != nil {
@@ -374,13 +376,15 @@ func assertProjectVisible(t *testing.T, baseURL, slug string) {
 	if projects.StatusCode != http.StatusOK {
 		t.Fatalf("list preserved projects returned HTTP %d", projects.StatusCode)
 	}
-	var body []struct {
-		Slug string `json:"slug"`
+	var body struct {
+		Items []struct {
+			Slug string `json:"slug"`
+		} `json:"items"`
 	}
 	if err := json.NewDecoder(projects.Body).Decode(&body); err != nil {
 		t.Fatalf("decode preserved projects: %v", err)
 	}
-	for _, project := range body {
+	for _, project := range body.Items {
 		if project.Slug == slug {
 			members, err := client.Get(baseURL + "/api/v1/projects/" + slug + "/members")
 			if err != nil {
@@ -390,14 +394,16 @@ func assertProjectVisible(t *testing.T, baseURL, slug string) {
 			if members.StatusCode != http.StatusOK {
 				t.Fatalf("list preserved memberships returned HTTP %d", members.StatusCode)
 			}
-			var memberships []struct {
-				PrincipalKind string `json:"principalKind"`
-				Role          string `json:"role"`
+			var memberships struct {
+				Items []struct {
+					PrincipalKind string `json:"principalKind"`
+					Role          string `json:"role"`
+				} `json:"items"`
 			}
 			if err := json.NewDecoder(members.Body).Decode(&memberships); err != nil {
 				t.Fatalf("decode preserved memberships: %v", err)
 			}
-			for _, membership := range memberships {
+			for _, membership := range memberships.Items {
 				if membership.PrincipalKind == constants.PrincipalUser && membership.Role == constants.RoleAdmin {
 					return
 				}

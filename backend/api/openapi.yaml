@@ -13,7 +13,6 @@ tags:
   - name: Registry Policies
   - name: Registry Lifecycle
   - name: Backups
-  - name: Integrations
 paths:
   /healthz:
     get:
@@ -134,15 +133,16 @@ paths:
       operationId: listUsers
       security:
         - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
       responses:
         "200":
           description: Installation users
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/UserPage"
         "403":
           $ref: "#/components/responses/Forbidden"
     post:
@@ -158,11 +158,11 @@ paths:
               $ref: "#/components/schemas/CreateUserRequest"
       responses:
         "201":
-          description: Created user
+          description: Created user and reveal-once registration link
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/CreateUserResponse"
         "403":
           $ref: "#/components/responses/Forbidden"
   /api/v1/users/{id}/password-reset-link:
@@ -205,6 +205,104 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/users/{id}/administrator:
+    put:
+      tags: [Identity]
+      operationId: promoteUserToSystemAdmin
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: User promoted to installation administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/users/{id}/viewer:
+    put:
+      tags: [Identity]
+      operationId: promoteUserToSystemViewer
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: User promoted to installation viewer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/me/registry-tokens:
+    get:
+      tags: [Registry]
+      operationId: listViewerRegistryTokens
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Read-only registry tokens owned by the installation viewer
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1
+                items:
+                  $ref: "#/components/schemas/ViewerRegistryToken"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Registry]
+      operationId: createViewerRegistryToken
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateViewerRegistryTokenRequest"
+      responses:
+        "201":
+          description: Reveal-once read-only registry token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedViewerRegistryToken"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/me/registry-tokens/{tokenId}:
+    delete:
+      tags: [Registry]
+      operationId: revokeViewerRegistryToken
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Token revoked
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/service-accounts:
     get:
       tags: [Identity]
@@ -212,6 +310,8 @@ paths:
       security:
         - cookieAuth: []
       parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
         - name: includeDisabled
           in: query
           required: false
@@ -225,9 +325,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ServiceAccount"
+                $ref: "#/components/schemas/ServiceAccountPage"
     post:
       tags: [Identity]
       operationId: createServiceAccount
@@ -267,15 +365,15 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: "#/components/parameters/ID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
       responses:
         "200":
           description: API tokens owned by the service account
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/APIToken"
+                $ref: "#/components/schemas/APITokenPage"
     post:
       tags: [Identity]
       operationId: createServiceAccountToken
@@ -319,15 +417,16 @@ paths:
       operationId: listProjects
       security:
         - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
       responses:
         "200":
           description: Visible projects
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Project"
+                $ref: "#/components/schemas/ProjectPage"
     post:
       tags: [Projects]
       operationId: createProject
@@ -393,15 +492,15 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
       responses:
         "200":
           description: Project memberships
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Membership"
+                $ref: "#/components/schemas/MembershipPage"
   /api/v1/projects/{project}/members/{principalKind}/{principalId}:
     put:
       tags: [Projects]
@@ -445,15 +544,15 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
       responses:
         "200":
           description: Project repositories
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Repository"
+                $ref: "#/components/schemas/RepositoryPage"
     post:
       tags: [Registry]
       operationId: createProjectRepository
@@ -483,6 +582,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
   /api/v1/projects/{project}/repositories/{repositoryId}:
+    get:
+      tags: [Registry]
+      operationId: getProjectRepository
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/RepositoryID"
+      responses:
+        "200":
+          description: Project repository
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repository"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
     delete:
       tags: [Registry]
       operationId: deleteProjectRepository
@@ -600,6 +718,8 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
         - name: repository
           in: query
           required: true
@@ -612,7 +732,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TagList"
+                $ref: "#/components/schemas/TagPage"
   /api/v1/projects/{project}/artifact-deletion-previews:
     post:
       tags: [Registry]
@@ -644,6 +764,8 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
         - name: repository
           in: query
           required: true
@@ -655,9 +777,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ArtifactDeletion"
+                $ref: "#/components/schemas/ArtifactDeletionPage"
         "403":
           $ref: "#/components/responses/Forbidden"
     post:
@@ -696,6 +816,8 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
         - name: repository
           in: query
           required: true
@@ -707,9 +829,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ManifestInventory"
+                $ref: "#/components/schemas/ManifestInventoryPage"
   /api/v1/projects/{project}/repository-inventory-reconciliations:
     post:
       tags: [Registry Lifecycle]
@@ -792,6 +912,8 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
         - name: repository
           in: query
           required: true
@@ -803,9 +925,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/LifecycleRun"
+                $ref: "#/components/schemas/LifecycleRunPage"
     post:
       tags: [Registry Lifecycle]
       operationId: createLifecycleRun
@@ -854,42 +974,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LifecycleRun"
-  /api/v1/integrations:
-    get:
-      tags: [Integrations]
-      operationId: listIntegrations
-      security:
-        - cookieAuth: []
-      responses:
-        "200":
-          description: Integration catalog
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Integration"
-  /api/v1/integrations/{key}:
-    get:
-      tags: [Integrations]
-      operationId: getIntegration
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: key
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Integration descriptor
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Integration"
-        "404":
-          $ref: "#/components/responses/NotFound"
   /api/v1/backups:
     get:
       tags: [Backups]
@@ -1038,6 +1122,23 @@ components:
       type: http
       scheme: basic
   parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor returned by the previous page
+      schema:
+        type: string
+        maxLength: 512
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 25
+        minimum: 1
+        maximum: 100
     ID:
       name: id
       in: path
@@ -1230,7 +1331,7 @@ components:
           minLength: 8
     User:
       type: object
-      required: [id, email, username, systemAdmin, createdAt]
+      required: [id, email, username, systemAdmin, systemViewer, createdAt]
       properties:
         id:
           type: string
@@ -1242,6 +1343,8 @@ components:
           type: string
         systemAdmin:
           type: boolean
+        systemViewer:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -1249,9 +1352,140 @@ components:
           type: string
           format: date-time
           nullable: true
+    UserPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
+    ServiceAccountPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceAccount"
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
+    APITokenPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/APIToken"
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
+    ProjectPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
+    MembershipPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Membership"
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
+    RepositoryPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Repository"
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
+    TagPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            type: string
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
+    ArtifactDeletionPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArtifactDeletion"
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
+    ManifestInventoryPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManifestInventory"
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
+    LifecycleRunPage:
+      type: object
+      required: [items, pageCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LifecycleRun"
+        nextCursor:
+          type: string
+        pageCount:
+          type: integer
+          minimum: 0
     CreateUserRequest:
       type: object
-      required: [email, username, password]
+      additionalProperties: false
+      required: [email, username]
       properties:
         email:
           type: string
@@ -1259,13 +1493,14 @@ components:
         username:
           type: string
           pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
-        password:
-          type: string
-          format: password
-          minLength: 12
-        systemAdmin:
-          type: boolean
-          default: false
+    CreateUserResponse:
+      type: object
+      required: [user, registrationLink]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        registrationLink:
+          $ref: "#/components/schemas/PasswordResetLink"
     ChangePasswordRequest:
       type: object
       required: [currentPassword, newPassword]
@@ -1385,6 +1620,52 @@ components:
         secret:
           type: string
           description: Reveal-once API token secret.
+    ViewerRegistryToken:
+      type: object
+      required: [id, publicId, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        publicId:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+    CreateViewerRegistryTokenRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+    CreatedViewerRegistryToken:
+      type: object
+      required: [token, secret]
+      properties:
+        token:
+          $ref: "#/components/schemas/ViewerRegistryToken"
+        secret:
+          type: string
+          description: Reveal-once API token restricted to registry pull access.
     Project:
       type: object
       required: [id, slug, name, createdBy, createdAt]
@@ -1916,27 +2197,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LifecycleRunItem"
-    Integration:
-      type: object
-      required: [key, name, category, status, capabilities]
-      properties:
-        key:
-          type: string
-        name:
-          type: string
-        category:
-          type: string
-        status:
-          type: string
-          enum: [planned, available, configured, disabled]
-        capabilities:
-          type: array
-          items:
-            type: string
-        documentationUrl:
-          type: string
-          format: uri
-          nullable: true
     RegistryToken:
       type: object
       required: [token, access_token, expires_in, issued_at]

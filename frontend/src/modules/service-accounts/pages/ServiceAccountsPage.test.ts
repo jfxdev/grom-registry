@@ -88,7 +88,7 @@ describe('ServiceAccountsPage', () => {
     await search.setValue('CI-PAYMENTS')
     expect(wrapper.text()).toContain('Payments CI')
     expect(wrapper.text()).not.toContain('Registry mirror')
-    expect(wrapper.text()).toContain('1 of 1')
+    expect(wrapper.text()).toContain('1 of 1 on this page')
 
     await wrapper.get('select[aria-label="Filter service accounts by status"]').setValue('disabled')
     await search.setValue('base images')
@@ -104,7 +104,7 @@ describe('ServiceAccountsPage', () => {
     await wrapper.get('input[aria-label="Search service accounts"]').setValue('missing')
 
     expect(wrapper.text()).toContain('No matching service accounts')
-    expect(wrapper.text()).toContain('0 of 1')
+    expect(wrapper.text()).toContain('0 of 1 on this page')
   })
 
   it('requires the exact service account name before disabling it', async () => {

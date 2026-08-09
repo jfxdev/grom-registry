@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	ErrUnauthenticated        = errors.New("authentication failed")
-	ErrInvalidCurrentPassword = errors.New("current password is incorrect")
-	ErrInvalidPasswordReset   = errors.New("password reset link is invalid or expired")
+	ErrUnauthenticated          = errors.New("authentication failed")
+	ErrInvalidCurrentPassword   = errors.New("current password is incorrect")
+	ErrInvalidUserInput         = errors.New("email and username are required")
+	ErrInvalidPasswordReset     = errors.New("password reset link is invalid or expired")
+	ErrViewerPermissionRequired = errors.New("installation viewer permission required")
 )
 
 const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -36,6 +38,11 @@ type CreatedToken struct {
 type CreatedPasswordReset struct {
 	Token     string
 	ExpiresAt time.Time
+}
+
+type CreatedUser struct {
+	User             identity.User
+	RegistrationLink CreatedPasswordReset
 }
 
 func New(repository identity.Repository, sessionTTL time.Duration) *Service {
@@ -125,23 +132,81 @@ func (s *Service) ListUsers(ctx context.Context) ([]identity.User, error) {
 	return s.repository.ListUsers(ctx)
 }
 
-func (s *Service) CreateUser(ctx context.Context, email, username, plaintext string, systemAdmin bool) (*identity.User, error) {
+func (s *Service) CreateUser(ctx context.Context, email, username string) (*CreatedUser, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	username = strings.TrimSpace(username)
-	if email == "" || username == "" || len(plaintext) < constants.MinimumPasswordLength {
-		return nil, fmt.Errorf("email, username, and a password with at least %d characters are required", constants.MinimumPasswordLength)
+	if email == "" || username == "" {
+		return nil, ErrInvalidUserInput
 	}
-	hash, err := password.Hash(plaintext)
+	placeholderPassword, err := randomString(32)
 	if err != nil {
 		return nil, err
 	}
-	user := &identity.User{
-		ID: foundation.NewID(), Email: email, Username: username, PasswordHash: hash,
-		SystemAdmin: systemAdmin, CreatedAt: time.Now().UTC(),
-	}
-	if err := s.repository.CreateUser(ctx, user); err != nil {
+	passwordHash, err := password.Hash(placeholderPassword)
+	if err != nil {
 		return nil, err
 	}
+	publicID, err := randomString(12)
+	if err != nil {
+		return nil, err
+	}
+	secret, err := randomString(32)
+	if err != nil {
+		return nil, err
+	}
+	secretHash, err := password.Hash(secret)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	user := &identity.User{
+		ID: foundation.NewID(), Email: email, Username: username, PasswordHash: passwordHash,
+		SystemAdmin: false, CreatedAt: now, DisabledAt: &now,
+	}
+	reset := &identity.PasswordReset{
+		ID: foundation.NewID(), PublicID: publicID, UserID: user.ID, SecretHash: secretHash,
+		CreatedAt: now, ExpiresAt: now.Add(constants.DefaultPasswordResetMinutes * time.Minute), Purpose: identity.PasswordResetPurposeRegistration,
+	}
+	if err := s.repository.CreateUserWithPasswordReset(ctx, user, reset); err != nil {
+		return nil, err
+	}
+	return &CreatedUser{
+		User:             *user,
+		RegistrationLink: CreatedPasswordReset{Token: "grmpr_" + publicID + "_" + secret, ExpiresAt: reset.ExpiresAt},
+	}, nil
+}
+
+func (s *Service) PromoteUserToSystemAdmin(ctx context.Context, id foundation.ID) (*identity.User, error) {
+	user, err := s.repository.FindUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if user.SystemAdmin {
+		return user, nil
+	}
+	if err := s.repository.PromoteUserToSystemAdmin(ctx, id); err != nil {
+		return nil, err
+	}
+	user.SystemAdmin = true
+	user.SystemViewer = false
+	return user, nil
+}
+
+func (s *Service) PromoteUserToSystemViewer(ctx context.Context, id foundation.ID) (*identity.User, error) {
+	user, err := s.repository.FindUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if user.SystemAdmin {
+		return nil, errors.New("installation administrators cannot be promoted to viewer")
+	}
+	if user.SystemViewer {
+		return user, nil
+	}
+	if err := s.repository.PromoteUserToSystemViewer(ctx, id); err != nil {
+		return nil, err
+	}
+	user.SystemViewer = true
 	return user, nil
 }
 
@@ -191,7 +256,7 @@ func (s *Service) CreatePasswordReset(ctx context.Context, userID foundation.ID)
 	expiresAt := now.Add(constants.DefaultPasswordResetMinutes * time.Minute)
 	reset := &identity.PasswordReset{
 		ID: foundation.NewID(), PublicID: publicID, UserID: userID, SecretHash: hash,
-		CreatedAt: now, ExpiresAt: expiresAt,
+		CreatedAt: now, ExpiresAt: expiresAt, Purpose: identity.PasswordResetPurposePasswordReset,
 	}
 	if err := s.repository.CreatePasswordReset(ctx, reset); err != nil {
 		return nil, err
@@ -216,7 +281,7 @@ func (s *Service) CompletePasswordReset(ctx context.Context, rawToken, newPasswo
 	if err != nil {
 		return "", err
 	}
-	if err := s.repository.ConsumePasswordReset(ctx, reset.ID, reset.UserID, hash, now); err != nil {
+	if err := s.repository.ConsumePasswordReset(ctx, reset.ID, reset.UserID, hash, reset.Purpose == identity.PasswordResetPurposeRegistration, now); err != nil {
 		return "", ErrInvalidPasswordReset
 	}
 	return reset.UserID, nil
@@ -266,7 +331,8 @@ func (s *Service) CreateServiceAccountAPIToken(ctx context.Context, serviceAccou
 	}
 	token := identity.APIToken{
 		ID: foundation.NewID(), PublicID: publicID, ServiceAccountID: serviceAccountID,
-		Name: strings.TrimSpace(name), SecretHash: hash,
+		Principal: foundation.PrincipalRef{Kind: constants.PrincipalServiceAccount, ID: serviceAccountID},
+		Name:      strings.TrimSpace(name), SecretHash: hash,
 		CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt,
 	}
 	if token.Name == "" {
@@ -276,6 +342,58 @@ func (s *Service) CreateServiceAccountAPIToken(ctx context.Context, serviceAccou
 		return nil, err
 	}
 	return &CreatedToken{Token: token, Secret: "grm_" + publicID + "_" + secret}, nil
+}
+
+func (s *Service) CreateViewerRegistryToken(ctx context.Context, userID foundation.ID, name string, expiresAt *time.Time) (*CreatedToken, error) {
+	user, err := s.repository.FindUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !user.SystemViewer {
+		return nil, ErrViewerPermissionRequired
+	}
+	publicID, err := randomString(10)
+	if err != nil {
+		return nil, err
+	}
+	secret, err := randomString(32)
+	if err != nil {
+		return nil, err
+	}
+	hash, err := password.Hash(secret)
+	if err != nil {
+		return nil, err
+	}
+	token := identity.APIToken{ID: foundation.NewID(), PublicID: publicID, Principal: foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: userID}, Name: strings.TrimSpace(name), SecretHash: hash, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
+	if token.Name == "" {
+		return nil, fmt.Errorf("token name is required")
+	}
+	if err := s.repository.CreateViewerAPIToken(ctx, &token); err != nil {
+		return nil, err
+	}
+	return &CreatedToken{Token: token, Secret: "grm_" + publicID + "_" + secret}, nil
+}
+
+func (s *Service) ListViewerRegistryTokens(ctx context.Context, userID foundation.ID) ([]identity.ViewerRegistryToken, error) {
+	user, err := s.repository.FindUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !user.SystemViewer {
+		return nil, ErrViewerPermissionRequired
+	}
+	return s.repository.ListViewerAPITokens(ctx, userID)
+}
+
+func (s *Service) RevokeViewerRegistryToken(ctx context.Context, userID, tokenID foundation.ID) error {
+	user, err := s.repository.FindUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !user.SystemViewer {
+		return ErrViewerPermissionRequired
+	}
+	return s.repository.RevokeViewerAPIToken(ctx, userID, tokenID)
 }
 
 func (s *Service) ListServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID) ([]identity.APIToken, error) {
@@ -301,12 +419,23 @@ func (s *Service) AuthenticateRegistry(ctx context.Context, username, rawToken s
 	if !password.Verify(token.SecretHash, secret) {
 		return foundation.PrincipalRef{}, ErrUnauthenticated
 	}
-	account, err := s.repository.FindServiceAccountByID(ctx, token.ServiceAccountID)
-	if err != nil || account.Username != username {
+	principal := token.Principal
+	switch principal.Kind {
+	case constants.PrincipalServiceAccount:
+		account, err := s.repository.FindServiceAccountByID(ctx, principal.ID)
+		if err != nil || account.Username != username {
+			return foundation.PrincipalRef{}, ErrUnauthenticated
+		}
+	case constants.PrincipalUser:
+		user, err := s.repository.FindUserByID(ctx, principal.ID)
+		if err != nil || !user.SystemViewer || user.Username != username {
+			return foundation.PrincipalRef{}, ErrUnauthenticated
+		}
+	default:
 		return foundation.PrincipalRef{}, ErrUnauthenticated
 	}
 	_ = s.repository.TouchAPIToken(ctx, token.ID)
-	return foundation.PrincipalRef{Kind: constants.PrincipalServiceAccount, ID: token.ServiceAccountID}, nil
+	return principal, nil
 }
 
 func randomString(bytes int) (string, error) {

@@ -7,13 +7,13 @@ import { Button } from '@/shared/components/ui/button'
 import { ROUTES } from '@/shared/constants'
 import {
   Boxes,
-  Cable,
   CircleAlert,
   ChevronDown,
   ChevronRight,
   LogOut,
   Menu,
   PanelLeft,
+  UserRound,
   ShieldCheck,
   DatabaseBackup,
   Users,
@@ -26,6 +26,8 @@ const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
 const menuOpen = ref(false)
+const accountMenuOpen = ref(false)
+const accountMenuTrigger = ref<{ focus: () => void } | null>(null)
 const deployment = ref<Deployment | null>(null)
 const insecureHTTP = computed(() => deployment.value?.insecureHttp === true)
 const isPublic = computed(() => route.meta.public === true)
@@ -41,12 +43,12 @@ const navigation = [
   { label: 'Projects', to: ROUTES.projects, icon: Boxes, adminOnly: false },
   { label: 'Users', to: ROUTES.users, icon: Users, adminOnly: true },
   { label: 'Service accounts', to: ROUTES.serviceAccounts, icon: ShieldCheck, adminOnly: false },
-  { label: 'Integrations', to: ROUTES.integrations, icon: Cable, adminOnly: false },
   { label: 'Backup & recovery', to: ROUTES.backups, icon: DatabaseBackup, adminOnly: true },
 ]
 const visibleNavigation = computed(() => navigation.filter((item) => !item.adminOnly || session.user?.systemAdmin))
 
 async function signOut() {
+	closeAccountMenu()
   await session.signOut()
   await router.push('/signin')
 }
@@ -55,9 +57,27 @@ function closeMenu() {
   menuOpen.value = false
 }
 
+function closeAccountMenu(restoreFocus = false) {
+  accountMenuOpen.value = false
+  if (restoreFocus) accountMenuTrigger.value?.focus()
+}
+
+function toggleAccountMenu(event: globalThis.PointerEvent) {
+	accountMenuTrigger.value = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
+  accountMenuOpen.value = !accountMenuOpen.value
+}
+
 function handleKeydown(event: globalThis.KeyboardEvent) {
   if (event.key === 'Escape') {
     closeMenu()
+    closeAccountMenu(true)
+  }
+}
+
+function handlePointerDown(event: globalThis.PointerEvent) {
+  const target = event.target
+  if (target instanceof globalThis.Element && !target.closest('.account-menu')) {
+    closeAccountMenu()
   }
 }
 
@@ -71,9 +91,13 @@ async function loadDeployment() {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('pointerdown', handlePointerDown)
   void loadDeployment()
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('pointerdown', handlePointerDown)
+})
 </script>
 
 <template>
@@ -89,17 +113,42 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
       <RouterLink :to="ROUTES.projects" class="shell-brand-link">
         <GromBrand compact :crest-size="34" />
       </RouterLink>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-controls="app-navigation"
-        :aria-expanded="menuOpen"
-        :aria-label="menuOpen ? 'Close navigation' : 'Open navigation'"
-        @click="menuOpen = !menuOpen"
-      >
-        <X v-if="menuOpen" :size="20" />
-        <Menu v-else :size="20" />
-      </Button>
+      <div class="mobile-header-actions">
+        <div class="account-menu account-menu-mobile">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-controls="mobile-account-menu"
+            :aria-expanded="accountMenuOpen"
+            aria-haspopup="true"
+            aria-label="Open account menu"
+            @click="toggleAccountMenu"
+          >
+            <span class="avatar">{{ session.user?.username.slice(0, 2).toUpperCase() }}</span>
+          </Button>
+          <div v-if="accountMenuOpen" id="mobile-account-menu" class="account-menu-panel" role="menu" aria-label="Account menu">
+            <RouterLink :to="ROUTES.profile" role="menuitem" class="account-menu-item" @click="closeAccountMenu">
+              <UserRound :size="16" />
+              Profile
+            </RouterLink>
+            <button type="button" role="menuitem" class="account-menu-item" @click="signOut">
+              <LogOut :size="16" />
+              Sign out
+            </button>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-controls="app-navigation"
+          :aria-expanded="menuOpen"
+          :aria-label="menuOpen ? 'Close navigation' : 'Open navigation'"
+          @click="menuOpen = !menuOpen"
+        >
+          <X v-if="menuOpen" :size="20" />
+          <Menu v-else :size="20" />
+        </Button>
+      </div>
     </header>
 
     <button
@@ -144,22 +193,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
           </RouterLink>
         </nav>
       </div>
-
-      <div class="sidebar-footer">
-        <p class="nav-section-label">Account</p>
-        <RouterLink :to="ROUTES.profile" class="user-chip account-link" @click="closeMenu">
-          <div class="avatar">{{ session.user?.username.slice(0, 2).toUpperCase() }}</div>
-          <div class="min-w-0">
-            <p class="truncate text-sm font-medium">{{ session.user?.username }}</p>
-            <p class="truncate text-xs text-muted-foreground">{{ session.user?.email }}</p>
-          </div>
-          <ChevronRight class="ml-auto text-muted-foreground" :size="14" />
-        </RouterLink>
-        <Button variant="ghost" class="mt-2 w-full justify-start text-muted-foreground" @click="signOut">
-          <LogOut :size="16" />
-          Sign out
-        </Button>
-      </div>
     </aside>
 
     <div class="app-workspace">
@@ -171,14 +204,33 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
           <ChevronRight :size="13" />
           <span class="header-current">{{ currentSection }}</span>
         </div>
-        <RouterLink :to="ROUTES.profile" class="header-account">
-          <span class="header-account-copy">
-            <strong>{{ session.user?.username }}</strong>
-            <small>{{ session.user?.systemAdmin ? 'Administrator' : 'Member' }}</small>
-          </span>
-          <span class="avatar">{{ session.user?.username.slice(0, 2).toUpperCase() }}</span>
-          <ChevronDown :size="14" />
-        </RouterLink>
+        <div class="account-menu">
+          <button
+            type="button"
+            class="header-account"
+            aria-controls="desktop-account-menu"
+            :aria-expanded="accountMenuOpen"
+            aria-haspopup="true"
+            @click="toggleAccountMenu"
+          >
+            <span class="header-account-copy">
+              <strong>{{ session.user?.username }}</strong>
+              <small>{{ session.user?.systemAdmin ? 'Administrator' : session.user?.systemViewer ? 'Viewer' : 'Member' }}</small>
+            </span>
+            <span class="avatar">{{ session.user?.username.slice(0, 2).toUpperCase() }}</span>
+            <ChevronDown :size="14" :class="{ 'account-menu-chevron-open': accountMenuOpen }" />
+          </button>
+          <div v-if="accountMenuOpen" id="desktop-account-menu" class="account-menu-panel" role="menu" aria-label="Account menu">
+            <RouterLink :to="ROUTES.profile" role="menuitem" class="account-menu-item" @click="closeAccountMenu">
+              <UserRound :size="16" />
+              Profile
+            </RouterLink>
+            <button type="button" role="menuitem" class="account-menu-item" @click="signOut">
+              <LogOut :size="16" />
+              Sign out
+            </button>
+          </div>
+        </div>
       </header>
 
       <div v-if="insecureHTTP" class="deployment-warning" role="alert">
@@ -200,18 +252,74 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   text-decoration: none;
 }
 
-.account-link {
-  color: inherit;
-  text-decoration: none;
-}
-
-.account-link:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-raised);
-}
-
 .header-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 0;
+  background: transparent;
   color: inherit;
+  cursor: pointer;
+}
+
+.header-account:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  z-index: 50;
+  width: 11rem;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.65rem;
+  background: var(--surface-raised);
+  box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.3);
+  padding: 0.3rem;
+}
+
+.account-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.6rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: transparent;
+  padding: 0.65rem 0.7rem;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
   text-decoration: none;
+  cursor: pointer;
+}
+
+.account-menu-item:hover,
+.account-menu-item:focus-visible {
+  background: var(--muted);
+  outline: none;
+}
+
+.account-menu-chevron-open {
+  transform: rotate(180deg);
+}
+
+.mobile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.account-menu-mobile .avatar {
+  width: 1.9rem;
+  height: 1.9rem;
 }
 </style>

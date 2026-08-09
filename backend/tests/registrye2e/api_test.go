@@ -77,12 +77,23 @@ func (c *managementClient) currentUser(t *testing.T, expectedStatus int) openapi
 
 func (c *managementClient) createUser(t *testing.T, email, username, password string) openapi.User {
 	t.Helper()
-	systemAdmin := false
-	var user openapi.User
+	var created openapi.CreateUserResponse
 	c.doJSON(t, http.MethodPost, "/api/v1/users", openapi.CreateUserRequest{
-		Email: openapi_types.Email(email), Username: username, Password: password, SystemAdmin: &systemAdmin,
-	}, &user, http.StatusCreated)
-	return user
+		Email: openapi_types.Email(email), Username: username,
+	}, &created, http.StatusCreated)
+	registrationURL, err := url.Parse(created.RegistrationLink.Url)
+	if err != nil {
+		t.Fatalf("parse registration link: %v", err)
+	}
+	registrationToken, err := url.ParseQuery(registrationURL.Fragment)
+	if err != nil {
+		t.Fatalf("parse registration token: %v", err)
+	}
+	registrationClient := newManagementClient(t, c.baseURL)
+	registrationClient.doJSON(t, http.MethodPost, "/api/v1/password-resets", openapi.CompletePasswordResetRequest{
+		Token: registrationToken.Get("token"), NewPassword: password,
+	}, nil, http.StatusNoContent)
+	return created.User
 }
 
 func (c *managementClient) disableUser(t *testing.T, userID string) {
@@ -157,28 +168,63 @@ func (c *managementClient) createRepository(
 
 func (c *managementClient) repositories(t *testing.T, project string) []openapi.Repository {
 	t.Helper()
-	var repositories []openapi.Repository
+	var response json.RawMessage
 	c.doJSON(t, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/repositories",
-		nil, &repositories, http.StatusOK)
-	return repositories
+		nil, &response, http.StatusOK)
+	var page openapi.RepositoryPage
+	if len(response) > 0 && response[0] == '[' {
+		var repositories []openapi.Repository
+		if err := json.Unmarshal(response, &repositories); err != nil {
+			t.Fatalf("decode legacy repositories: %v", err)
+		}
+		return repositories
+	}
+	if err := json.Unmarshal(response, &page); err != nil {
+		t.Fatalf("decode repositories page: %v", err)
+	}
+	return page.Items
 }
 
-func (c *managementClient) tags(t *testing.T, project, repository string) openapi.TagList {
+func (c *managementClient) tags(t *testing.T, project, repository string) openapi.TagPage {
 	t.Helper()
-	var tags openapi.TagList
+	var response json.RawMessage
 	path := "/api/v1/projects/" + url.PathEscape(project) + "/repository-tags?repository=" +
 		url.QueryEscape(repository)
-	c.doJSON(t, http.MethodGet, path, nil, &tags, http.StatusOK)
+	c.doJSON(t, http.MethodGet, path, nil, &response, http.StatusOK)
+	var tags openapi.TagPage
+	if err := json.Unmarshal(response, &tags); err != nil {
+		t.Fatalf("decode tags page: %v", err)
+	}
+	if len(tags.Items) == 0 {
+		var legacy struct {
+			Tags []string `json:"tags"`
+		}
+		if err := json.Unmarshal(response, &legacy); err != nil {
+			t.Fatalf("decode legacy tags: %v", err)
+		}
+		tags.Items = legacy.Tags
+	}
 	return tags
 }
 
 func (c *managementClient) inventory(t *testing.T, project, repository string) []openapi.ManifestInventory {
 	t.Helper()
-	var inventory []openapi.ManifestInventory
+	var response json.RawMessage
 	path := "/api/v1/projects/" + url.PathEscape(project) + "/repository-inventory?repository=" +
 		url.QueryEscape(repository)
-	c.doJSON(t, http.MethodGet, path, nil, &inventory, http.StatusOK)
-	return inventory
+	c.doJSON(t, http.MethodGet, path, nil, &response, http.StatusOK)
+	if len(response) > 0 && response[0] == '[' {
+		var inventory []openapi.ManifestInventory
+		if err := json.Unmarshal(response, &inventory); err != nil {
+			t.Fatalf("decode legacy inventory: %v", err)
+		}
+		return inventory
+	}
+	var inventory openapi.ManifestInventoryPage
+	if err := json.Unmarshal(response, &inventory); err != nil {
+		t.Fatalf("decode inventory page: %v", err)
+	}
+	return inventory.Items
 }
 
 func (c *managementClient) exchangeToken(

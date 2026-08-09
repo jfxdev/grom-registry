@@ -27,8 +27,8 @@ Implemented on July 26, 2026:
   changing labels and expanded state, link dismissal, and Escape dismissal.
 - Added focused tests for Button, Input, and sign-in behavior.
 - Validated the sign-in screen at `1440 × 900`, `390 × 844`, and `320 × 568`.
-- Validated the authenticated Projects, Users, Service Accounts, and
-  Integrations views on desktop, plus the Projects shell and drawer on mobile.
+- Validated the authenticated Projects, Users, and Service Accounts views on
+  desktop, plus the Projects shell and drawer on mobile.
 
 The implementation uses one 256px crest source rather than separate `@2x`
 files. This source covers the approved rendered sizes while keeping the
@@ -230,7 +230,6 @@ Pages and surfaces:
 - Project membership flow.
 - User list, reset-link modal, and profile.
 - Service-account list and access-key panel.
-- Integrations.
 - Authenticated application shell and drawer.
 
 Work:
@@ -757,7 +756,6 @@ Apply shared tokens and primitives in this order:
 3. `frontend/src/modules/service-accounts/pages/ServiceAccountsPage.vue`
 4. `frontend/src/modules/service-accounts/components/ServiceAccountKeysPanel.vue`
 5. `frontend/src/modules/users/pages/UsersPage.vue`
-6. `frontend/src/modules/integrations/pages/IntegrationsPage.vue`
 
 ### Propagation rules
 

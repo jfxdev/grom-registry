@@ -13,6 +13,7 @@ type userModel struct {
 	Username      string     `bun:"username,notnull,unique"`
 	Password      string     `bun:"password_hash,notnull"`
 	SystemAdmin   bool       `bun:"is_system_admin,notnull"`
+	SystemViewer  bool       `bun:"is_system_viewer,notnull"`
 	CreatedAt     time.Time  `bun:"created_at,notnull"`
 	DisabledAt    *time.Time `bun:"disabled_at"`
 }
@@ -60,4 +61,5 @@ type passwordResetModel struct {
 	CreatedAt     time.Time  `bun:"created_at,notnull"`
 	ExpiresAt     time.Time  `bun:"expires_at,notnull"`
 	UsedAt        *time.Time `bun:"used_at"`
+	Purpose       string     `bun:"purpose,notnull"`
 }

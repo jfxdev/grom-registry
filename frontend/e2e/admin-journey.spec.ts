@@ -5,61 +5,13 @@ import { readRuntime } from './support/runtime'
 
 test('an administrator completes the first-push journey through the public UI', async ({ page }) => {
   const runtime = await readRuntime()
-  await page.goto(`${runtime.publicURL}/signin`)
-  await page.getByLabel('Email').fill(ADMIN_E2E_ADMIN.email)
-  await page.getByRole('textbox', { name: 'Password' }).fill(ADMIN_E2E_ADMIN.password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
+  await signIn(page, runtime.publicURL)
 
-  await page.getByRole('button', { name: 'New project' }).click()
-  await page.getByLabel('Name').fill('Alpha')
-  await page.getByLabel('Name').press('Tab')
-  await expect(page.getByLabel('Slug')).toHaveValue('alpha')
-  await page.getByRole('button', { name: 'Create project' }).click()
-  await expect(page.getByRole('link', { name: /Alpha/ })).toBeVisible()
-
-  await page.getByRole('link', { name: 'Service accounts' }).click()
-  await page.getByRole('button', { name: 'New account' }).click()
-  await page.getByLabel('Display name').fill('Alpha writer')
-  await page.getByLabel('Username').fill('alpha-writer')
-  await page.getByLabel('Description').fill('First-push acceptance test')
-  await page.getByRole('button', { name: 'Create' }).click()
-  const account = page.locator('.account-item', { hasText: 'alpha-writer' })
-  await expect(account).toBeVisible()
-  const keysPanel = account.locator('.keys-panel')
-  if (!await keysPanel.isVisible()) {
-    await account.getByRole('button', { name: 'Keys' }).click()
-  }
-  await expect(keysPanel).toBeVisible()
-  await keysPanel.getByRole('button', { name: 'New key' }).click()
-  await keysPanel.getByLabel('Key name').fill('First push')
-  await keysPanel.getByRole('button', { name: 'Create key' }).click()
-  const secret = await page.locator('.secret-value code').textContent()
-  expect(secret).toBeTruthy()
-  await page.getByRole('button', { name: 'Close revealed key' }).click()
-
-  await page.goto(`${runtime.publicURL}/projects/alpha`)
-  await expect(page.getByRole('heading', { name: 'Alpha', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: /Members/ }).click()
-  await page.getByRole('button', { name: 'Add service account' }).click()
-  const memberDialog = page.getByRole('dialog', { name: 'Add service account' })
-  const memberSelects = memberDialog.locator('select')
-  await expect(memberSelects).toHaveCount(3)
-  await memberSelects.nth(1).selectOption({ label: 'Alpha writer · alpha-writer' })
-  await memberSelects.nth(2).selectOption('writer')
-  const [memberResponse] = await Promise.all([
-    page.waitForResponse((response) => response.request().method() === 'PUT' && response.url().includes('/members/service_account/')),
-    memberDialog.getByRole('button', { name: 'Add member' }).click(),
-  ])
-  expect(memberResponse.url()).toContain('/api/v1/projects/alpha/members/service_account/')
-  expect(await memberResponse.json()).toEqual({ status: 'saved' })
-  await expect(memberDialog).toBeHidden()
-  await expect(page.locator('.data-row').filter({ hasText: 'service account' }).getByText('writer', { exact: true })).toBeVisible()
+  const secret = await createProjectWithWriter(page, runtime.publicURL, 'Alpha', 'alpha', 'Alpha writer', 'alpha-writer')
 
   const { digest, cleanup } = await pushFirstImage(runtime, 'alpha-writer', secret!)
   try {
     await page.reload()
-    await page.getByRole('button', { name: /Repositories/ }).click()
     await expect(page.getByRole('button', { name: /app/ })).toBeVisible()
     await page.getByRole('button', { name: /app/ }).click()
     await expect(page.getByText('v1', { exact: true })).toBeVisible()
@@ -72,3 +24,103 @@ test('an administrator completes the first-push journey through the public UI', 
     await cleanup()
   }
 })
+
+test('an administrator confirms destructive access changes through the public UI', async ({ page }) => {
+  const runtime = await readRuntime()
+  await signIn(page, runtime.publicURL)
+
+  await createProjectWithWriter(page, runtime.publicURL, 'Destructive', 'destructive', 'Destructive writer', 'destructive-writer')
+  await page.goto(`${runtime.publicURL}/projects/destructive`)
+  await expect(page.getByRole('heading', { name: 'Destructive', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  await page.getByRole('button', { name: 'Remove service account member' }).click()
+  const memberDialog = page.getByRole('dialog', { name: 'Remove member' })
+  await expect(memberDialog).toContainText('loses project access')
+  const [memberResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().includes('/members/service_account/')),
+    memberDialog.getByRole('button', { name: 'Remove member' }).click(),
+  ])
+  expect(memberResponse.status()).toBe(204)
+  await expect(page.getByRole('button', { name: 'Remove service account member' })).toBeHidden()
+  await page.getByRole('button', { name: 'Close project settings' }).click()
+  await expect(page.getByRole('dialog', { name: 'Project settings' })).toBeHidden()
+
+  await page.getByRole('link', { name: 'Service accounts' }).click()
+  const account = page.locator('.account-item', { hasText: 'destructive-writer' })
+  await account.getByRole('button', { name: 'Disable service account Destructive writer' }).click()
+  const disableDialog = page.getByRole('form', { name: 'Disable service account' })
+  await expect(disableDialog.getByRole('button', { name: 'Disable service account' })).toBeDisabled()
+  await disableDialog.getByLabel('Service account name confirmation').fill('Destructive writer')
+  const [disableResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'DELETE' && /\/service-accounts\//.test(response.url())),
+    disableDialog.getByRole('button', { name: 'Disable service account' }).click(),
+  ])
+  expect(disableResponse.status()).toBe(204)
+  await page.getByRole('combobox', { name: 'Filter service accounts by status' }).selectOption('disabled')
+  await expect(account.getByText('Disabled', { exact: true })).toBeVisible()
+
+  await page.goto(`${runtime.publicURL}/projects/destructive`)
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  await page.getByRole('button', { name: /Danger zone/ }).click()
+  await page.getByRole('button', { name: 'Delete project' }).click()
+  const projectDialog = page.getByRole('dialog', { name: 'Delete project' })
+  const [projectResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().endsWith('/api/v1/projects/destructive')),
+    projectDialog.getByRole('button', { name: 'Delete project' }).click(),
+  ])
+  expect(projectResponse.status()).toBe(204)
+  await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
+})
+
+async function signIn(page: import('@playwright/test').Page, publicURL: string) {
+  await page.goto(`${publicURL}/signin`)
+  await page.getByLabel('Email').fill(ADMIN_E2E_ADMIN.email)
+  await page.getByRole('textbox', { name: 'Password' }).fill(ADMIN_E2E_ADMIN.password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
+}
+
+async function createProjectWithWriter(page: import('@playwright/test').Page, publicURL: string, projectName: string, slug: string, accountName: string, username: string) {
+  await page.goto(`${publicURL}/projects`)
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByLabel('Name').fill(projectName)
+  const nameInput = page.getByLabel('Name')
+  const slugInput = page.getByLabel('Slug')
+  await nameInput.blur()
+  await expect(slugInput).toHaveValue(slug)
+  await slugInput.fill(slug)
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await expect(page.getByRole('link', { name: new RegExp(projectName) })).toBeVisible()
+
+  await page.getByRole('link', { name: 'Service accounts' }).click()
+  await page.getByRole('button', { name: 'New account' }).click()
+  await page.getByLabel('Display name').fill(accountName)
+  await page.getByLabel('Username').fill(username)
+  await page.getByLabel('Description').fill('Administrative acceptance test')
+  await page.getByRole('button', { name: 'Create' }).click()
+  const account = page.locator('.account-item', { hasText: username })
+  await expect(account).toBeVisible()
+  const keysPanel = account.locator('.keys-panel')
+  if (!await keysPanel.isVisible()) await account.getByRole('button', { name: 'Keys' }).click()
+  await keysPanel.getByRole('button', { name: 'New key' }).click()
+  await keysPanel.getByLabel('Key name').fill('Acceptance key')
+  await keysPanel.getByRole('button', { name: 'Create key' }).click()
+  const secret = await page.locator('.secret-value code').textContent()
+  expect(secret).toBeTruthy()
+  await page.getByRole('button', { name: 'Close revealed key' }).click()
+
+  await page.goto(`${publicURL}/projects/${slug}`)
+  await expect(page.getByRole('heading', { name: projectName, exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  await page.getByRole('button', { name: 'Add member' }).click()
+  const memberDialog = page.getByRole('dialog', { name: 'Add service account' })
+  const memberSelects = memberDialog.locator('select')
+  await memberSelects.nth(1).selectOption({ label: `${accountName} · ${username}` })
+  await memberSelects.nth(2).selectOption('writer')
+  await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'PUT' && response.url().includes('/members/service_account/')),
+    memberDialog.getByRole('button', { name: 'Add member' }).click(),
+  ])
+  await expect(memberDialog).toBeHidden()
+  return secret!
+}

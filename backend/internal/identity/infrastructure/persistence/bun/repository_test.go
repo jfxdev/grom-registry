@@ -56,7 +56,7 @@ func TestDisableUserRevokesSessionsAtomically(t *testing.T) {
 	ctx := context.Background()
 	db := openSQLiteRepositoryTestDB(t)
 	for _, statement := range []string{
-		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, is_system_admin BOOLEAN NOT NULL, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
+		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, is_system_admin BOOLEAN NOT NULL, is_system_viewer BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
 		`CREATE TABLE sessions (id TEXT PRIMARY KEY, public_id TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL, secret_hash TEXT NOT NULL, created_at TIMESTAMP NOT NULL, expires_at TIMESTAMP NOT NULL)`,
 	} {
 		if _, err := db.ExecContext(ctx, statement); err != nil {
@@ -101,6 +101,27 @@ func TestDisableUserRevokesSessionsAtomically(t *testing.T) {
 	}
 	if err := repository.DisableUser(ctx, adminTwo); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected last administrator protection, got %v", err)
+	}
+}
+
+func TestPromoteUserToSystemAdmin(t *testing.T) {
+	ctx := context.Background()
+	db := openSQLiteRepositoryTestDB(t)
+	if _, err := db.ExecContext(ctx, `CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, is_system_admin BOOLEAN NOT NULL, is_system_viewer BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	repository := New(db)
+	userID := foundation.NewID()
+	if _, err := db.ExecContext(ctx, `INSERT INTO users (id, email, username, password_hash, is_system_admin, created_at) VALUES (?, ?, ?, ?, ?, ?)`, userID.String(), "user@example.com", "user", "hash", false, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repository.PromoteUserToSystemAdmin(ctx, userID); err != nil {
+		t.Fatal(err)
+	}
+	user, err := repository.FindUserByID(ctx, userID)
+	if err != nil || !user.SystemAdmin {
+		t.Fatalf("expected promoted user, got %#v, %v", user, err)
 	}
 }
 
@@ -227,7 +248,7 @@ func TestInvalidateEphemeralCredentialsDeletesBothTablesAndRollsBack(t *testing.
 		`CREATE TABLE password_reset_tokens (
 			id TEXT PRIMARY KEY, public_id TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL,
 			secret_hash TEXT NOT NULL, created_at TIMESTAMP NOT NULL, expires_at TIMESTAMP NOT NULL,
-			used_at TIMESTAMP NULL
+			used_at TIMESTAMP NULL, purpose TEXT NOT NULL DEFAULT 'password_reset'
 		)`,
 		`INSERT INTO users (id) VALUES ('user')`,
 	} {

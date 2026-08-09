@@ -82,7 +82,7 @@ describe('ProjectsPage', () => {
     await search.setValue('payments')
     expect(wrapper.text()).toContain('Payments API')
     expect(wrapper.text()).not.toContain('Customer Portal')
-    expect(wrapper.text()).toContain('1 of 2')
+    expect(wrapper.text()).toContain('1 of 2 on this page')
 
     await search.setValue('WEB-STORE')
     expect(wrapper.text()).toContain('Customer Portal')
@@ -105,6 +105,6 @@ describe('ProjectsPage', () => {
     await wrapper.get('input[aria-label="Search projects"]').setValue('missing')
 
     expect(wrapper.text()).toContain('No matching projects')
-    expect(wrapper.text()).toContain('0 of 1')
+    expect(wrapper.text()).toContain('0 of 1 on this page')
   })
 })
