@@ -719,52 +719,42 @@ export interface components {
         UserPage: {
             items: components["schemas"]["User"][];
             nextCursor?: string;
-            pageCount: number;
         };
         ServiceAccountPage: {
             items: components["schemas"]["ServiceAccount"][];
             nextCursor?: string;
-            pageCount: number;
         };
         APITokenPage: {
             items: components["schemas"]["APIToken"][];
             nextCursor?: string;
-            pageCount: number;
         };
         ProjectPage: {
             items: components["schemas"]["Project"][];
             nextCursor?: string;
-            pageCount: number;
         };
         MembershipPage: {
             items: components["schemas"]["Membership"][];
             nextCursor?: string;
-            pageCount: number;
         };
         RepositoryPage: {
             items: components["schemas"]["Repository"][];
             nextCursor?: string;
-            pageCount: number;
         };
         TagPage: {
             items: string[];
             nextCursor?: string;
-            pageCount: number;
         };
         ArtifactDeletionPage: {
             items: components["schemas"]["ArtifactDeletion"][];
             nextCursor?: string;
-            pageCount: number;
         };
         ManifestInventoryPage: {
             items: components["schemas"]["ManifestInventory"][];
             nextCursor?: string;
-            pageCount: number;
         };
         LifecycleRunPage: {
             items: components["schemas"]["LifecycleRun"][];
             nextCursor?: string;
-            pageCount: number;
         };
         CreateUserRequest: {
             /** Format: email */
@@ -1381,6 +1371,8 @@ export interface operations {
                 /** @description Opaque cursor returned by the previous page */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["PageLimit"];
+                /** @description Case-insensitive search across email and username. */
+                q?: string;
             };
             header?: never;
             path?: never;
@@ -1603,8 +1595,10 @@ export interface operations {
                 /** @description Opaque cursor returned by the previous page */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["PageLimit"];
-                /** @description Include disabled service accounts in the administrative listing. */
-                includeDisabled?: boolean;
+                /** @description Case-insensitive search across name, username, and description. */
+                q?: string;
+                /** @description Administrative account status filter. */
+                status?: "active" | "disabled" | "all";
             };
             header?: never;
             path?: never;

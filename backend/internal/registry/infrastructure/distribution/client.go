@@ -34,6 +34,11 @@ type TagPage struct {
 	NextMarker string
 }
 
+type ProjectRepositoryPage struct {
+	Repositories []string
+	NextMarker   string
+}
+
 type manifestDocument struct {
 	MediaType    string `json:"mediaType"`
 	ArtifactType string `json:"artifactType"`
@@ -93,6 +98,45 @@ func (c *Client) ListProjectRepositories(ctx context.Context, project string) ([
 		}
 	}
 	return result, nil
+}
+
+// ListProjectRepositoriesPage keeps Distribution's catalog Link private while
+// exposing only a project-relative continuation marker to the control plane.
+func (c *Client) ListProjectRepositoriesPage(ctx context.Context, project string, limit int, marker string) (*ProjectRepositoryPage, error) {
+	if limit < 1 {
+		return nil, fmt.Errorf("catalog page limit must be positive")
+	}
+	token, err := c.tokens.IssueCatalog("grom-internal")
+	if err != nil {
+		return nil, err
+	}
+	query := url.Values{"n": []string{fmt.Sprintf("%d", limit)}}
+	if marker != "" {
+		query.Set("last", marker)
+	}
+	var response RepositoryList
+	nextPath, err := c.getWithLink(ctx, "/v2/_catalog?"+query.Encode(), token, &response)
+	if err != nil {
+		return nil, err
+	}
+	page := &ProjectRepositoryPage{Repositories: make([]string, 0, len(response.Repositories))}
+	prefix := project + "/"
+	for _, name := range response.Repositories {
+		if strings.HasPrefix(name, prefix) {
+			page.Repositories = append(page.Repositories, strings.TrimPrefix(name, prefix))
+		}
+	}
+	if nextPath != "" {
+		nextURL, parseErr := url.Parse(nextPath)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		page.NextMarker = nextURL.Query().Get("last")
+		if page.NextMarker == "" {
+			return nil, fmt.Errorf("distribution pagination link has no catalog marker")
+		}
+	}
+	return page, nil
 }
 
 func (c *Client) ListTags(ctx context.Context, repository string) (*TagList, error) {

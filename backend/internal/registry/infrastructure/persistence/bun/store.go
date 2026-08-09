@@ -78,6 +78,48 @@ func (s *Store) ListRepositories(ctx context.Context, projectID foundation.ID) (
 	return result, nil
 }
 
+func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.ID, request foundation.PageRequest) (foundation.PageResult[registrydomain.Repository], error) {
+	name := ""
+	if request.Cursor != "" {
+		cursor, err := foundation.DecodePageCursor(request.Cursor, request.Scope)
+		if err != nil {
+			return foundation.PageResult[registrydomain.Repository]{}, err
+		}
+		name = cursor.Name
+	}
+	models := make([]repositoryModel, 0, request.Limit+1)
+	query := s.db.NewSelect().Model(&models).Where("project_id = ?", projectID.String())
+	if name != "" {
+		query = query.Where("name > ?", name)
+	}
+	if err := query.OrderExpr("name ASC, id ASC").Limit(request.Limit + 1).Scan(ctx); err != nil {
+		return foundation.PageResult[registrydomain.Repository]{}, err
+	}
+	result := foundation.PageResult[registrydomain.Repository]{Items: make([]registrydomain.Repository, 0, minRepositoryPage(len(models), request.Limit))}
+	for i := 0; i < minRepositoryPage(len(models), request.Limit); i++ {
+		repository := toRepository(&models[i])
+		policies, err := s.listPolicies(ctx, repository.ID)
+		if err != nil {
+			return foundation.PageResult[registrydomain.Repository]{}, err
+		}
+		repository.Policies = policies
+		result.Items = append(result.Items, *repository)
+	}
+	if len(models) > request.Limit {
+		last := models[request.Limit-1]
+		cursor, _ := foundation.EncodePageCursor(foundation.PageCursor{Scope: request.Scope, Name: last.Name})
+		result.NextCursor = cursor
+	}
+	return result, nil
+}
+
+func minRepositoryPage(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func (s *Store) FindRepository(ctx context.Context, projectID foundation.ID, name string) (*registrydomain.Repository, error) {
 	model := new(repositoryModel)
 	if err := s.db.NewSelect().Model(model).

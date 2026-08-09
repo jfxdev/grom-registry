@@ -16,3 +16,8 @@ type Repository interface {
 	DeleteMembership(ctx context.Context, projectID foundation.ID, principal foundation.PrincipalRef) error
 	FindMembership(ctx context.Context, projectID foundation.ID, principal foundation.PrincipalRef) (*Membership, error)
 }
+
+type PagedRepository interface {
+	ListProjectsPageForPrincipal(ctx context.Context, principal foundation.PrincipalRef, systemAdmin bool, request foundation.PageRequest) (foundation.PageResult[Project], error)
+	ListMembershipsPage(ctx context.Context, projectID foundation.ID, request foundation.PageRequest) (foundation.PageResult[Membership], error)
+}

@@ -11,13 +11,14 @@ import { writeClipboardText } from '@/shared/lib/clipboard'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Check, CircleCheck, CircleOff, Copy, Eye, KeyRound, Plus, Search, ShieldAlert, UserRound, X } from '@lucide/vue'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { createUser, createUserPasswordResetLink, disableUser, listUsers, promoteUserToSystemAdmin, promoteUserToSystemViewer, userKeys } from '../api/users'
 
 const queryClient = useQueryClient()
 const session = useSessionStore()
 const pagination = useCursorPagination()
-const users = useQuery({ queryKey: computed(() => [...userKeys.all, pagination.cursor.value]), queryFn: () => listUsers(pagination.cursor.value) })
+const searchQuery = ref('')
+const users = useQuery({ queryKey: computed(() => userKeys.list(searchQuery.value.trim(), pagination.cursor.value)), queryFn: () => listUsers(searchQuery.value.trim(), pagination.cursor.value) })
 const modalOpen = ref(false)
 const email = ref('')
 const username = ref('')
@@ -31,7 +32,6 @@ const resetLink = ref('')
 const resetExpiresAt = ref('')
 const copied = ref(false)
 const copyError = ref('')
-const searchQuery = ref('')
 const disableTarget = ref<User | null>(null)
 const disableError = ref('')
 const promoteTarget = ref<User | null>(null)
@@ -39,14 +39,9 @@ const promoteError = ref('')
 const viewerTarget = ref<User | null>(null)
 const viewerError = ref('')
 const currentPageUserCount = computed(() => pageItems(users.data.value).length)
-const filteredUsers = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase()
-  if (!query) return pageItems(users.data.value)
+const filteredUsers = computed(() => pageItems(users.data.value))
 
-  return pageItems(users.data.value).filter((user) =>
-    user.username.toLocaleLowerCase().includes(query) || user.email.toLocaleLowerCase().includes(query),
-  )
-})
+watch(searchQuery, () => pagination.reset())
 
 const create = useMutation({
   mutationFn: createUser,
@@ -238,7 +233,7 @@ async function copyRegistrationLink() {
             />
           </div>
           <span v-if="!users.isLoading.value" class="list-count">
-            {{ searchQuery.trim() ? `${filteredUsers.length} of ${currentPageUserCount} on this page` : `${currentPageUserCount} on this page` }}
+            {{ `${currentPageUserCount} on this page` }}
           </span>
         </div>
       </div>
@@ -246,17 +241,17 @@ async function copyRegistrationLink() {
       <div v-if="users.isLoading.value" class="empty-state list-empty-state" role="status">
         <p class="text-sm text-muted-foreground">Loading users…</p>
       </div>
-      <div v-else-if="!currentPageUserCount" class="empty-state list-empty-state">
-        <div>
-          <UserRound class="mx-auto mb-3 text-accent" :size="28" />
-          <p class="font-medium text-foreground">No users yet</p>
-        </div>
-      </div>
-      <div v-else-if="!filteredUsers.length" class="empty-state list-empty-state">
+      <div v-else-if="!currentPageUserCount && searchQuery.trim()" class="empty-state list-empty-state">
         <div>
           <Search class="mx-auto mb-3 text-accent" :size="28" />
           <p class="font-medium text-foreground">No matching users</p>
           <p class="mt-1 text-sm">Try a different username or email.</p>
+        </div>
+      </div>
+      <div v-else-if="!currentPageUserCount" class="empty-state list-empty-state">
+        <div>
+          <UserRound class="mx-auto mb-3 text-accent" :size="28" />
+          <p class="font-medium text-foreground">No users yet</p>
         </div>
       </div>
       <template v-else>
@@ -295,7 +290,6 @@ async function copyRegistrationLink() {
       </template>
       <PaginationControls
         :page="pagination.page.value"
-        :page-count="users.data.value?.pageCount ?? 0"
         :has-previous="pagination.hasPrevious.value"
         :has-next="Boolean(users.data.value?.nextCursor)"
         :disabled="users.isFetching.value"

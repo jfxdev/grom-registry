@@ -28,12 +28,14 @@ coleta de blobs continua uma operação distinta.
 
 `backend/internal/foundation/pagination.go` define os tipos independentes de
 persistência e transporte `PageRequest`, `PageResult[T]` e `PageCursor`.
-Backups já expõem paginação opaca e fixa em cinco recovery points. As listas
-administrativas e de repositórios já possuem a primeira entrega de cursor.
-Tags, inventário de manifests, histórico de exclusões e execuções de lifecycle
-agora usam páginas: tags delegam a continuação para Distribution e as três
-listas persistidas usam keyset por timestamp/ID. A ampliação da aceitação
-Playwright destrutiva permanece pendente.
+Backups já expõem paginação opaca e fixa em cinco recovery points. Usuários,
+service accounts, access keys e projetos usam keyset por timestamp/ID;
+memberships usam a chave ordenada do principal. Busca e status administrativos
+são aplicados pelo servidor antes da página. Tags, inventário de
+manifests, histórico de exclusões e execuções de lifecycle também usam páginas:
+tags e catálogo delegam a continuação para Distribution sem vazar o cabeçalho
+`Link`; as três listas persistidas usam keyset por timestamp/ID. A ampliação
+da aceitação Playwright destrutiva permanece pendente.
 
 O Playwright já tem uma jornada pública instalada em
 `frontend/e2e/admin-journey.spec.ts`: ele inicia um projeto Compose isolado,

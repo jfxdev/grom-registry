@@ -161,7 +161,6 @@ function closeSecret() {
     </div>
     <PaginationControls
       :page="pagination.page.value"
-      :page-count="keys.data.value?.pageCount ?? 0"
       :has-previous="pagination.hasPrevious.value"
       :has-next="Boolean(keys.data.value?.nextCursor)"
       :disabled="keys.isFetching.value"

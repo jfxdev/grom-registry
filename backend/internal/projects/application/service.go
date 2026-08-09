@@ -66,6 +66,14 @@ func (s *Service) List(ctx context.Context, actor foundation.PrincipalRef, syste
 	return s.repository.ListProjectsForPrincipal(ctx, actor, systemAdmin)
 }
 
+func (s *Service) ListPage(ctx context.Context, actor foundation.PrincipalRef, systemAdmin bool, request foundation.PageRequest) (foundation.PageResult[projectdomain.Project], error) {
+	paged, ok := s.repository.(projectdomain.PagedRepository)
+	if !ok {
+		return foundation.PageResult[projectdomain.Project]{}, errors.New("project pagination is not configured")
+	}
+	return paged.ListProjectsPageForPrincipal(ctx, actor, systemAdmin, request)
+}
+
 func (s *Service) Find(ctx context.Context, slug string) (*projectdomain.Project, error) {
 	return s.repository.FindProjectBySlug(ctx, slug)
 }
@@ -103,6 +111,24 @@ func (s *Service) ListMemberships(ctx context.Context, actor foundation.Principa
 		}
 	}
 	return s.repository.ListMemberships(ctx, project.ID)
+}
+
+func (s *Service) ListMembershipsPage(ctx context.Context, actor foundation.PrincipalRef, systemAdmin bool, slug string, request foundation.PageRequest) (foundation.PageResult[projectdomain.Membership], error) {
+	project, err := s.repository.FindProjectBySlug(ctx, slug)
+	if err != nil {
+		return foundation.PageResult[projectdomain.Membership]{}, err
+	}
+	if !systemAdmin {
+		membership, findErr := s.repository.FindMembership(ctx, project.ID, actor)
+		if findErr != nil || membership.Role != constants.RoleAdmin {
+			return foundation.PageResult[projectdomain.Membership]{}, errors.New("project administrator permission required")
+		}
+	}
+	paged, ok := s.repository.(projectdomain.PagedRepository)
+	if !ok {
+		return foundation.PageResult[projectdomain.Membership]{}, errors.New("project pagination is not configured")
+	}
+	return paged.ListMembershipsPage(ctx, project.ID, request)
 }
 
 func (s *Service) SetMembership(ctx context.Context, actor foundation.PrincipalRef, systemAdmin bool, slug string, principal foundation.PrincipalRef, role string) error {

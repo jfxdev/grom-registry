@@ -53,8 +53,7 @@ func pageResult[T any](r *http.Request, scope string, values []T) (foundation.Pa
 	if end > len(values) {
 		end = len(values)
 	}
-	pageCount := (len(values) + request.Limit - 1) / request.Limit
-	result := foundation.PageResult[T]{Items: values[offset:end], PageCount: pageCount}
+	result := foundation.PageResult[T]{Items: values[offset:end]}
 	if end < len(values) {
 		result.NextCursor, _ = foundation.EncodePageCursor(foundation.PageCursor{Scope: scope, Offset: end})
 	}

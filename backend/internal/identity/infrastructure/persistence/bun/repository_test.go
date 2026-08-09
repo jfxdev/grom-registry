@@ -52,6 +52,53 @@ func TestListServiceAccountsCanIncludeDisabledAccounts(t *testing.T) {
 	})
 }
 
+func TestAdministrativePagesFilterAndAdvanceWithKeysets(t *testing.T) {
+	ctx := context.Background()
+	db := openSQLiteRepositoryTestDB(t)
+	for _, statement := range []string{
+		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, is_system_admin BOOLEAN NOT NULL, is_system_viewer BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
+		`CREATE TABLE service_accounts (id TEXT PRIMARY KEY, name TEXT NOT NULL, username TEXT NOT NULL, description TEXT NOT NULL, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
+	} {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repository := New(db)
+	base := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	for i, user := range []identity.User{
+		{ID: foundation.ID("user-one"), Email: "alex@example.com", Username: "alex", PasswordHash: "hash", CreatedAt: base},
+		{ID: foundation.ID("user-two"), Email: "sam@example.com", Username: "sam", PasswordHash: "hash", CreatedAt: base.Add(time.Minute)},
+	} {
+		if err := repository.CreateUser(ctx, &user); err != nil {
+			t.Fatalf("user %d: %v", i, err)
+		}
+	}
+	first, err := repository.ListUsersPage(ctx, "example", foundation.PageRequest{Limit: 1, Scope: "users:q=example"})
+	if err != nil || len(first.Items) != 1 || first.Items[0].Username != "sam" || first.NextCursor == "" {
+		t.Fatalf("first user page: %#v, %v", first, err)
+	}
+	second, err := repository.ListUsersPage(ctx, "example", foundation.PageRequest{Limit: 1, Scope: "users:q=example", Cursor: first.NextCursor})
+	if err != nil || len(second.Items) != 1 || second.Items[0].Username != "alex" {
+		t.Fatalf("second user page: %#v, %v", second, err)
+	}
+
+	active := &identity.ServiceAccount{ID: foundation.ID("active"), Name: "Build", Username: "build", Description: "CI", CreatedAt: base}
+	disabled := &identity.ServiceAccount{ID: foundation.ID("disabled"), Name: "Mirror", Username: "mirror", Description: "sync", CreatedAt: base.Add(time.Minute)}
+	if err := repository.CreateServiceAccount(ctx, active); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.CreateServiceAccount(ctx, disabled); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.DisableServiceAccount(ctx, disabled.ID); err != nil {
+		t.Fatal(err)
+	}
+	accounts, err := repository.ListServiceAccountsPage(ctx, "mirror", "disabled", foundation.PageRequest{Limit: 1, Scope: "service-accounts:status=disabled:q=mirror"})
+	if err != nil || len(accounts.Items) != 1 || accounts.Items[0].ID != disabled.ID {
+		t.Fatalf("filtered accounts: %#v, %v", accounts, err)
+	}
+}
+
 func TestDisableUserRevokesSessionsAtomically(t *testing.T) {
 	ctx := context.Background()
 	db := openSQLiteRepositoryTestDB(t)

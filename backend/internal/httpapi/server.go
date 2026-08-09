@@ -479,12 +479,18 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	if !requireSystemAdmin(w, r) {
 		return
 	}
-	users, err := s.identity.ListUsers(r.Context())
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	request, _, err := pageRequest(r, "users:q="+strings.ToLower(query))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	users, err := s.identity.ListUsersPage(r.Context(), query, request)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	writePage(w, r, "users", users)
+	writeJSON(w, http.StatusOK, users)
 }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
@@ -654,13 +660,26 @@ func (s *Server) listServiceAccounts(w http.ResponseWriter, r *http.Request) {
 	if !requireSystemAdmin(w, r) {
 		return
 	}
-	includeDisabled := r.URL.Query().Get("includeDisabled") == "true"
-	accounts, err := s.identity.ListServiceAccounts(r.Context(), includeDisabled)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		status = "active"
+	}
+	if status != "active" && status != "disabled" && status != "all" {
+		writeError(w, r, http.StatusBadRequest, "invalid_status", "Status must be active, disabled, or all")
+		return
+	}
+	request, _, err := pageRequest(r, "service-accounts:status="+status+":q="+strings.ToLower(query))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	accounts, err := s.identity.ListServiceAccountsPage(r.Context(), query, status, request)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	writePage(w, r, "service-accounts:include-disabled="+r.URL.Query().Get("includeDisabled"), accounts)
+	writeJSON(w, http.StatusOK, accounts)
 }
 
 func (s *Server) createServiceAccount(w http.ResponseWriter, r *http.Request) {
@@ -700,12 +719,18 @@ func (s *Server) listServiceAccountTokens(w http.ResponseWriter, r *http.Request
 	if !requireSystemAdmin(w, r) {
 		return
 	}
-	tokens, err := s.identity.ListServiceAccountAPITokens(r.Context(), foundation.ID(chi.URLParam(r, "id")))
+	accountID := foundation.ID(chi.URLParam(r, "id"))
+	request, _, err := pageRequest(r, "service-account-tokens:"+accountID.String())
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	tokens, err := s.identity.ListServiceAccountAPITokensPage(r.Context(), accountID, request)
 	if err != nil {
 		writeError(w, r, http.StatusNotFound, "not_found", "Service account not found")
 		return
 	}
-	writePage(w, r, "service-account-tokens:"+chi.URLParam(r, "id"), tokens)
+	writeJSON(w, http.StatusOK, tokens)
 }
 
 func (s *Server) createServiceAccountToken(w http.ResponseWriter, r *http.Request) {
@@ -748,12 +773,17 @@ func (s *Server) revokeServiceAccountToken(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
-	projects, err := s.projects.List(r.Context(), principalForUser(user), user.SystemAdmin)
+	request, _, err := pageRequest(r, "projects:"+user.ID.String())
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	projects, err := s.projects.ListPage(r.Context(), principalForUser(user), user.SystemAdmin, request)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	writePage(w, r, "projects:"+user.ID.String(), projects)
+	writeJSON(w, http.StatusOK, projects)
 }
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
@@ -831,12 +861,18 @@ func (s *Server) listMemberships(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer accounts cannot access user memberships")
 		return
 	}
-	memberships, err := s.projects.ListMemberships(r.Context(), principalForUser(user), user.SystemAdmin, chi.URLParam(r, "project"))
+	projectSlug := chi.URLParam(r, "project")
+	request, _, pageErr := pageRequest(r, "memberships:"+projectSlug)
+	if pageErr != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	memberships, err := s.projects.ListMembershipsPage(r.Context(), principalForUser(user), user.SystemAdmin, projectSlug, request)
 	if err != nil {
 		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	writePage(w, r, "memberships:"+chi.URLParam(r, "project"), memberships)
+	writeJSON(w, http.StatusOK, memberships)
 }
 
 func (s *Server) setMembership(w http.ResponseWriter, r *http.Request) {
@@ -888,18 +924,44 @@ func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
 		return
 	}
-	discovered, err := s.distributionClient.ListProjectRepositories(r.Context(), project.Slug)
-	catalogAvailable := err == nil
+	scope := "repositories:" + project.Slug
+	request, _, pageErr := pageRequest(r, scope)
+	if pageErr != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	marker := ""
+	if request.Cursor != "" {
+		cursor, decodeErr := foundation.DecodePageCursor(request.Cursor, scope)
+		if decodeErr != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+			return
+		}
+		marker = cursor.Marker
+	}
+	discovered, err := s.distributionClient.ListProjectRepositoriesPage(r.Context(), project.Slug, request.Limit, marker)
 	if err != nil {
 		s.logger.Warn("distribution catalog unavailable", "error", err)
-		discovered = nil
+		discovered = &distribution.ProjectRepositoryPage{}
 	}
-	repositories, err := s.repositories.List(r.Context(), project.ID, discovered, catalogAvailable)
+	if err := s.repositories.ReconcileDiscoveredPage(r.Context(), project.ID, discovered.Repositories); err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	repositories, err := s.repositories.ListPage(r.Context(), project.ID, request)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	writePage(w, r, "repositories:"+project.Slug, repositories)
+	if repositories.NextCursor != "" || discovered.NextMarker != "" {
+		cursor := foundation.PageCursor{Scope: scope, Marker: discovered.NextMarker}
+		if repositories.NextCursor != "" {
+			decoded, _ := foundation.DecodePageCursor(repositories.NextCursor, scope)
+			cursor.Name = decoded.Name
+		}
+		repositories.NextCursor, _ = foundation.EncodePageCursor(cursor)
+	}
+	writeJSON(w, http.StatusOK, repositories)
 }
 
 func (s *Server) getRepository(w http.ResponseWriter, r *http.Request) {

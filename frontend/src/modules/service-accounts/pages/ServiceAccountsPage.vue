@@ -9,7 +9,7 @@ import { PaginationControls } from '@/shared/components/ui/pagination'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Bot, ChevronDown, KeyRound, Plus, Search, X } from '@lucide/vue'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import ServiceAccountKeysPanel from '../components/ServiceAccountKeysPanel.vue'
 import {
   createServiceAccount,
@@ -21,32 +21,25 @@ import {
 const queryClient = useQueryClient()
 const session = useSessionStore()
 const pagination = useCursorPagination()
-const accounts = useQuery({ queryKey: computed(() => [...serviceAccountKeys.list(true), pagination.cursor.value]), queryFn: () => listServiceAccounts(true, pagination.cursor.value) })
+const searchQuery = ref('')
+const statusFilter = ref<'active' | 'disabled' | 'all'>('active')
+const accounts = useQuery({
+  queryKey: computed(() => serviceAccountKeys.list(searchQuery.value.trim(), statusFilter.value, pagination.cursor.value)),
+  queryFn: () => listServiceAccounts(searchQuery.value.trim(), statusFilter.value, pagination.cursor.value),
+})
 const modalOpen = ref(false)
 const selectedAccountId = ref<string | null>(null)
 const name = ref('')
 const username = ref('')
 const description = ref('')
 const error = ref('')
-const searchQuery = ref('')
-const statusFilter = ref<'active' | 'disabled' | 'all'>('active')
 const disableTarget = ref<ServiceAccount | null>(null)
 const disableConfirmation = ref('')
 const disableError = ref('')
-const statusAccounts = computed(() => pageItems(accounts.data.value).filter((account) => {
-  if (statusFilter.value === 'all') return true
-  return statusFilter.value === 'disabled' ? Boolean(account.disabledAt) : !account.disabledAt
-}))
-const filteredAccounts = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase()
-  if (!query) return statusAccounts.value
+const statusAccounts = computed(() => pageItems(accounts.data.value))
+const filteredAccounts = computed(() => statusAccounts.value)
 
-  return statusAccounts.value.filter((account) =>
-    account.name.toLocaleLowerCase().includes(query)
-      || account.username.toLocaleLowerCase().includes(query)
-      || account.description.toLocaleLowerCase().includes(query),
-  )
-})
+watch([searchQuery, statusFilter], () => pagination.reset())
 
 const create = useMutation({
   mutationFn: createServiceAccount,
@@ -131,7 +124,7 @@ function confirmDisable() {
             />
           </div>
           <span v-if="!accounts.isLoading.value" class="list-count">
-            {{ searchQuery.trim() ? `${filteredAccounts.length} of ${statusAccounts.length} on this page` : `${statusAccounts.length} on this page` }}
+            {{ `${statusAccounts.length} on this page` }}
           </span>
         </div>
       </div>
@@ -139,19 +132,19 @@ function confirmDisable() {
       <div v-if="accounts.isLoading.value" class="empty-state list-empty-state" role="status">
         <p class="text-sm text-muted-foreground">Loading service accounts…</p>
       </div>
+      <div v-else-if="!statusAccounts.length && searchQuery.trim()" class="empty-state list-empty-state">
+        <div>
+          <Search class="mx-auto mb-3 text-accent" :size="28" />
+          <p class="font-medium text-foreground">No matching service accounts</p>
+          <p class="mt-1 text-sm">Try a different name, username or description.</p>
+        </div>
+      </div>
       <div v-else-if="!statusAccounts.length" class="empty-state list-empty-state">
         <div>
           <Bot class="mx-auto mb-3 text-accent" :size="28" />
           <p class="font-medium text-foreground">
             {{ statusFilter === 'disabled' ? 'No disabled service accounts' : statusFilter === 'active' ? 'No active service accounts' : 'No service accounts' }}
           </p>
-        </div>
-      </div>
-      <div v-else-if="!filteredAccounts.length" class="empty-state list-empty-state">
-        <div>
-          <Search class="mx-auto mb-3 text-accent" :size="28" />
-          <p class="font-medium text-foreground">No matching service accounts</p>
-          <p class="mt-1 text-sm">Try a different name, username or description.</p>
         </div>
       </div>
       <template v-else>
@@ -191,7 +184,6 @@ function confirmDisable() {
       </template>
       <PaginationControls
         :page="pagination.page.value"
-        :page-count="accounts.data.value?.pageCount ?? 0"
         :has-previous="pagination.hasPrevious.value"
         :has-next="Boolean(accounts.data.value?.nextCursor)"
         :disabled="accounts.isFetching.value"

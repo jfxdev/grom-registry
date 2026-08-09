@@ -22,7 +22,7 @@ vi.mock('../api/users', () => ({
   listUsers: mocks.listUsers,
   promoteUserToSystemAdmin: mocks.promoteUserToSystemAdmin,
   promoteUserToSystemViewer: mocks.promoteUserToSystemViewer,
-  userKeys: { all: ['users'] },
+  userKeys: { all: ['users'], list: (query: string, cursor = '') => ['users', query, cursor] },
 }))
 
 vi.mock('@/modules/auth/store/session', () => ({
@@ -48,8 +48,7 @@ describe('UsersPage', () => {
     mocks.listUsers.mockReset()
     mocks.promoteUserToSystemAdmin.mockReset()
     mocks.promoteUserToSystemViewer.mockReset()
-    mocks.listUsers.mockResolvedValue({
-      items: [
+    const items = [
         {
           id: 'user-1',
           email: 'alex@example.com',
@@ -64,9 +63,11 @@ describe('UsersPage', () => {
           systemAdmin: false,
           createdAt: '2026-07-29T10:00:00Z',
         },
-      ],
+    ]
+    mocks.listUsers.mockImplementation((query = '') => Promise.resolve({
+      items: items.filter((user) => `${user.username} ${user.email}`.toLowerCase().includes(query.toLowerCase())),
       pageCount: 1,
-    })
+    }))
   })
 
   it('shows a loading state before users resolve', () => {
@@ -83,11 +84,13 @@ describe('UsersPage', () => {
 
     const search = wrapper.get('input[aria-label="Search users"]')
     await search.setValue('ALEX')
+    await flushPromises()
     expect(wrapper.text()).toContain('alex@example.com')
     expect(wrapper.text()).not.toContain('sam@registry.test')
-    expect(wrapper.text()).toContain('1 of 2 on this page')
+    expect(wrapper.text()).toContain('1 on this page')
 
     await search.setValue('registry.test')
+    await flushPromises()
     expect(wrapper.text()).toContain('sam@registry.test')
     expect(wrapper.text()).not.toContain('alex@example.com')
   })
@@ -97,9 +100,10 @@ describe('UsersPage', () => {
     await flushPromises()
 
     await wrapper.get('input[aria-label="Search users"]').setValue('missing')
+    await flushPromises()
 
     expect(wrapper.text()).toContain('No matching users')
-    expect(wrapper.text()).toContain('0 of 2 on this page')
+    expect(wrapper.text()).toContain('0 on this page')
   })
 
   it('labels the loaded users as the current page rather than a global total', async () => {

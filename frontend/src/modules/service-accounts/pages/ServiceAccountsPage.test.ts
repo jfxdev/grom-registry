@@ -25,7 +25,7 @@ vi.mock('../api/serviceAccounts', () => ({
   listServiceAccounts: mocks.listServiceAccounts,
   serviceAccountKeys: {
     all: ['service-accounts'],
-    list: (includeDisabled = false) => ['service-accounts', includeDisabled ? 'all' : 'active'],
+    list: (query = '', status = 'active', cursor = '') => ['service-accounts', query, status, cursor],
     tokens: (id: string) => ['service-accounts', id, 'tokens'],
   },
 }))
@@ -48,7 +48,7 @@ describe('ServiceAccountsPage', () => {
     mocks.disableServiceAccount.mockReset()
     mocks.disableServiceAccount.mockResolvedValue(undefined)
     mocks.listServiceAccounts.mockReset()
-    mocks.listServiceAccounts.mockResolvedValue([
+    const items = [
       {
         id: 'account-1',
         name: 'Payments CI',
@@ -64,7 +64,14 @@ describe('ServiceAccountsPage', () => {
         createdAt: '2026-07-29T10:00:00Z',
         disabledAt: '2026-07-29T12:00:00Z',
       },
-    ])
+    ]
+    mocks.listServiceAccounts.mockImplementation((query = '', status = 'active') => Promise.resolve({
+      items: items.filter((account) => {
+        const matchesStatus = status === 'all' || (status === 'disabled' ? Boolean(account.disabledAt) : !account.disabledAt)
+        return matchesStatus && `${account.name} ${account.username} ${account.description}`.toLowerCase().includes(query.toLowerCase())
+      }),
+      pageCount: 1,
+    }))
   })
 
   it('shows a loading state before service accounts resolve', () => {
@@ -86,12 +93,14 @@ describe('ServiceAccountsPage', () => {
 
     const search = wrapper.get('input[aria-label="Search service accounts"]')
     await search.setValue('CI-PAYMENTS')
+    await flushPromises()
     expect(wrapper.text()).toContain('Payments CI')
     expect(wrapper.text()).not.toContain('Registry mirror')
-    expect(wrapper.text()).toContain('1 of 1 on this page')
+    expect(wrapper.text()).toContain('1 on this page')
 
     await wrapper.get('select[aria-label="Filter service accounts by status"]').setValue('disabled')
     await search.setValue('base images')
+    await flushPromises()
     expect(wrapper.text()).toContain('Registry mirror')
     expect(wrapper.text()).not.toContain('Payments CI')
     expect(wrapper.text()).toContain('Disabled')
@@ -102,9 +111,10 @@ describe('ServiceAccountsPage', () => {
     await flushPromises()
 
     await wrapper.get('input[aria-label="Search service accounts"]').setValue('missing')
+    await flushPromises()
 
     expect(wrapper.text()).toContain('No matching service accounts')
-    expect(wrapper.text()).toContain('0 of 1 on this page')
+    expect(wrapper.text()).toContain('0 on this page')
   })
 
   it('requires the exact service account name before disabling it', async () => {

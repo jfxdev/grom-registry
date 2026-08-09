@@ -3,12 +3,17 @@ import type { APITokenPage, CreatedToken, ServiceAccount, ServiceAccountPage } f
 
 export const serviceAccountKeys = {
   all: ['service-accounts'] as const,
-  list: (includeDisabled = false) => ['service-accounts', includeDisabled ? 'all' : 'active'] as const,
+  list: (query = '', status: 'active' | 'disabled' | 'all' = 'active', cursor = '') =>
+    ['service-accounts', query, status, cursor] as const,
   tokens: (serviceAccountId: string) => ['service-accounts', serviceAccountId, 'tokens'] as const,
 }
 
-export const listServiceAccounts = (includeDisabled = false, cursor = '') =>
-  apiRequest<ServiceAccountPage>(`/api/v1/service-accounts?includeDisabled=${includeDisabled}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+export const listServiceAccounts = (query = '', status: 'active' | 'disabled' | 'all' = 'active', cursor = '') => {
+  const params = new URLSearchParams({ status })
+  if (query) params.set('q', query)
+  if (cursor) params.set('cursor', cursor)
+  return apiRequest<ServiceAccountPage>(`/api/v1/service-accounts?${params}`)
+}
 export const createServiceAccount = (input: { name: string; username: string; description: string }) =>
   apiRequest<ServiceAccount>('/api/v1/service-accounts', { method: 'POST', body: JSON.stringify(input) })
 export const disableServiceAccount = (id: string) =>

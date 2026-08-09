@@ -40,14 +40,11 @@ func TestPageRequestRejectsInvalidLimit(t *testing.T) {
 	}
 }
 
-func TestPageResultReportsTotalPagesAndRejectsOutOfRangeCursor(t *testing.T) {
+func TestPageResultRejectsOutOfRangeCursor(t *testing.T) {
 	values := []string{"one", "two", "three", "four", "five"}
-	first, err := pageResult(httptest.NewRequest("GET", "/?limit=2", nil), "users", values)
+	_, err := pageResult(httptest.NewRequest("GET", "/?limit=2", nil), "users", values)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if first.PageCount != 3 {
-		t.Fatalf("page count = %d, want 3", first.PageCount)
 	}
 	if _, err := pageResult(httptest.NewRequest("GET", "/?cursor=eyJ2IjoxLCJzIjoidXNlcnMiLCJvIjo2fQ", nil), "users", values); err == nil {
 		t.Fatal("expected out-of-range cursor to be rejected")

@@ -194,6 +194,27 @@ func (s *RepositoryService) List(
 	return repositories, nil
 }
 
+// ReconcileDiscoveredPage imports just the catalog slice observed for the
+// current response. It deliberately does not mark unseen repositories empty:
+// an upstream catalog continuation is not a complete reconciliation.
+func (s *RepositoryService) ReconcileDiscoveredPage(ctx context.Context, projectID foundation.ID, discovered []string) error {
+	for _, rawName := range discovered {
+		name := strings.TrimSpace(rawName)
+		if !repositoryNamePattern.MatchString(name) {
+			continue
+		}
+		now := time.Now().UTC()
+		if err := s.store.UpsertDiscoveredRepository(ctx, &registrydomain.Repository{ID: foundation.NewID(), ProjectID: projectID, Name: name, Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationReconciled, Profile: constants.RepositoryProfileUnknown, ProfileSource: constants.ProfileSourceNone, ProfileConfidence: constants.ClassificationConfidenceNone, CreatedAt: now, UpdatedAt: now}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *RepositoryService) ListPage(ctx context.Context, projectID foundation.ID, request foundation.PageRequest) (foundation.PageResult[registrydomain.Repository], error) {
+	return s.store.ListRepositoriesPage(ctx, projectID, request)
+}
+
 func (s *RepositoryService) Find(ctx context.Context, projectID foundation.ID, name string) (*registrydomain.Repository, error) {
 	return s.store.FindRepository(ctx, projectID, name)
 }

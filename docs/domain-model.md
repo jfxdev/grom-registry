@@ -12,7 +12,7 @@ Target package: `backend/internal/foundation`.
 | `ID` | Application-generated portable identifier | String UUID value |
 | `PrincipalRef` | Reference to a user or service account across contexts | Principal kind and ID |
 | `PageRequest` | Validated pagination input | Cursor and limit |
-| `PageResult[T]` | Generic paginated result | Items and next cursor |
+| `PageResult[T]` | Generic paginated result | Items and optional next cursor; never a total or page count |
 | `PageCursor` | Opaque, scope-bound continuation token | Scope plus legacy offset, keyset boundary, or upstream marker |
 | `Timestamps` | Common creation/update metadata where both are meaningful | CreatedAt and UpdatedAt |
 | `FieldError` | Stable field-level validation failure | Field, code, message |

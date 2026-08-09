@@ -76,6 +76,38 @@ func TestListProjectRepositoriesFollowsCatalogPagination(t *testing.T) {
 	}
 }
 
+func TestListProjectRepositoriesPageFiltersAndReturnsOnlyOpaqueMarker(t *testing.T) {
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if got := r.URL.Query().Get("n"); got != "2" {
+			t.Errorf("page size = %q", got)
+		}
+		if got := r.URL.Query().Get("last"); got != "project/previous" {
+			t.Errorf("marker = %q", got)
+		}
+		header := make(http.Header)
+		header.Set("Link", `</v2/_catalog?n=2&last=project%2Ftwo>; rel="next"`)
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(`{"repositories":["project/one","other/ignored"]}`)), Request: r}, nil
+	})
+	temp := t.TempDir()
+	signer, err := signing.LoadOrCreate(temp+"/key.pem", temp+"/cert.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient("http://distribution.local", registryapp.NewTokenService(nil, nil, signer, time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = transport
+
+	page, err := client.ListProjectRepositoriesPage(context.Background(), "project", 2, "project/previous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Repositories) != 1 || page.Repositories[0] != "one" || page.NextMarker != "project/two" {
+		t.Fatalf("unexpected page: %#v", page)
+	}
+}
+
 func TestListTagsPageReturnsOnlyTheRequestedDistributionPage(t *testing.T) {
 	var requests atomic.Int32
 	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {

@@ -134,7 +134,6 @@ function submitCreate() {
       </div>
       <PaginationControls
         :page="pagination.page.value"
-        :page-count="projects.data.value?.pageCount ?? 0"
         :has-previous="pagination.hasPrevious.value"
         :has-next="Boolean(projects.data.value?.nextCursor)"
         :disabled="projects.isFetching.value"
