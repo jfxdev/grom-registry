@@ -48,22 +48,25 @@ describe('UsersPage', () => {
     mocks.listUsers.mockReset()
     mocks.promoteUserToSystemAdmin.mockReset()
     mocks.promoteUserToSystemViewer.mockReset()
-    mocks.listUsers.mockResolvedValue([
-      {
-        id: 'user-1',
-        email: 'alex@example.com',
-        username: 'alex',
-        systemAdmin: true,
-        createdAt: '2026-07-29T10:00:00Z',
-      },
-      {
-        id: 'user-2',
-        email: 'sam@registry.test',
-        username: 'sam',
-        systemAdmin: false,
-        createdAt: '2026-07-29T10:00:00Z',
-      },
-    ])
+    mocks.listUsers.mockResolvedValue({
+      items: [
+        {
+          id: 'user-1',
+          email: 'alex@example.com',
+          username: 'alex',
+          systemAdmin: true,
+          createdAt: '2026-07-29T10:00:00Z',
+        },
+        {
+          id: 'user-2',
+          email: 'sam@registry.test',
+          username: 'sam',
+          systemAdmin: false,
+          createdAt: '2026-07-29T10:00:00Z',
+        },
+      ],
+      pageCount: 1,
+    })
   })
 
   it('shows a loading state before users resolve', () => {
@@ -140,6 +143,12 @@ describe('UsersPage', () => {
     expect(wrapper.text()).toContain('User')
     await roleButton.trigger('click')
     expect(wrapper.get('[role="menu"]').text()).toContain('Viewer')
+    await wrapper.findAll('[role="menuitem"]').find((item) => item.text().includes('Viewer'))!.trigger('click')
+    mocks.promoteUserToSystemViewer.mockResolvedValueOnce(undefined)
+    await wrapper.get('form[aria-labelledby="promote-viewer-title"]').trigger('submit')
+    expect(mocks.promoteUserToSystemViewer).toHaveBeenCalledWith('user-2')
+
+    await roleButton.trigger('click')
     await wrapper.findAll('[role="menuitem"]').find((item) => item.text().includes('Administrator'))!.trigger('click')
     expect(wrapper.text()).toContain('Make sam an administrator?')
     mocks.promoteUserToSystemAdmin.mockResolvedValueOnce(undefined)
@@ -148,10 +157,13 @@ describe('UsersPage', () => {
   })
 
   it('offers only promotion to administrator for viewers', async () => {
-    mocks.listUsers.mockResolvedValueOnce([{
-      id: 'viewer-1', email: 'viewer@example.com', username: 'viewer', systemAdmin: false, systemViewer: true,
-      createdAt: '2026-08-08T00:00:00Z',
-    }])
+    mocks.listUsers.mockResolvedValueOnce({
+      items: [{
+        id: 'viewer-1', email: 'viewer@example.com', username: 'viewer', systemAdmin: false, systemViewer: true,
+        createdAt: '2026-08-08T00:00:00Z',
+      }],
+      pageCount: 1,
+    })
     const wrapper = mountPage()
     await flushPromises()
 
@@ -159,6 +171,10 @@ describe('UsersPage', () => {
     const roleMenu = wrapper.get('[role="menu"]')
     expect(roleMenu.text()).not.toContain('Viewer')
     expect(roleMenu.text()).toContain('Administrator')
+    await roleMenu.find('[role="menuitem"]').trigger('click')
+    mocks.promoteUserToSystemAdmin.mockResolvedValueOnce(undefined)
+    await wrapper.get('form[aria-labelledby="promote-user-title"]').trigger('submit')
+    expect(mocks.promoteUserToSystemAdmin).toHaveBeenCalledWith('viewer-1')
   })
 
   it.each([
@@ -178,10 +194,13 @@ describe('UsersPage', () => {
   })
 
   it('does not offer password reset or disable actions for disabled users', async () => {
-    mocks.listUsers.mockResolvedValueOnce([{
-      id: 'user-3', email: 'disabled@example.com', username: 'disabled', systemAdmin: false,
-      createdAt: '2026-07-29T10:00:00Z', disabledAt: '2026-07-30T10:00:00Z',
-    }])
+    mocks.listUsers.mockResolvedValueOnce({
+      items: [{
+        id: 'user-3', email: 'disabled@example.com', username: 'disabled', systemAdmin: false,
+        createdAt: '2026-07-29T10:00:00Z', disabledAt: '2026-07-30T10:00:00Z',
+      }],
+      pageCount: 1,
+    })
     const wrapper = mountPage()
     await flushPromises()
 
@@ -191,10 +210,13 @@ describe('UsersPage', () => {
   })
 
   it('disables the action for the signed-in administrator account', async () => {
-    mocks.listUsers.mockResolvedValueOnce([{
-      id: 'admin-1', email: 'admin@example.com', username: 'admin', systemAdmin: true,
-      createdAt: '2026-07-29T10:00:00Z',
-    }])
+    mocks.listUsers.mockResolvedValueOnce({
+      items: [{
+        id: 'admin-1', email: 'admin@example.com', username: 'admin', systemAdmin: true,
+        createdAt: '2026-07-29T10:00:00Z',
+      }],
+      pageCount: 1,
+    })
     const wrapper = mountPage()
     await flushPromises()
 

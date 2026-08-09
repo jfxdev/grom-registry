@@ -440,7 +440,7 @@ function profileLabel(profile: Repository['profile']) {
               <Badge>{{ member.role }}</Badge>
               <div class="flex gap-1">
                 <Button variant="ghost" size="sm" @click="editMember(member.principalKind, member.principalId, member.role)">Change role</Button>
-                <Button variant="ghost" size="icon" :aria-label="`Remove ${member.principalKind} member`" @click="memberError = ''; membershipToRemove = { kind: member.principalKind, id: member.principalId }"><Trash2 :size="15" /></Button>
+                <Button variant="ghost" size="icon" :aria-label="`Remove ${member.principalKind.replace('_', ' ')} member`" @click="memberError = ''; membershipToRemove = { kind: member.principalKind, id: member.principalId }"><Trash2 :size="15" /></Button>
               </div>
             </div>
           </div>

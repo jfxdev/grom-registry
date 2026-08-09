@@ -196,9 +196,12 @@ describe('ProjectPage membership management', () => {
 
     await wrapper.get('button[aria-label="Project settings"]').trigger('click')
     await buttonWithText(wrapper, 'Add member').trigger('click')
-    await wrapper.get('form[aria-labelledby="add-member-title"]').trigger('submit')
+    const memberForm = wrapper.get('form[aria-labelledby="add-member-title"]')
+    await memberForm.findAll('select')[1]!.setValue('service-1')
+    await memberForm.trigger('submit')
     await flushPromises()
 
+    expect(mocks.setMember).toHaveBeenCalledWith('payments', 'service_account', 'service-1', 'reader')
     expect(wrapper.get('[role="alert"]').text()).toContain('Member assignment denied')
   })
 
@@ -389,6 +392,17 @@ describe('ProjectPage membership management', () => {
     await fireEvent.submit(within(removalDialog).getByRole('button', { name: 'Remove member' }).closest('form')!)
     await waitFor(() => expect(mocks.deleteMember).toHaveBeenCalledWith('payments', 'user', 'user-2'))
     expect((await screen.findByText(/Member removal denied/)).textContent).toContain('Member removal denied')
+  })
+
+  it('uses a human-readable removal label for service accounts', async () => {
+    mocks.listMembers.mockResolvedValue([{
+      principalKind: 'service_account', principalId: 'service-1', role: 'writer', createdAt: '2026-07-29T00:00:00Z',
+    }])
+    renderPage()
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Project settings' }))
+
+    expect(screen.getByRole('button', { name: 'Remove service account member' })).toBeTruthy()
   })
 
   it('shows a project-deletion error without leaving the confirmation dialog', async () => {

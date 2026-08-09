@@ -904,8 +904,12 @@ func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getRepository(w http.ResponseWriter, r *http.Request) {
 	project, err := s.projects.Find(r.Context(), chi.URLParam(r, "project"))
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
 		return
 	}
 	user := userFromContext(r.Context())

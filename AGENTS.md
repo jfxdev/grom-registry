@@ -145,6 +145,8 @@ already downloaded bundle.
   PostgreSQL test may skip only when `GROM_TEST_POSTGRES_URL` is absent; use a
   single connection and temporary tables when the migration names fixed tables
   or indexes, so it neither collides with nor mutates shared test state.
+  The `Backend Tests` CI job provisions this database and sets the URL so these
+  checks cannot be skipped in CI.
 
 ## HTTP and OpenAPI
 
