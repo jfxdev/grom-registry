@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
-defineProps<{ labelledBy: string }>()
+const props = defineProps<{
+  labelledBy: string
+  restoreFocus?: globalThis.HTMLElement | null
+}>()
 const emit = defineEmits<{ close: [] }>()
 const dialog = ref<{
   open: boolean
@@ -33,7 +36,7 @@ onBeforeUnmount(() => {
   if (dialog.value?.open && typeof dialog.value.close === 'function') {
     dialog.value.close()
   }
-  const focusTarget = previousFocusedElement.value
+  const focusTarget = props.restoreFocus ?? previousFocusedElement.value
   if (focusTarget?.isConnected) focusTarget.focus()
 })
 </script>

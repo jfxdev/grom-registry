@@ -72,6 +72,7 @@ const membershipToRemove = ref<{ kind: PrincipalKind; id: string } | null>(null)
 const copied = ref('')
 const copyError = ref('')
 const deletionPreview = ref<ArtifactDeletionPreview | null>(null)
+const deletionTrigger = ref<HTMLElement | null>(null)
 const deletionReference = ref('')
 const deletionReason = ref('')
 const deletionError = ref('')
@@ -223,6 +224,11 @@ const previewDeletion = useMutation({
     deletionError.value = caught instanceof APIError ? caught.message : 'Could not review this deletion'
   },
 })
+
+function requestArtifactDeletionPreview(event: MouseEvent, tag: string) {
+  deletionTrigger.value = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  previewDeletion.mutate(tag)
+}
 
 const confirmDeletion = useMutation({
   mutationFn: () => deleteArtifact(slug.value, {
@@ -568,7 +574,7 @@ function profileLabel(profile: Repository['profile']) {
               size="icon"
               :aria-label="`Delete ${tag}`"
               :disabled="previewDeletion.isPending.value"
-              @click="previewDeletion.mutate(tag)"
+              @click="requestArtifactDeletionPreview($event, tag)"
             >
               <Trash2 :size="15" />
             </Button>
@@ -683,7 +689,7 @@ function profileLabel(profile: Repository['profile']) {
       @created="repositoryModal = false"
     />
 
-    <Dialog v-if="deletionPreview" labelled-by="delete-artifact-title" @close="deletionPreview = null">
+    <Dialog v-if="deletionPreview" labelled-by="delete-artifact-title" :restore-focus="deletionTrigger" @close="deletionPreview = null">
       <form class="modal form-stack" aria-labelledby="delete-artifact-title" @submit.prevent="confirmDeletion.mutate()">
         <div class="flex items-start justify-between gap-4">
           <div>

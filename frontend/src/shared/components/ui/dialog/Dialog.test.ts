@@ -10,21 +10,23 @@ describe('Dialog', () => {
     document.body.replaceChildren()
   })
 
-  it('returns focus to the triggering control when it closes', async () => {
+  it('returns focus to an explicit triggering control when it closes', async () => {
     const trigger = document.createElement('button')
     trigger.textContent = 'Delete v1'
-    document.body.append(trigger)
+    const restoreTarget = document.createElement('button')
+    restoreTarget.textContent = 'Delete artifact'
+    document.body.append(trigger, restoreTarget)
     trigger.focus()
 
     const wrapper = mount(Dialog, {
       attachTo: document.body,
-      props: { labelledBy: 'dialog-title' },
+      props: { labelledBy: 'dialog-title', restoreFocus: restoreTarget },
       slots: { default: '<button aria-label="Close deletion">Close</button>' },
     })
     await nextTick()
 
     wrapper.unmount()
 
-    expect(document.activeElement).toBe(trigger)
+    expect(document.activeElement).toBe(restoreTarget)
   })
 })
