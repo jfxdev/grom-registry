@@ -5,7 +5,7 @@
 This document is both the architectural contract and the delivery plan for the
 first supported self-hosted Grom release. Architecture sections describe
 decisions that must remain true. Progress sections describe the repository as
-implemented on July 29, 2026 and must be updated when acceptance evidence
+implemented on August 9, 2026 and must be updated when acceptance evidence
 changes.
 
 For a user-facing inventory of behavior, permissions, and known product gaps,
@@ -43,15 +43,16 @@ scanner execution.
 
 | Phase | Status | Current evidence | Remaining exit work |
 |---|---|---|---|
-| Phase 0: executable foundation | Partially accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, an accepted public boot/migration/docs journey, and a clean-checkout production-image smoke check exist | Dependency/container scanning and PostgreSQL CI before claiming the corresponding support |
+| Phase 0: executable foundation | Default path accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, an accepted public boot/migration/docs journey, a clean-checkout production-image smoke check, published-image scanning, and a separate PostgreSQL test gate exist | Record the first successful PostgreSQL CI run and complete PostgreSQL recovery evidence before claiming full PostgreSQL support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
-| Phase 2: registry browsing and core UI | Partially accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, user-disable flows, and essential audit acceptance evidence exist | Pagination decision and complete first-push Playwright coverage |
+| Phase 2: registry browsing and core UI | Default path accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, user-disable flows, cursor pagination, and first-push plus destructive-browser acceptance evidence exist | Broaden quality coverage only when a concrete release need promotes it |
 | Phase 3: operational hardening | Default path accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, accepted full-stack restart preservation, a clean-checkout image smoke check, release automation, a published `v0.0.1` release, and tagged-release upgrade evidence exist | Expanded matrices follow advertised capabilities |
 
 `make test` passed on July 29, 2026, including backend tests, the SQLite
 integration flow, frontend lint, 23 frontend tests, and TypeScript checking.
-`make build` also passed on July 29, 2026. The PostgreSQL integration test
-remains conditional on `GROM_TEST_POSTGRES_URL`. The clean-checkout container
+`make build` also passed on July 29, 2026. The PostgreSQL integration suite is
+available locally through `make test-postgres GROM_TEST_POSTGRES_URL=postgres://...`
+and is required by the dedicated CI job. The clean-checkout container
 smoke test passed locally on August 4, 2026. The first tagged release,
 [`v0.0.1`](https://github.com/jfxdev/grom-registry/releases/tag/v0.0.1),
 published its image digest, SPDX SBOM, Trivy report, and checksums on August 5,
@@ -310,10 +311,13 @@ Acceptance:
 
 ### Completion step 4: establish the mandatory CI matrix
 
-**Status: partially implemented. Mandatory backend, frontend, golangci-lint,
-govulncheck, registry, administrative-browser, backup/restore, and boot
-acceptance jobs are implemented; remaining matrix items below are still
-open.**
+**Status: accepted for the default SQLite/local-storage path. Mandatory
+backend, frontend, golangci-lint, govulncheck, registry,
+administrative-browser, backup/restore, boot-acceptance, production-image, and
+release-upgrade jobs passed in [PR #27](https://github.com/jfxdev/grom-registry/pull/27).
+The gate is implemented locally and required by the active `main` ruleset;
+its first CI run is the remaining evidence before the application-database
+claim can be promoted. PostgreSQL backup and recovery remain separate work.**
 
 Work:
 
@@ -351,6 +355,11 @@ Current evidence:
   repository's `CODECOV_TOKEN` Actions secret. `codecov.yml` requires 70%
   patch coverage with 1% tolerance and excludes only generated OpenAPI code
   and static frontend assets.
+- `.github/workflows/ci.yml` separately runs `PostgreSQL Tests` against a
+  provisioned PostgreSQL 18 service with `GROM_REQUIRE_POSTGRES_TESTS=1` and
+  `GROM_TEST_POSTGRES_URL` set. It executes the complete backend suite,
+  including migrations, repository persistence, and advisory-lock timeout and
+  recovery coverage. The active `main` branch ruleset requires this check.
 - The same workflow runs stable `Go Lint` and `Go Vulnerability Check` jobs.
   golangci-lint 2.11.4 performs static analysis, while the official Go
   govulncheck action uses text output so reachable known vulnerabilities fail
@@ -367,13 +376,17 @@ Current evidence:
   E2E (Docker)` check on pull requests, `main`, merge queues, and manual
   dispatch. The command passed locally and the mandatory CI check passed on
   August 3, 2026 in [PR #16](https://github.com/jfxdev/grom-registry/pull/16).
-- The active `main` branch ruleset is configured to require `Backend Tests`, `Frontend Tests`,
-  `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
+- The active `main` branch ruleset is configured to require `Backend Tests`,
+  `PostgreSQL Tests`, `Frontend Tests`, `Go Lint`, `Go Vulnerability Check`,
+  `Registry E2E (Docker)`,
   `Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and
   `Backup Restore E2E`; branch-protection state is not stored in workflow YAML.
 - Backend tests validate the OpenAPI document and compare all registered
   management routes with the contract in both directions. The frontend job
   regenerates TypeScript API types and fails on tracked drift.
+- The `Admin Journey E2E (Docker)` check, including the expanded destructive
+  administrative flows, passed in [PR #27](https://github.com/jfxdev/grom-registry/pull/27)
+  alongside every other mandatory default-path check.
 
 ### Completion step 5: prove registry behavior end to end
 
@@ -446,6 +459,10 @@ remaining browser journey and boot/contract smoke checks is maintained in
 [`mvp-acceptance-implementation-plan.md`](mvp-acceptance-implementation-plan.md).
 It deliberately proves the installed public Grom surface rather than relying
 on mocked frontend routes or direct database setup.
+
+**Acceptance update on August 9, 2026:** the expanded destructive
+administrative journey passed locally and in the mandatory `Admin Journey E2E
+(Docker)` check in [PR #27](https://github.com/jfxdev/grom-registry/pull/27).
 
 Work:
 
@@ -1114,8 +1131,12 @@ Supporting both databases requires more than changing the driver, so the followi
 - Make equivalent PostgreSQL integration tests mandatory before a release
   advertises PostgreSQL as supported.
 
-Current gap: SQLite is exercised by `make test`; PostgreSQL coverage is
-conditional and is not yet enforced by CI.
+`make test` retains the fast SQLite-default suite. `make test-postgres
+GROM_TEST_POSTGRES_URL=postgres://...` enables the complete PostgreSQL suite
+locally; the dedicated `PostgreSQL Tests` CI job sets the required URL and
+rejects a run that does not configure PostgreSQL. The active `main` branch
+ruleset requires that check. PostgreSQL backup and recovery are not yet part of
+the supported matrix.
 
 ### Management and protocol entry points
 
@@ -1501,7 +1522,7 @@ Grom instances are supported.
 
 ### Phase 0: executable foundation
 
-**Progress: partially accepted.**
+**Progress: default path accepted.**
 
 - **Implemented:** Go service, Vue application, embedded frontend build,
   configuration loader, structured logs, and health/readiness endpoints.
@@ -1522,8 +1543,12 @@ Grom instances are supported.
   root Dockerfile from a clean checkout, verifies the final image declares the
   non-root `grom` user, and starts the isolated public stack before checking
   health, readiness, API documentation, and the registry bearer challenge.
-- **Pending:** dependency/container scanning and PostgreSQL CI before PostgreSQL is advertised as fully
-  supported.
+- **Implemented, evidence pending:** the separate `PostgreSQL Tests` CI job
+  requires a configured PostgreSQL service and exercises migrations,
+  persistence, and advisory-lock timeout/recovery without a skip path. Its
+  first recorded CI run, plus PostgreSQL recovery evidence, remain required
+  before PostgreSQL is advertised as fully supported. Published release images
+  already receive the documented SBOM and Trivy vulnerability report.
 
 Exit criterion: one command starts Grom with SQLite, applies pending migrations
 automatically, and returns an authenticated `/v2/` challenge. The same boot
@@ -1534,7 +1559,8 @@ The default-path release-artifact, image-scanning, operator-documentation, and
 tagged-release upgrade evidence are complete. `v0.0.1` is both the first
 published artifact and the accepted baseline for the SQLite/local-storage
 upgrade journey in [PR #23](https://github.com/jfxdev/grom-registry/pull/23).
-PostgreSQL CI remains a capability-specific gate.
+PostgreSQL recovery and its first mandatory CI evidence remain
+capability-specific gates.
 
 ### Phase 1: authentication and project authorization
 
@@ -1562,7 +1588,7 @@ registry protocol with Docker.
 
 ### Phase 2: registry browsing and core UI
 
-**Progress: partially accepted.**
+**Progress: default path accepted.**
 
 - **Implemented:** project, repository, tag, manifest-detail, memberships,
   users, service accounts, token management, copyable pull/push guidance, and
@@ -1570,11 +1596,11 @@ registry protocol with Docker.
 - **Implemented:** the complete security-sensitive event set has SQLite
   persistence and sanitization coverage; failed audit intent blocks destructive
   operations. Audit presentation remains intentionally outside the default MVP.
-- **Implemented; CI evidence pending:** useful empty/error states exist in
-  implemented screens, and `frontend/e2e/admin-destructive-flows.spec.ts`
-  covers destructive browser journeys. The expanded journey passed locally via
-  `make test-admin-e2e` on August 9, 2026; its mandatory CI evidence remains
-  to be recorded.
+- **Accepted:** useful empty/error states exist in implemented screens, and
+  `frontend/e2e/admin-destructive-flows.spec.ts` covers destructive browser
+  journeys. The expanded journey passed locally and in the mandatory `Admin
+  Journey E2E (Docker)` check on August 9, 2026 in
+  [PR #27](https://github.com/jfxdev/grom-registry/pull/27).
 
 Exit criterion: a new administrator can create a project, add a service account, push an image, and inspect it without using the database or editing configuration.
 
@@ -1674,7 +1700,7 @@ Status vocabulary:
   evidence is absent.
 - **Missing:** the required implementation or delivery mechanism does not exist.
 
-| # | Scenario | Gate | Status on August 7, 2026 | Evidence needed to close |
+| # | Scenario | Gate | Status on August 9, 2026 | Evidence needed to close |
 |---:|---|---|---|---|
 | 1 | An administrator creates projects `alpha` and `beta` | Default MVP | Passing | Registry E2E creates both projects through the public management API |
 | 2 | A service account is Writer in `alpha` and has no membership in `beta` | Default MVP | Passing | Registry E2E persists real projects, principals, and memberships |

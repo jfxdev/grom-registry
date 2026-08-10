@@ -18,7 +18,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `deploy/backup/` | Low-level development and compatibility helpers for offline backup inspection and restore |
 | `deploy/docker/` | Multi-mode image entrypoint for normal, backup-agent, and recovery execution |
 | `deploy/distribution/` | CNCF Distribution configuration |
-| `.github/workflows/ci.yml` | Mandatory Go formatting/tests, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and separate backend/frontend Codecov coverage and JUnit test-result uploads |
+| `.github/workflows/ci.yml` | Mandatory SQLite backend checks, separate mandatory PostgreSQL migration/repository suite, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and backend/frontend Codecov coverage and JUnit test-result uploads |
 | `codecov.yml` | Explicit 70% patch-coverage gate and narrow generated-code/static-asset exclusions |
 | `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry authorization, restart-preservation, and session-revocation acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/release-upgrade-e2e.yml` | Tagged-GHCR-release to checkout-candidate SQLite/local-storage upgrade acceptance check; it is intentionally separate from the required, network-independent registry journey |
@@ -159,6 +159,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 |---|---|
 | `make generate` | Regenerate Go and TypeScript models from OpenAPI |
 | `make test` | Run backend tests, frontend lint, tests, and type checks |
+| `make test-postgres GROM_TEST_POSTGRES_URL=postgres://...` | Run the backend migration and repository suite against an available PostgreSQL database |
 | `make test-coverage` | Generate Go and frontend LCOV coverage reports used by Codecov |
 | `make test-registry-e2e` | Run the isolated real-Docker authorization, policy, JWT, inventory, session-revocation, and restart-preservation journeys |
 | `make test-release-upgrade-e2e` | Pull the configured tagged GHCR baseline for `GROM_UPGRADE_PLATFORM` (default `linux/amd64`), upgrade its preserved SQLite/local-registry volumes to a locally built candidate, and verify metadata, credentials, blobs, and restart preservation |

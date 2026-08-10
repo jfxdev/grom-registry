@@ -19,6 +19,7 @@ Keep this file aligned with the code that actually exists.
 
 - Generate Go and TypeScript OpenAPI models: `make generate`
 - Run backend and frontend checks: `make test`
+- Run the backend suite against PostgreSQL: `make test-postgres GROM_TEST_POSTGRES_URL=postgres://...`
 - Generate backend and frontend coverage reports: `make test-coverage`
 - Run the isolated real-Docker registry, session-revocation, and restart-preservation journeys: `make test-registry-e2e`
 - Upgrade a tagged GHCR release to a locally built candidate while preserving SQLite/local-registry state: `make test-release-upgrade-e2e`
@@ -80,11 +81,11 @@ preserve the administrator, project, Writer access key, repository inventory,
 and pushed blobs across the upgrade and a subsequent restart. Keep it outside
 the network-independent registry journey and do not mark supported upgrades as
 accepted until the tagged-release evidence has passed in CI.
-The mandatory GitHub status checks are `Backend Tests`, `Frontend Tests`,
-`Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
+The mandatory GitHub status checks are `Backend Tests`, `PostgreSQL Tests`,
+`Frontend Tests`, `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
 `Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and
 `Backup Restore E2E`, and `Production Image Smoke (Docker)`, defined under
-`.github/workflows`. Keep these job names stable and require all nine in the
+`.github/workflows`. Keep these job names stable and require all ten in the
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
@@ -145,8 +146,8 @@ already downloaded bundle.
   PostgreSQL test may skip only when `GROM_TEST_POSTGRES_URL` is absent; use a
   single connection and temporary tables when the migration names fixed tables
   or indexes, so it neither collides with nor mutates shared test state.
-  The `Backend Tests` CI job provisions this database and sets the URL so these
-  checks cannot be skipped in CI.
+  The `PostgreSQL Tests` CI job provisions this database and sets the URL so
+  these checks cannot be skipped in CI.
 
 ## HTTP and OpenAPI
 

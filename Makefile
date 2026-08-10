@@ -1,4 +1,4 @@
-.PHONY: generate test test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-production-image-smoke build dev compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
+.PHONY: generate test test-postgres test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-production-image-smoke build dev compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
 
 DEV_ENV_FILE ?= .env
 
@@ -9,6 +9,10 @@ generate:
 test:
 	cd backend && go test ./...
 	cd frontend && npm run lint && npm test && npm run typecheck
+
+test-postgres:
+	@test -n "$(GROM_TEST_POSTGRES_URL)" || (echo "GROM_TEST_POSTGRES_URL must point to an available PostgreSQL database" >&2; exit 1)
+	cd backend && GROM_REQUIRE_POSTGRES_TESTS=1 go test ./...
 
 test-coverage:
 	cd backend && mkdir -p coverage && go test -covermode=atomic -coverprofile=coverage/backend.out ./...

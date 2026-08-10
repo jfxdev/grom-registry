@@ -2,7 +2,7 @@
 
 ## Status e objetivo
 
-**Status: implementação e validação Docker local concluídas; evidência CI pendente (9 de agosto de 2026).**
+**Status: implementação e validação Docker local e CI concluídas em 9 de agosto de 2026. O check obrigatório `Admin Journey E2E (Docker)` passou em [PR #27](https://github.com/jfxdev/grom-registry/pull/27).**
 
 Esta é uma entrega única. Ela fecha as lacunas restantes da experiência de
 administração ao:
@@ -37,7 +37,8 @@ tags e catálogo delegam a continuação para Distribution sem vazar o cabeçalh
 `Link`; as três listas persistidas usam keyset por timestamp/ID. A ampliação
 da aceitação Playwright destrutiva está em
 `frontend/e2e/admin-destructive-flows.spec.ts`. A suíte passou localmente por
-`make test-admin-e2e`; falta registrar a evidência no check obrigatório de CI.
+`make test-admin-e2e` e no check obrigatório `Admin Journey E2E (Docker)` em
+[PR #27](https://github.com/jfxdev/grom-registry/pull/27).
 
 O Playwright já tem uma jornada pública instalada em
 `frontend/e2e/admin-journey.spec.ts`: ele inicia um projeto Compose isolado,
