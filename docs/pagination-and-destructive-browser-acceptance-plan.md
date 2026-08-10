@@ -2,7 +2,7 @@
 
 ## Status e objetivo
 
-**Status: parcialmente implementado (9 de agosto de 2026).**
+**Status: implementação e validação Docker local concluídas; evidência CI pendente (9 de agosto de 2026).**
 
 Esta é uma entrega única. Ela fecha as lacunas restantes da experiência de
 administração ao:
@@ -35,7 +35,9 @@ são aplicados pelo servidor antes da página. Tags, inventário de
 manifests, histórico de exclusões e execuções de lifecycle também usam páginas:
 tags e catálogo delegam a continuação para Distribution sem vazar o cabeçalho
 `Link`; as três listas persistidas usam keyset por timestamp/ID. A ampliação
-da aceitação Playwright destrutiva permanece pendente.
+da aceitação Playwright destrutiva está em
+`frontend/e2e/admin-destructive-flows.spec.ts`. A suíte passou localmente por
+`make test-admin-e2e`; falta registrar a evidência no check obrigatório de CI.
 
 O Playwright já tem uma jornada pública instalada em
 `frontend/e2e/admin-journey.spec.ts`: ele inicia um projeto Compose isolado,
@@ -135,7 +137,7 @@ Para cada recurso paginado:
 
 ## Aceitação browser dos fluxos destrutivos
 
-Adicionar `frontend/e2e/admin-destructive-flows.spec.ts`. As jornadas usam o
+`frontend/e2e/admin-destructive-flows.spec.ts` usa o
 mesmo global setup de `admin-journey.spec.ts`, mas cada caso recebe nomes de
 projeto, usuário e service account próprios. A suíte permanece serializada.
 Segredos reveal-once existem somente em memória ou em diretórios Docker

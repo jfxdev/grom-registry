@@ -7,7 +7,9 @@ on August 3, 2026. Their recorded CI evidence is
 [PR #6](https://github.com/jfxdev/grom-registry/pull/6) for A and
 [PR #16](https://github.com/jfxdev/grom-registry/pull/16) for B. Work packages
 C and D are also accepted locally and in CI on August 3, 2026; their recorded
-evidence is [PR #17](https://github.com/jfxdev/grom-registry/pull/17).**
+evidence is [PR #17](https://github.com/jfxdev/grom-registry/pull/17). The
+expanded destructive administrative journey is implemented and passed locally
+on August 9, 2026; its mandatory CI evidence is pending.**
 
 This plan closes the next two default-MVP acceptance gaps from
 [`architecture-and-mvp.md`](architecture-and-mvp.md):

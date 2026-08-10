@@ -1570,9 +1570,11 @@ registry protocol with Docker.
 - **Implemented:** the complete security-sensitive event set has SQLite
   persistence and sanitization coverage; failed audit intent blocks destructive
   operations. Audit presentation remains intentionally outside the default MVP.
-- **Partial:** useful empty/error states exist in implemented screens;
-  browser-level acceptance beyond the accepted first-push journey remains
-  unresolved.
+- **Implemented; CI evidence pending:** useful empty/error states exist in
+  implemented screens, and `frontend/e2e/admin-destructive-flows.spec.ts`
+  covers destructive browser journeys. The expanded journey passed locally via
+  `make test-admin-e2e` on August 9, 2026; its mandatory CI evidence remains
+  to be recorded.
 
 Exit criterion: a new administrator can create a project, add a service account, push an image, and inspect it without using the database or editing configuration.
 

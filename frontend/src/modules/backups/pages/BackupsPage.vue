@@ -326,9 +326,9 @@ function downloadBackup(backupId: string) {
     </div>
 
     <div v-if="deletionTarget" class="modal-backdrop" @click.self="closeDeletion">
-      <form class="modal form-stack" @submit.prevent="confirmDeletion">
+      <form class="modal form-stack" aria-labelledby="backup-deletion-title" @submit.prevent="confirmDeletion">
         <div>
-          <h2 class="text-lg font-semibold">Delete this recovery point?</h2>
+          <h2 id="backup-deletion-title" class="text-lg font-semibold">Delete this recovery point?</h2>
           <p class="mt-2 text-sm leading-6 text-muted-foreground">This permanently removes the local snapshot. Bundles already downloaded to another location are not affected.</p>
         </div>
         <div class="deletion-summary">

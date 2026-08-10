@@ -11,6 +11,9 @@ if (configuredPort === '' || !Number.isInteger(port) || port < 1 || port > 65535
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
+  // The public administrative suite shares one isolated Compose stack and a
+  // bootstrap administrator, so its files must not mutate it concurrently.
+  ...(adminE2E ? { workers: 1 } : {}),
   ...(adminE2E ? { timeout: 5 * 60_000 } : {}),
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {

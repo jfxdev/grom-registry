@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
-defineProps<{ labelledBy: string }>()
+const props = defineProps<{
+  labelledBy: string
+  restoreFocus?: globalThis.HTMLElement | null
+}>()
 const emit = defineEmits<{ close: [] }>()
 const dialog = ref<{
   open: boolean
@@ -9,6 +12,7 @@ const dialog = ref<{
   close?: () => void
   setAttribute: (name: string, value: string) => void
 } | null>(null)
+const previousFocusedElement = ref<globalThis.HTMLElement | null>(null)
 
 function requestClose() {
   emit('close')
@@ -20,6 +24,7 @@ function closeFromBackdrop(event: { target: unknown; currentTarget: unknown }) {
 
 onMounted(async () => {
   await nextTick()
+  previousFocusedElement.value = document.activeElement instanceof globalThis.HTMLElement ? document.activeElement : null
   if (typeof dialog.value?.showModal === 'function') {
     dialog.value.showModal()
   } else {
@@ -31,6 +36,8 @@ onBeforeUnmount(() => {
   if (dialog.value?.open && typeof dialog.value.close === 'function') {
     dialog.value.close()
   }
+  const focusTarget = props.restoreFocus ?? previousFocusedElement.value
+  if (focusTarget?.isConnected) focusTarget.focus()
 })
 </script>
 

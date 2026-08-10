@@ -72,6 +72,7 @@ const membershipToRemove = ref<{ kind: PrincipalKind; id: string } | null>(null)
 const copied = ref('')
 const copyError = ref('')
 const deletionPreview = ref<ArtifactDeletionPreview | null>(null)
+const deletionTrigger = ref<globalThis.HTMLElement | null>(null)
 const deletionReference = ref('')
 const deletionReason = ref('')
 const deletionError = ref('')
@@ -80,6 +81,7 @@ const lifecycleRun = ref<LifecycleRun | null>(null)
 const lifecycleReason = ref('')
 const lifecycleError = ref('')
 const projectDeletionOpen = ref(false)
+const projectSettingsTrigger = ref<globalThis.HTMLElement | null>(null)
 const projectSettingsOpen = ref(false)
 const projectDeletionError = ref('')
 const selectedManifest = ref<ManifestInventory | null>(null)
@@ -91,6 +93,11 @@ const tagPagination = useCursorPagination()
 const inventoryPagination = useCursorPagination()
 const deletionPagination = useCursorPagination()
 const lifecyclePagination = useCursorPagination()
+
+function openProjectSettings(event: globalThis.MouseEvent) {
+  projectSettingsTrigger.value = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
+  projectSettingsOpen.value = true
+}
 
 function openProjectDeletion() {
   projectSettingsOpen.value = false
@@ -223,6 +230,11 @@ const previewDeletion = useMutation({
     deletionError.value = caught instanceof APIError ? caught.message : 'Could not review this deletion'
   },
 })
+
+function requestArtifactDeletionPreview(event: globalThis.MouseEvent, tag: string) {
+  deletionTrigger.value = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
+  previewDeletion.mutate(tag)
+}
 
 const confirmDeletion = useMutation({
   mutationFn: () => deleteArtifact(slug.value, {
@@ -364,7 +376,7 @@ function profileLabel(profile: Repository['profile']) {
           variant="outline"
           size="icon"
           aria-label="Project settings"
-          @click="projectSettingsOpen = true"
+          @click="openProjectSettings($event)"
         >
           <Settings2 :size="16" />
         </Button>
@@ -478,6 +490,7 @@ function profileLabel(profile: Repository['profile']) {
     <Dialog
       v-if="projectDeletionOpen && session.user?.systemAdmin"
       labelled-by="delete-project-title"
+      :restore-focus="projectSettingsTrigger"
       @close="projectDeletionOpen = false"
     >
       <form class="modal form-stack" aria-labelledby="delete-project-title" @submit.prevent="removeProject.mutate()">
@@ -568,7 +581,7 @@ function profileLabel(profile: Repository['profile']) {
               size="icon"
               :aria-label="`Delete ${tag}`"
               :disabled="previewDeletion.isPending.value"
-              @click="previewDeletion.mutate(tag)"
+              @click="requestArtifactDeletionPreview($event, tag)"
             >
               <Trash2 :size="15" />
             </Button>
@@ -683,7 +696,7 @@ function profileLabel(profile: Repository['profile']) {
       @created="repositoryModal = false"
     />
 
-    <Dialog v-if="deletionPreview" labelled-by="delete-artifact-title" @close="deletionPreview = null">
+    <Dialog v-if="deletionPreview" labelled-by="delete-artifact-title" :restore-focus="deletionTrigger" @close="deletionPreview = null">
       <form class="modal form-stack" aria-labelledby="delete-artifact-title" @submit.prevent="confirmDeletion.mutate()">
         <div class="flex items-start justify-between gap-4">
           <div>
