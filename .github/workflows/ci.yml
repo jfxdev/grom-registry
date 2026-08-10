@@ -20,20 +20,6 @@ jobs:
     name: Backend Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_DB: grom_test
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d grom_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Check out repository
@@ -66,8 +52,6 @@ jobs:
 
       - name: Run backend tests
         working-directory: backend
-        env:
-          GROM_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/grom_test?sslmode=disable
         run: |
           mkdir -p coverage
           go tool gotestsum \
@@ -98,6 +82,44 @@ jobs:
           flags: backend
           name: backend
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  postgres:
+    name: PostgreSQL Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: grom_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d grom_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Run PostgreSQL migration and repository tests
+        working-directory: backend
+        env:
+          GROM_REQUIRE_POSTGRES_TESTS: "1"
+          GROM_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/grom_test?sslmode=disable
+        run: go test ./...
 
   go-lint:
     name: Go Lint

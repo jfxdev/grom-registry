@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,6 +73,49 @@ func TestSQLiteFileMigrationLockSerializesAndTimesOut(t *testing.T) {
 	secondUnlock, err := sqliteFileMigrationLock(context.Background(), lockPath, time.Second)
 	if err != nil {
 		t.Fatalf("expected lock acquisition after release: %v", err)
+	}
+	secondUnlock()
+}
+
+func TestPostgresMigrationLockSerializesAndRecovers(t *testing.T) {
+	databaseURL := os.Getenv("GROM_TEST_POSTGRES_URL")
+	if databaseURL == "" {
+		if os.Getenv("GROM_REQUIRE_POSTGRES_TESTS") == "1" {
+			t.Fatal("GROM_TEST_POSTGRES_URL is required when PostgreSQL tests are enabled")
+		}
+		t.Skip("GROM_TEST_POSTGRES_URL is not configured")
+	}
+
+	ctx := context.Background()
+	db, kind, err := Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if kind != Postgres {
+		t.Fatalf("expected postgres kind, got %s", kind)
+	}
+
+	unlock, err := migrationLock(ctx, db, kind, databaseURL, time.Second)
+	if err != nil {
+		t.Fatalf("acquire first postgres migration lock: %v", err)
+	}
+	defer func() {
+		if unlock != nil {
+			unlock()
+		}
+	}()
+
+	_, err = migrationLock(ctx, db, kind, databaseURL, 25*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "migration lock timeout") {
+		t.Fatalf("expected postgres migration lock timeout, got %v", err)
+	}
+
+	unlock()
+	unlock = nil
+	secondUnlock, err := migrationLock(ctx, db, kind, databaseURL, time.Second)
+	if err != nil {
+		t.Fatalf("expected postgres migration lock acquisition after release: %v", err)
 	}
 	secondUnlock()
 }
