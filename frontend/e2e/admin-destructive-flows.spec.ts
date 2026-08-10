@@ -145,12 +145,20 @@ test('an administrator archives/removes empty repositories and observes project 
 
   await createEmptyRepository(page, runtime.publicURL, 'repository-removal', 'still-present')
   await page.goto(`${runtime.publicURL}/projects/repository-removal`)
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  const projectSettingsTrigger = page.getByRole('button', { name: 'Project settings' })
+  await projectSettingsTrigger.click()
   await page.getByRole('button', { name: 'Danger zone' }).click()
   const deleteProjectTrigger = page.getByRole('button', { name: 'Delete project' })
   await deleteProjectTrigger.click()
   const projectDialog = page.getByRole('dialog', { name: 'Delete project' })
-  await assertDialogFocusManagement(page, projectDialog, deleteProjectTrigger, 'Close project deletion')
+  await expect(projectDialog.getByRole('button', { name: 'Close project deletion' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(projectDialog).toBeHidden()
+  await expect(projectSettingsTrigger).toBeFocused()
+  await projectSettingsTrigger.click()
+  await page.getByRole('button', { name: 'Danger zone' }).click()
+  await page.getByRole('button', { name: 'Delete project' }).click()
+  await expect(projectDialog).toBeVisible()
   const [conflictResponse] = await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().endsWith('/api/v1/projects/repository-removal')),
     projectDialog.getByRole('button', { name: 'Delete project' }).click(),
