@@ -1,6 +1,6 @@
 # Backup and disaster recovery implementation plan
 
-Status: implemented for the default SQLite and local-volume deployment.
+Status: implemented for SQLite and PostgreSQL with local-volume registry storage.
 
 This document records the implementation boundary and acceptance criteria. The
 operator procedure lives in
@@ -18,15 +18,16 @@ inside the application container, or access to the Docker socket.
 
 The implementation covers one installation using:
 
-- SQLite;
+- SQLite or PostgreSQL;
 - local Distribution storage;
 - Grom signing certificates;
 - the Distribution configuration embedded in the release image and persisted
   in its own named volume;
 - Docker Compose named volumes.
 
-PostgreSQL, S3-backed Distribution, scheduled backups, and point-in-time
-recovery remain outside this profile.
+S3-backed Distribution, scheduled backups, and point-in-time recovery remain
+outside this profile. PostgreSQL recovery is a logical full-database restore,
+not point-in-time recovery.
 
 ## Runtime topology
 
@@ -62,7 +63,8 @@ The backend then:
 2. rejects new management mutations, registry token exchanges, and `/v2`
    traffic with `503 Service Unavailable`;
 3. waits for already-running writes and registry requests to drain;
-4. checkpoints and truncates the SQLite WAL;
+4. checkpoints SQLite or PostgreSQL; PostgreSQL then creates a custom-format
+   logical dump in the private shared staging volume;
 5. asks the isolated backup agent to snapshot all required volumes;
 6. validates the completed recovery point;
 7. records a sanitized audit event;
@@ -87,6 +89,7 @@ grom-backup-<timestamp>-<backup-id>/
 ├── checksums.sha256
 ├── COMPLETE
 ├── grom-data.tar
+├── postgres.dump (PostgreSQL installations only)
 ├── registry-data.tar
 ├── signing-certs.tar
 └── distribution-config.tar
@@ -125,7 +128,9 @@ general file browser.
 
 Restore validates the complete set before extraction, stages every component,
 refuses non-empty targets, writes a restore marker, and publishes the staged
-data to the target volumes. On the first normal boot after restore, Grom
+data to the target volumes. For PostgreSQL, recovery starts an empty temporary
+PostgreSQL target and imports the validated logical dump before normal startup.
+On the first normal boot after restore, Grom
 invalidates restored web sessions and password-reset capabilities and records
 an idempotent `platform.restore_completed` audit event. Service-account access
 keys retain their state at the selected recovery point.
@@ -154,7 +159,7 @@ portable bundle import, recovery HTTP authorization and validation, CLI command
 parsing, empty-target enforcement, restore markers, failure-state reporting,
 and administrative backup endpoint behavior.
 
-The mandatory real-Docker recovery journey:
+The mandatory real-Docker recovery journeys (SQLite and PostgreSQL):
 
 1. starts the default stack;
 2. creates identities, authorization, and OCI content;

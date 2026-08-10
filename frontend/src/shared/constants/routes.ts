@@ -6,4 +6,5 @@ export const ROUTES = {
   users: '/users',
   serviceAccounts: '/service-accounts',
   backups: '/backups',
+  settings: '/settings',
 } as const

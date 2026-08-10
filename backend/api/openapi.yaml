@@ -47,6 +47,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Deployment"
+  /api/v1/settings/status:
+    get:
+      tags: [System]
+      operationId: getInstallationStatus
+      responses:
+        "200":
+          description: Non-sensitive installation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstallationStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/session:
     post:
       tags: [Identity]
@@ -1256,6 +1271,16 @@ components:
         insecureHttp:
           type: boolean
           description: True only for an explicitly opted-in permissive HTTP deployment
+    InstallationStatus:
+      type: object
+      required: [database, distribution]
+      properties:
+        database:
+          type: string
+          enum: [sqlite, postgres]
+        distribution:
+          type: string
+          enum: [available, unavailable]
     BackupStatus:
       type: string
       enum: [starting, quiescing, creating, complete, failed]

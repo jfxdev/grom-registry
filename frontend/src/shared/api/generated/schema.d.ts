@@ -52,6 +52,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getInstallationStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/session": {
         parameters: {
             query?: never;
@@ -659,6 +675,12 @@ export interface components {
             /** @description True only for an explicitly opted-in permissive HTTP deployment */
             insecureHttp: boolean;
         };
+        InstallationStatus: {
+            /** @enum {string} */
+            database: "sqlite" | "postgres";
+            /** @enum {string} */
+            distribution: "available" | "unavailable";
+        };
         /** @enum {string} */
         BackupStatus: "starting" | "quiescing" | "creating" | "complete" | "failed";
         BackupOperation: {
@@ -1252,6 +1274,28 @@ export interface operations {
                     "application/json": components["schemas"]["Deployment"];
                 };
             };
+        };
+    };
+    getInstallationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Non-sensitive installation status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createSession: {

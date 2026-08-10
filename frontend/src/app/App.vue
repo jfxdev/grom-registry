@@ -16,6 +16,7 @@ import {
   UserRound,
   ShieldCheck,
   DatabaseBackup,
+  Settings,
   Users,
   X,
 } from '@lucide/vue'
@@ -44,6 +45,7 @@ const navigation = [
   { label: 'Users', to: ROUTES.users, icon: Users, adminOnly: true },
   { label: 'Service accounts', to: ROUTES.serviceAccounts, icon: ShieldCheck, adminOnly: false },
   { label: 'Backup & recovery', to: ROUTES.backups, icon: DatabaseBackup, adminOnly: true },
+  { label: 'Settings', to: ROUTES.settings, icon: Settings, adminOnly: true },
 ]
 const visibleNavigation = computed(() => navigation.filter((item) => !item.adminOnly || session.user?.systemAdmin))
 

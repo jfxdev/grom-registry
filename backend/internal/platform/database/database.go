@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -114,8 +115,15 @@ func migrateDatabase(
 }
 
 func Checkpoint(ctx context.Context, db *bun.DB, kind Kind) error {
+	if kind == Postgres {
+		_, err := db.ExecContext(ctx, "CHECKPOINT")
+		if err != nil {
+			return fmt.Errorf("checkpoint postgres database: %w", err)
+		}
+		return nil
+	}
 	if kind != SQLite {
-		return fmt.Errorf("integrated backup supports SQLite only")
+		return fmt.Errorf("unsupported database kind")
 	}
 	var busy, logFrames, checkpointedFrames int
 	if err := db.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").
@@ -124,6 +132,26 @@ func Checkpoint(ctx context.Context, db *bun.DB, kind Kind) error {
 	}
 	if busy != 0 {
 		return fmt.Errorf("checkpoint sqlite database: database remained busy")
+	}
+	return nil
+}
+
+// DumpPostgres creates a portable custom-format logical dump. The password is
+// passed only through the child process environment, never its argument list.
+func DumpPostgres(ctx context.Context, databaseURL, destination string) error {
+	u, err := url.Parse(databaseURL)
+	if err != nil {
+		return fmt.Errorf("parse postgres URL for backup: %w", err)
+	}
+	password, _ := u.User.Password()
+	u.User = url.User(u.User.Username())
+	if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+		return fmt.Errorf("create postgres dump directory: %w", err)
+	}
+	command := exec.CommandContext(ctx, "pg_dump", "--format=custom", "--file="+destination, "--dbname="+u.String())
+	command.Env = append(os.Environ(), "PGPASSWORD="+password)
+	if _, err := command.CombinedOutput(); err != nil {
+		return fmt.Errorf("dump postgres database: %w", err)
 	}
 	return nil
 }

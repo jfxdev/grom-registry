@@ -21,6 +21,7 @@ type RecoveryOptions struct {
 	RegistryDataTarget       string
 	DistributionConfigTarget string
 	TargetGromVersion        string
+	PostgresDatabaseURL      string
 	MaxUploadBytes           int64
 }
 
@@ -115,6 +116,7 @@ func newRecoveryHandler(options RecoveryOptions, requestToken string) http.Handl
 			RegistryDataTarget:       options.RegistryDataTarget,
 			DistributionConfigTarget: options.DistributionConfigTarget,
 			TargetGromVersion:        options.TargetGromVersion,
+			PostgresDatabaseURL:      options.PostgresDatabaseURL,
 		})
 		if err != nil {
 			writeAgentJSON(w, http.StatusConflict, map[string]string{

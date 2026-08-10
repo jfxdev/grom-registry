@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -20,6 +22,7 @@ type RestoreOptions struct {
 	RegistryDataTarget       string
 	DistributionConfigTarget string
 	TargetGromVersion        string
+	PostgresDatabaseURL      string
 	Now                      func() time.Time
 }
 
@@ -39,6 +42,9 @@ func Restore(options RestoreOptions) (Inspection, error) {
 	}
 	if options.Now == nil {
 		options.Now = time.Now
+	}
+	if inspection.Manifest.Database == "postgres" && options.PostgresDatabaseURL == "" {
+		return Inspection{}, fmt.Errorf("PostgreSQL restore requires a database URL")
 	}
 	targets := []string{options.GromDataTarget, options.SigningCertsTarget, options.RegistryDataTarget}
 	for _, target := range targets {
@@ -72,9 +78,13 @@ func Restore(options RestoreOptions) (Inspection, error) {
 		}
 	}()
 	for index := range targets {
+		componentIndex := index
+		if inspection.Manifest.Database == "postgres" && index > 0 {
+			componentIndex++
+		}
 		if err := extractArchive(
-			filepath.Join(options.BackupPath, inspection.Manifest.Components[index].File),
-			staging[index], inspection.Manifest.Components[index],
+			filepath.Join(options.BackupPath, inspection.Manifest.Components[componentIndex].File),
+			staging[index], inspection.Manifest.Components[componentIndex],
 		); err != nil {
 			return Inspection{}, err
 		}
@@ -112,8 +122,10 @@ func Restore(options RestoreOptions) (Inspection, error) {
 			_ = os.Remove(configStaging)
 		}
 	}()
-	if info, err := os.Stat(filepath.Join(staging[0], "grom.db")); err != nil || !info.Mode().IsRegular() {
-		return Inspection{}, fmt.Errorf("restored Grom data does not contain grom.db")
+	if inspection.Manifest.Database == "sqlite" {
+		if info, err := os.Stat(filepath.Join(staging[0], "grom.db")); err != nil || !info.Mode().IsRegular() {
+			return Inspection{}, fmt.Errorf("restored Grom data does not contain grom.db")
+		}
 	}
 	for _, name := range []string{"signing-key.pem", "signing-cert.pem", "jwks.json"} {
 		if info, err := os.Stat(filepath.Join(staging[1], name)); err != nil || !info.Mode().IsRegular() {
@@ -172,6 +184,11 @@ func Restore(options RestoreOptions) (Inspection, error) {
 		return Inspection{}, rollbackPromotion(fmt.Errorf("promote restored distribution configuration: %w", err))
 	}
 	configPromoted = true
+	if inspection.Manifest.Database == "postgres" {
+		if err := restorePostgres(options.PostgresDatabaseURL, filepath.Join(options.BackupPath, "postgres.dump")); err != nil {
+			return Inspection{}, rollbackPromotion(fmt.Errorf("restore postgres database: %w", err))
+		}
+	}
 	for _, path := range staging {
 		if err := os.Remove(path); err != nil {
 			return Inspection{}, rollbackPromotion(fmt.Errorf("remove restore staging: %w", err))
@@ -179,6 +196,21 @@ func Restore(options RestoreOptions) (Inspection, error) {
 	}
 	cleanupStaging = false
 	return inspection, nil
+}
+
+func restorePostgres(databaseURL, dumpPath string) error {
+	u, err := url.Parse(databaseURL)
+	if err != nil {
+		return fmt.Errorf("parse postgres target URL: %w", err)
+	}
+	password, _ := u.User.Password()
+	u.User = url.User(u.User.Username())
+	command := exec.Command("pg_restore", "--clean", "--if-exists", "--no-owner", "--no-privileges", "--dbname="+u.String(), dumpPath)
+	command.Env = append(os.Environ(), "PGPASSWORD="+password)
+	if _, err := command.CombinedOutput(); err != nil {
+		return fmt.Errorf("pg_restore failed: %w", err)
+	}
+	return nil
 }
 
 func requireEmptyDirectory(path string) error {

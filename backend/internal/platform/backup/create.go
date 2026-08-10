@@ -20,6 +20,8 @@ type CreateOptions struct {
 	SigningCerts       string
 	RegistryData       string
 	DistributionConfig string
+	PostgresDump       string
+	Database           string
 	GromVersion        string
 	DeploymentProfile  string
 	Consistency        string
@@ -40,6 +42,15 @@ func Create(options CreateOptions) (Inspection, string, error) {
 		if !filepath.IsAbs(source) {
 			return Inspection{}, "", fmt.Errorf("backup source paths must be absolute")
 		}
+	}
+	if options.Database == "" {
+		options.Database = "sqlite"
+	}
+	if options.Database != "sqlite" && options.Database != "postgres" {
+		return Inspection{}, "", fmt.Errorf("unsupported database profile")
+	}
+	if options.Database == "postgres" && !filepath.IsAbs(options.PostgresDump) {
+		return Inspection{}, "", fmt.Errorf("PostgreSQL dump path must be absolute")
 	}
 	if err := os.MkdirAll(options.DestinationRoot, 0o700); err != nil {
 		return Inspection{}, "", fmt.Errorf("create backup destination: %w", err)
@@ -70,28 +81,59 @@ func Create(options CreateOptions) (Inspection, string, error) {
 	if consistency == "quiesced" {
 		formatVersion = QuiescedFormatVersion
 	}
+	if options.Database == "postgres" {
+		formatVersion = PostgresFormatVersion
+	}
 	manifest := Manifest{
 		FormatVersion: formatVersion, BackupID: id, CreatedAt: createdAt,
 		Consistency: consistency, GromVersion: options.GromVersion,
-		Database: "sqlite", RegistryStorage: "filesystem",
+		Database: options.Database, RegistryStorage: "filesystem",
 		DeploymentProfile: options.DeploymentProfile,
 		Components:        make([]Component, len(requiredComponents)),
 	}
-	sources := []string{options.GromData, options.SigningCerts, options.RegistryData}
-	for index, source := range sources {
-		component, err := writeArchive(source, filepath.Join(partial, requiredComponents[index].File))
+	expected := requiredComponents
+	if options.Database == "postgres" {
+		expected = postgresRequiredComponents
+		manifest.Components = make([]Component, len(expected))
+	}
+	if options.Database == "postgres" {
+		component, err := copyRegularFile(options.PostgresDump, filepath.Join(partial, expected[1].File))
 		if err != nil {
 			return Inspection{}, "", err
 		}
-		component.Name, component.File, component.Kind = requiredComponents[index].Name, requiredComponents[index].File, "tar"
-		manifest.Components[index] = component
+		component.Name, component.File, component.Kind = expected[1].Name, expected[1].File, "file"
+		manifest.Components[1] = component
+		for sourceIndex, source := range []string{options.GromData, options.SigningCerts, options.RegistryData} {
+			component, err := writeArchive(source, filepath.Join(partial, expected[sourceIndex+2].File))
+			if err != nil {
+				return Inspection{}, "", err
+			}
+			component.Name, component.File, component.Kind = expected[sourceIndex+2].Name, expected[sourceIndex+2].File, "tar"
+			manifest.Components[sourceIndex+2] = component
+		}
+		configComponent, err := copyRegularFile(options.DistributionConfig, filepath.Join(partial, expected[4].File))
+		if err != nil {
+			return Inspection{}, "", err
+		}
+		configComponent.Name, configComponent.File, configComponent.Kind = expected[4].Name, expected[4].File, "file"
+		manifest.Components[4] = configComponent
+	} else {
+		sources := []string{options.GromData, options.SigningCerts, options.RegistryData}
+		for index, source := range sources {
+			component, err := writeArchive(source, filepath.Join(partial, requiredComponents[index].File))
+			if err != nil {
+				return Inspection{}, "", err
+			}
+			component.Name, component.File, component.Kind = requiredComponents[index].Name, requiredComponents[index].File, "tar"
+			manifest.Components[index] = component
+		}
+		configComponent, err := copyRegularFile(options.DistributionConfig, filepath.Join(partial, requiredComponents[3].File))
+		if err != nil {
+			return Inspection{}, "", err
+		}
+		configComponent.Name, configComponent.File, configComponent.Kind = requiredComponents[3].Name, requiredComponents[3].File, "file"
+		manifest.Components[3] = configComponent
 	}
-	configComponent, err := copyRegularFile(options.DistributionConfig, filepath.Join(partial, requiredComponents[3].File))
-	if err != nil {
-		return Inspection{}, "", err
-	}
-	configComponent.Name, configComponent.File, configComponent.Kind = requiredComponents[3].Name, requiredComponents[3].File, "file"
-	manifest.Components[3] = configComponent
 
 	if err := validateManifest(manifest); err != nil {
 		return Inspection{}, "", err

@@ -187,6 +187,9 @@ func (stack composeStack) compose(ctx context.Context, arguments ...string) (str
 	args := []string{"compose", "--ansi", "never", "--project-name", stack.project,
 		"--file", filepath.Join(stack.root, "deploy", "compose", "docker-compose.yml"),
 		"--file", filepath.Join(stack.root, "deploy", "backup", "docker-compose.backup.yml")}
+	if os.Getenv("GROM_BACKUP_RESTORE_POSTGRES") == "1" {
+		args = append(args, "--file", filepath.Join(stack.root, "deploy", "compose", "docker-compose.postgres.yml"))
+	}
 	args = append(args, arguments...)
 	return run(ctx, stack.root, stack.env, nil, "docker", args...)
 }

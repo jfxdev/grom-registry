@@ -81,15 +81,20 @@ func run(logger *slog.Logger) error {
 	inventoryService := registryapp.NewInventoryService(registryRepository)
 	maintenanceController := maintenance.New()
 	var backupManager *backup.Manager
-	if databaseKind == database.SQLite && cfg.BackupAgentSocket != "" {
-		backupManager = backup.NewManager(
+	if cfg.BackupAgentSocket != "" {
+		backupManager = backup.NewManagerWithDatabase(
 			backup.NewAgentClient(cfg.BackupAgentSocket),
 			maintenanceController,
 			func(checkpointContext context.Context) error {
-				return database.Checkpoint(checkpointContext, db, databaseKind)
+				if err := database.Checkpoint(checkpointContext, db, databaseKind); err != nil {
+					return err
+				}
+				if databaseKind == database.Postgres {
+					return database.DumpPostgres(checkpointContext, cfg.DatabaseURL, "/database-backups/postgres.dump")
+				}
+				return nil
 			},
-			version,
-			string(cfg.DeploymentProfile),
+			version, string(cfg.DeploymentProfile), string(databaseKind),
 			func(completeContext context.Context, summary backup.Summary) error {
 				return auditService.Record(
 					completeContext,
@@ -103,11 +108,6 @@ func run(logger *slog.Logger) error {
 					},
 				)
 			},
-		)
-	} else if cfg.BackupAgentSocket != "" {
-		logger.Warn(
-			"integrated backups are disabled because the backup agent requires SQLite",
-			"database_kind", databaseKind,
 		)
 	}
 
@@ -185,7 +185,7 @@ func run(logger *slog.Logger) error {
 			TrustedProxies: cfg.TrustedProxies, AuthFailureLimit: cfg.AuthFailureLimit,
 			AuthFailureWindow: cfg.AuthFailureWindow, AuthBlockDuration: cfg.AuthBlockDuration,
 		},
-		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController},
+		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController, Database: string(databaseKind)},
 	)
 	if err != nil {
 		return err

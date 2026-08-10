@@ -4,9 +4,9 @@ Grom provides backup and recovery interfaces inside the published Docker image.
 Operators do not need a source checkout, `make`, access to the Docker socket, or
 shell access inside the running Grom container.
 
-The supported profile is one active Grom installation using SQLite, local
+The supported profile is one active Grom installation using SQLite or PostgreSQL, local
 Distribution filesystem storage, and the shipped container topology.
-PostgreSQL, S3 storage, selective restore, downgrade, and restore over existing
+S3 storage, selective restore, downgrade, and restore over existing
 data are not supported by this workflow.
 
 ## Create and download a recovery point
@@ -17,8 +17,9 @@ Selecting **Create backup** starts an asynchronous operation:
 1. Grom temporarily rejects new management mutations, registry-token exchanges,
    pushes, and other `/v2` traffic that could change durable state.
 2. Existing writes drain.
-3. SQLite is checkpointed.
-4. The internal backup agent archives the Grom data, signing material, local
+3. SQLite is checkpointed; PostgreSQL is checkpointed and exported as a
+   validated logical dump.
+4. The internal backup agent archives the Grom data, database payload, signing material, local
    Distribution storage, and effective Distribution configuration.
 5. The complete set is checksummed, verified, and published atomically.
 6. Maintenance ends and normal writes resume.
@@ -93,7 +94,8 @@ The shipped deployment uses these durable volumes:
 
 | Volume | Purpose |
 |---|---|
-| `grom-data` | SQLite and application-owned data |
+| `grom-data` | SQLite database or application-owned restore-marker data |
+| `postgres-data` | PostgreSQL database data when the PostgreSQL Compose overlay is enabled |
 | `signing-certs` | Registry JWT private key, certificate, and JWKS |
 | `registry-data` | OCI manifests, configurations, layers, and tags |
 | `distribution-config` | Effective Distribution configuration |
