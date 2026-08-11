@@ -205,7 +205,7 @@ func restorePostgres(databaseURL, dumpPath string) error {
 	}
 	password, _ := u.User.Password()
 	u.User = url.User(u.User.Username())
-	command := exec.Command("pg_restore", "--clean", "--if-exists", "--no-owner", "--no-privileges", "--dbname="+u.String(), dumpPath)
+	command := exec.Command("pg_restore", "--single-transaction", "--clean", "--if-exists", "--no-owner", "--no-privileges", "--dbname="+u.String(), dumpPath)
 	command.Env = append(os.Environ(), "PGPASSWORD="+password)
 	if _, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("pg_restore failed: %w", err)

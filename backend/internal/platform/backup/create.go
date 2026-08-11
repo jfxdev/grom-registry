@@ -97,21 +97,28 @@ func Create(options CreateOptions) (Inspection, string, error) {
 		manifest.Components = make([]Component, len(expected))
 	}
 	if options.Database == "postgres" {
-		component, err := copyRegularFile(options.PostgresDump, filepath.Join(partial, expected[1].File))
+		component, err := copyPostgresDump(options.PostgresDump, filepath.Join(partial, expected[1].File))
 		if err != nil {
 			return Inspection{}, "", err
 		}
 		component.Name, component.File, component.Kind = expected[1].Name, expected[1].File, "file"
 		manifest.Components[1] = component
-		for sourceIndex, source := range []string{options.GromData, options.SigningCerts, options.RegistryData} {
-			component, err := writeArchive(source, filepath.Join(partial, expected[sourceIndex+2].File))
+		for _, source := range []struct {
+			path  string
+			index int
+		}{
+			{path: options.GromData, index: 0},
+			{path: options.SigningCerts, index: 2},
+			{path: options.RegistryData, index: 3},
+		} {
+			component, err := writeArchive(source.path, filepath.Join(partial, expected[source.index].File))
 			if err != nil {
 				return Inspection{}, "", err
 			}
-			component.Name, component.File, component.Kind = expected[sourceIndex+2].Name, expected[sourceIndex+2].File, "tar"
-			manifest.Components[sourceIndex+2] = component
+			component.Name, component.File, component.Kind = expected[source.index].Name, expected[source.index].File, "tar"
+			manifest.Components[source.index] = component
 		}
-		configComponent, err := copyRegularFile(options.DistributionConfig, filepath.Join(partial, expected[4].File))
+		configComponent, err := copyDistributionConfig(options.DistributionConfig, filepath.Join(partial, expected[4].File))
 		if err != nil {
 			return Inspection{}, "", err
 		}
@@ -127,7 +134,7 @@ func Create(options CreateOptions) (Inspection, string, error) {
 			component.Name, component.File, component.Kind = requiredComponents[index].Name, requiredComponents[index].File, "tar"
 			manifest.Components[index] = component
 		}
-		configComponent, err := copyRegularFile(options.DistributionConfig, filepath.Join(partial, requiredComponents[3].File))
+		configComponent, err := copyDistributionConfig(options.DistributionConfig, filepath.Join(partial, requiredComponents[3].File))
 		if err != nil {
 			return Inspection{}, "", err
 		}
@@ -182,29 +189,37 @@ func Create(options CreateOptions) (Inspection, string, error) {
 	return inspection, final, nil
 }
 
-func copyRegularFile(source, destination string) (Component, error) {
+func copyDistributionConfig(source, destination string) (Component, error) {
+	return copyRegularFile(source, destination, "distribution configuration", MaxConfigSize)
+}
+
+func copyPostgresDump(source, destination string) (Component, error) {
+	return copyRegularFile(source, destination, "PostgreSQL dump", MaxDatabaseBackupSize)
+}
+
+func copyRegularFile(source, destination, description string, maxSize int64) (Component, error) {
 	info, err := os.Lstat(source)
 	if err != nil || !info.Mode().IsRegular() {
-		return Component{}, fmt.Errorf("distribution configuration must be a regular file")
+		return Component{}, fmt.Errorf("%s must be a regular file", description)
 	}
-	if info.Size() > MaxConfigSize {
-		return Component{}, fmt.Errorf("distribution configuration exceeds %d bytes", MaxConfigSize)
+	if info.Size() > maxSize {
+		return Component{}, fmt.Errorf("%s exceeds %d bytes", description, maxSize)
 	}
 	input, err := os.Open(source)
 	if err != nil {
-		return Component{}, fmt.Errorf("open distribution configuration: %w", err)
+		return Component{}, fmt.Errorf("open %s: %w", description, err)
 	}
 	defer func() { _ = input.Close() }()
 	output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		return Component{}, fmt.Errorf("create distribution configuration backup: %w", err)
+		return Component{}, fmt.Errorf("create %s backup: %w", description, err)
 	}
 	hashWriter := &hashingWriter{writer: output, hash: sha256.New()}
 	bytes, copyErr := io.Copy(hashWriter, input)
 	syncErr := output.Sync()
 	closeErr := output.Close()
 	if copyErr != nil || syncErr != nil || closeErr != nil {
-		return Component{}, fmt.Errorf("copy distribution configuration")
+		return Component{}, fmt.Errorf("copy %s", description)
 	}
 	return Component{Bytes: bytes, SHA256: hashWriter.sum(), EntryCount: 1, ContentBytes: bytes}, nil
 }

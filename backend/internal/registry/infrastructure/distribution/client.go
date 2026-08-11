@@ -87,7 +87,7 @@ func (c *Client) Available(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	return response.StatusCode == http.StatusOK || response.StatusCode == http.StatusUnauthorized
 }
 

@@ -100,8 +100,8 @@ only if an actual split is implemented.
 | `backups` | Installation-admin recovery-point creation, status, listing, and download |
 | `settings` | Installation-admin operational status for the database backend and Distribution |
 
-Audit presentation and settings modules are planned completion work and do not
-currently exist under `frontend/src/modules`.
+Audit presentation remains planned completion work and does not currently exist
+under `frontend/src/modules`.
 
 Cross-cutting frontend code lives under `frontend/src/shared`.
 Static product artwork lives under `frontend/src/assets`, separated into `icons` and `logos`.

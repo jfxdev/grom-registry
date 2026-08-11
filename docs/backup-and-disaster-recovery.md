@@ -52,8 +52,8 @@ normal UI may be unavailable after volume loss.
 
 1. Stop Grom, Distribution, and the backup agent.
 2. Preserve damaged volumes separately when investigation may be required.
-3. Create empty replacement Grom-data, signing, registry-data, and Distribution
-   configuration volumes.
+3. Create empty replacement Grom-data, signing, registry-data, Distribution
+   configuration, and (for a PostgreSQL bundle) postgres-data volumes.
 4. Start the same image with the `recovery` command, mounting the backup
    location and all empty targets.
 5. Publish its port on loopback only and open the recovery UI.
@@ -65,16 +65,23 @@ normal UI may be unavailable after volume loss.
 With the shipped Compose deployment, the isolated recovery UI is:
 
 ```text
-docker compose --env-file .env -f docker-compose.yml --profile recovery up recovery
+docker compose --env-file .env \
+  -f deploy/compose/docker-compose.yml \
+  -f deploy/compose/docker-compose.postgres.yml \
+  --profile recovery up recovery
 ```
 
 It listens on `http://127.0.0.1:8081` by default. A direct image deployment can
 use the equivalent `recovery` image command with the five explicit volume
 mounts. Never expose the recovery port to a public or untrusted network.
 
+The PostgreSQL overlay configures the recovery image with an empty temporary
+PostgreSQL target through `--postgres-database-url`; it starts the recovery
+profile and its `postgres-recovery` dependency, never the normal Grom service.
 The UI verifies the bundle before extraction, refuses an incompatible image
-version, stages all components, checks `grom.db` and the complete signing set,
-and refuses every non-empty target. It never starts the normal services.
+version, stages all components, checks `grom.db` when applicable and the
+complete signing set, and refuses every non-empty target. It never starts the
+normal services.
 
 On the first normal boot after restore, Grom:
 

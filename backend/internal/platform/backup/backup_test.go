@@ -188,6 +188,34 @@ func TestCreateInspectAndRestore(t *testing.T) {
 	}
 }
 
+func TestCreatePostgresUsesRequiredComponentPositions(t *testing.T) {
+	fixture := createFixture(t)
+	dump := filepath.Join(t.TempDir(), "postgres.dump")
+	writeFixtureFile(t, dump, "postgres custom dump", 0o600)
+	inspection, _, err := Create(CreateOptions{
+		DestinationRoot: t.TempDir(), GromData: fixture.gromData,
+		SigningCerts: fixture.signing, RegistryData: fixture.registry,
+		DistributionConfig: fixture.config, PostgresDump: dump, Database: "postgres",
+		GromVersion: "test-version", DeploymentProfile: "development", Consistency: "quiesced",
+	})
+	if err != nil {
+		t.Fatalf("create PostgreSQL backup: %v", err)
+	}
+	want := []Component{
+		{Name: ComponentGromData, File: "grom-data.tar", Kind: "tar"},
+		{Name: ComponentPostgresDump, File: "postgres.dump", Kind: "file"},
+		{Name: ComponentSigningCerts, File: "signing-certs.tar", Kind: "tar"},
+		{Name: ComponentRegistryData, File: "registry-data.tar", Kind: "tar"},
+		{Name: ComponentDistributionConfig, File: "distribution-config.yml", Kind: "file"},
+	}
+	for index, expected := range want {
+		component := inspection.Manifest.Components[index]
+		if component.Name != expected.Name || component.File != expected.File || component.Kind != expected.Kind {
+			t.Fatalf("component %d = %#v, want name=%q file=%q kind=%q", index, component, expected.Name, expected.File, expected.Kind)
+		}
+	}
+}
+
 func TestBundleRoundTripRejectsUnexpectedOuterEntries(t *testing.T) {
 	fixture := createFixture(t)
 	root := t.TempDir()

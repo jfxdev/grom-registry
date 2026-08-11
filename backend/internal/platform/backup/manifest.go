@@ -19,6 +19,7 @@ const (
 	MaxManifestSize       = 1 << 20
 	MaxArchivePath        = 4096
 	MaxConfigSize         = 16 << 20
+	MaxDatabaseBackupSize = 16 << 30
 )
 
 const (
@@ -106,8 +107,12 @@ func validateManifest(manifest Manifest) error {
 		if len(component.SHA256) != 64 || !isLowerHex(component.SHA256) {
 			return fmt.Errorf("component %q has an invalid checksum", component.Name)
 		}
+		maxSize := int64(MaxConfigSize)
+		if component.Name == ComponentPostgresDump {
+			maxSize = MaxDatabaseBackupSize
+		}
 		if component.Kind == "file" &&
-			(component.EntryCount != 1 || component.ContentBytes != component.Bytes || component.Bytes > MaxConfigSize) {
+			(component.EntryCount != 1 || component.ContentBytes != component.Bytes || component.Bytes > maxSize) {
 			return fmt.Errorf("component %q has invalid file measurements", component.Name)
 		}
 	}

@@ -96,6 +96,9 @@ func New(
 		securityOptions.AuthBlockDuration <= 0 {
 		return nil, fmt.Errorf("authentication failure limiter settings must be positive")
 	}
+	if operationalOptions.Database != "sqlite" && operationalOptions.Database != "postgres" {
+		return nil, fmt.Errorf("operational database must be sqlite or postgres")
+	}
 	parsedPublicURL, err := url.Parse(publicURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse public URL: %w", err)

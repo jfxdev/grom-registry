@@ -40,6 +40,16 @@ type serverTestProjectRepository struct {
 	deleted bool
 }
 
+func TestNewRejectsUnsupportedOperationalDatabase(t *testing.T) {
+	_, err := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "", false, false, "", false,
+		SecurityOptions{AuthFailureLimit: 1, AuthFailureWindow: time.Second, AuthBlockDuration: time.Second},
+		OperationalOptions{Database: "unsupported"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "operational database") {
+		t.Fatalf("expected unsupported database rejection, got %v", err)
+	}
+}
+
 type serverTestProjectDeletionGuard struct{}
 
 func (serverTestProjectDeletionGuard) ProjectHasRepositories(context.Context, foundation.ID) (bool, error) {
