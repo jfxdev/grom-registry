@@ -43,7 +43,7 @@ scanner execution.
 
 | Phase | Status | Current evidence | Remaining exit work |
 |---|---|---|---|
-| Phase 0: executable foundation | Default path accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, an accepted public boot/migration/docs journey, a clean-checkout production-image smoke check, published-image scanning, and a separate PostgreSQL test gate exist | Record the first successful PostgreSQL CI run and complete PostgreSQL recovery evidence before claiming full PostgreSQL support |
+| Phase 0: executable foundation | Default path accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, an accepted public boot/migration/docs journey, a clean-checkout production-image smoke check, published-image scanning, and a passing separate PostgreSQL test gate exist | Complete PostgreSQL recovery evidence before claiming full PostgreSQL support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
 | Phase 2: registry browsing and core UI | Default path accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, user-disable flows, cursor pagination, and first-push plus destructive-browser acceptance evidence exist | Broaden quality coverage only when a concrete release need promotes it |
 | Phase 3: operational hardening | Default path accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, accepted full-stack restart preservation, a clean-checkout image smoke check, release automation, a published `v0.0.1` release, and tagged-release upgrade evidence exist | Expanded matrices follow advertised capabilities |
@@ -315,9 +315,9 @@ Acceptance:
 backend, frontend, golangci-lint, govulncheck, registry,
 administrative-browser, backup/restore, boot-acceptance, production-image, and
 release-upgrade jobs passed in [PR #27](https://github.com/jfxdev/grom-registry/pull/27).
-The gate is implemented locally and required by the active `main` ruleset;
-its first CI run is the remaining evidence before the application-database
-claim can be promoted. PostgreSQL backup and recovery remain separate work.**
+The separate mandatory `PostgreSQL Tests` job passed in
+[PR #28](https://github.com/jfxdev/grom-registry/pull/28). PostgreSQL backup
+and recovery remain separate work.**
 
 Work:
 
@@ -1543,12 +1543,13 @@ Grom instances are supported.
   root Dockerfile from a clean checkout, verifies the final image declares the
   non-root `grom` user, and starts the isolated public stack before checking
   health, readiness, API documentation, and the registry bearer challenge.
-- **Implemented, evidence pending:** the separate `PostgreSQL Tests` CI job
+- **Passing application-database gate:** the separate `PostgreSQL Tests` CI job
   requires a configured PostgreSQL service and exercises migrations,
-  persistence, and advisory-lock timeout/recovery without a skip path. Its
-  first recorded CI run, plus PostgreSQL recovery evidence, remain required
-  before PostgreSQL is advertised as fully supported. Published release images
-  already receive the documented SBOM and Trivy vulnerability report.
+  persistence, and advisory-lock timeout/recovery without a skip path. It
+  passed in [PR #28](https://github.com/jfxdev/grom-registry/pull/28).
+  PostgreSQL recovery evidence remains required before PostgreSQL is advertised
+  as fully supported. Published release images already receive the documented
+  SBOM and Trivy vulnerability report.
 
 Exit criterion: one command starts Grom with SQLite, applies pending migrations
 automatically, and returns an authenticated `/v2/` challenge. The same boot
@@ -1559,8 +1560,7 @@ The default-path release-artifact, image-scanning, operator-documentation, and
 tagged-release upgrade evidence are complete. `v0.0.1` is both the first
 published artifact and the accepted baseline for the SQLite/local-storage
 upgrade journey in [PR #23](https://github.com/jfxdev/grom-registry/pull/23).
-PostgreSQL recovery and its first mandatory CI evidence remain
-capability-specific gates.
+PostgreSQL recovery remains a capability-specific gate.
 
 ### Phase 1: authentication and project authorization
 
@@ -1660,7 +1660,8 @@ gates apply only to advertised capabilities.
 
 Compatibility expansion is driven by actual installation demand:
 
-1. Complete the PostgreSQL gate when small teams require an external database.
+1. Complete PostgreSQL backup and recovery evidence when small teams require
+   an external database.
 2. Complete the S3-compatible storage gate when local storage is insufficient.
 3. Complete representative ORAS and referrer coverage when generic OCI content
    becomes a supported product journey.
@@ -1713,7 +1714,7 @@ Status vocabulary:
 | 9 | Docker Engine can push and pull supported image content | Default MVP | Passing | Mandatory registry E2E job exercises Docker through the public Grom endpoint |
 | 10 | The UI lists the pushed repository and tag from live Distribution metadata | Default MVP | Passing | `make test-admin-e2e` passed locally and the mandatory `Admin Journey E2E (Docker)` workflow passed in [PR #6](https://github.com/jfxdev/grom-registry/pull/6) |
 | 11 | Restarting both services preserves users, projects, memberships, and blobs | Default MVP | Passing | The public process-level restart test passed in the mandatory `Registry E2E (Docker)` workflow in [PR #17](https://github.com/jfxdev/grom-registry/pull/17) |
-| 12 | The applicable backend suite passes against PostgreSQL | PostgreSQL support | Partial | Mandatory PostgreSQL CI job with no skip path |
+| 12 | The applicable backend suite passes against PostgreSQL | PostgreSQL support | Passing | The mandatory `PostgreSQL Tests` job passed in [PR #28](https://github.com/jfxdev/grom-registry/pull/28), exercising migrations, persistence, and advisory-lock timeout/recovery with a provisioned database and no skip path |
 | 13 | Empty or supported older databases migrate before readiness | Default MVP | Passing | `make test-boot-acceptance` and the mandatory `Boot Acceptance E2E (Docker)` workflow passed in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
 | 14 | A failed migration prevents startup and HTTP/registry exposure | Default MVP | Passing | The real failing-migration fixture passed through the mandatory `Boot Acceptance E2E (Docker)` workflow in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |
 | 15 | Every management/auth endpoint is versioned in OpenAPI and rendered at `/api/docs` | Default MVP | Passing | The public OpenAPI and documentation checks passed through the mandatory `Boot Acceptance E2E (Docker)` workflow in [PR #16](https://github.com/jfxdev/grom-registry/pull/16) |

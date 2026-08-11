@@ -20,12 +20,14 @@ type AgentOptions struct {
 	SigningCerts       string
 	RegistryData       string
 	DistributionConfig string
+	PostgresDump       string
 }
 
 type AgentCreateRequest struct {
 	GromVersion       string `json:"gromVersion"`
 	DeploymentProfile string `json:"deploymentProfile"`
 	Consistency       string `json:"consistency"`
+	Database          string `json:"database"`
 }
 
 func ServeAgent(ctx context.Context, options AgentOptions) error {
@@ -100,10 +102,18 @@ func newAgentHandler(options AgentOptions) http.Handler {
 			writeAgentError(w, http.StatusBadRequest)
 			return
 		}
+		if input.Database == "" {
+			input.Database = "sqlite"
+		}
+		if input.Database != "sqlite" && input.Database != "postgres" {
+			writeAgentError(w, http.StatusBadRequest)
+			return
+		}
 		inspection, path, err := Create(CreateOptions{
 			DestinationRoot: options.DestinationRoot,
 			GromData:        options.GromData, SigningCerts: options.SigningCerts,
 			RegistryData: options.RegistryData, DistributionConfig: options.DistributionConfig,
+			PostgresDump: options.PostgresDump, Database: input.Database,
 			GromVersion: input.GromVersion, DeploymentProfile: input.DeploymentProfile,
 			Consistency: input.Consistency,
 		})

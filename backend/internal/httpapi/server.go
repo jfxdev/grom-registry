@@ -60,6 +60,7 @@ type Server struct {
 	registryLimiter    *authenticationFailureLimiter
 	backups            *platformbackup.Manager
 	maintenance        *maintenance.Controller
+	databaseKind       string
 }
 
 type currentUserKey struct{}
@@ -67,6 +68,7 @@ type currentUserKey struct{}
 type OperationalOptions struct {
 	Backups     *platformbackup.Manager
 	Maintenance *maintenance.Controller
+	Database    string
 }
 
 func New(
@@ -94,6 +96,9 @@ func New(
 		securityOptions.AuthBlockDuration <= 0 {
 		return nil, fmt.Errorf("authentication failure limiter settings must be positive")
 	}
+	if operationalOptions.Database != "sqlite" && operationalOptions.Database != "postgres" {
+		return nil, fmt.Errorf("operational database must be sqlite or postgres")
+	}
 	parsedPublicURL, err := url.Parse(publicURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse public URL: %w", err)
@@ -110,6 +115,7 @@ func New(
 		registryLimiter: newAuthenticationFailureLimiter(securityOptions),
 		backups:         operationalOptions.Backups,
 		maintenance:     operationalOptions.Maintenance,
+		databaseKind:    operationalOptions.Database,
 	}
 	if server.maintenance == nil {
 		server.maintenance = maintenance.New()
@@ -159,6 +165,7 @@ func (s *Server) routes() chi.Router {
 			protected.Use(s.requireSession)
 			protected.Use(s.viewerReadOnly)
 			protected.Get("/me", s.currentUser)
+			protected.Get("/settings/status", s.getInstallationStatus)
 			protected.Put("/me/password", s.changeCurrentUserPassword)
 			protected.Get("/me/registry-tokens", s.listViewerRegistryTokens)
 			protected.Post("/me/registry-tokens", s.createViewerRegistryToken)
@@ -382,6 +389,17 @@ func (s *Server) getDeployment(w http.ResponseWriter, _ *http.Request) {
 		"profile":      s.deploymentProfile,
 		"insecureHttp": s.insecureHTTP,
 	})
+}
+
+func (s *Server) getInstallationStatus(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	distributionStatus := "unavailable"
+	if s.distributionClient != nil && s.distributionClient.Available(r.Context()) {
+		distributionStatus = "available"
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"database": s.databaseKind, "distribution": distributionStatus})
 }
 
 func (s *Server) changeCurrentUserPassword(w http.ResponseWriter, r *http.Request) {

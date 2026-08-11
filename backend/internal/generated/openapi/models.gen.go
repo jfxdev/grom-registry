@@ -174,6 +174,42 @@ func (e DeploymentProfile) Valid() bool {
 	}
 }
 
+// Defines values for InstallationStatusDatabase.
+const (
+	Postgres InstallationStatusDatabase = "postgres"
+	Sqlite   InstallationStatusDatabase = "sqlite"
+)
+
+// Valid indicates whether the value is a known member of the InstallationStatusDatabase enum.
+func (e InstallationStatusDatabase) Valid() bool {
+	switch e {
+	case Postgres:
+		return true
+	case Sqlite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstallationStatusDistribution.
+const (
+	Available   InstallationStatusDistribution = "available"
+	Unavailable InstallationStatusDistribution = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the InstallationStatusDistribution enum.
+func (e InstallationStatusDistribution) Valid() bool {
+	switch e {
+	case Available:
+		return true
+	case Unavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InventoryState.
 const (
 	InventoryStateActive   InventoryState = "active"
@@ -666,6 +702,18 @@ type Health struct {
 	// Status Example: ok
 	Status string `json:"status"`
 }
+
+// InstallationStatus defines model for InstallationStatus.
+type InstallationStatus struct {
+	Database     InstallationStatusDatabase     `json:"database"`
+	Distribution InstallationStatusDistribution `json:"distribution"`
+}
+
+// InstallationStatusDatabase defines model for InstallationStatus.Database.
+type InstallationStatusDatabase string
+
+// InstallationStatusDistribution defines model for InstallationStatus.Distribution.
+type InstallationStatusDistribution string
 
 // InventoryState defines model for InventoryState.
 type InventoryState string

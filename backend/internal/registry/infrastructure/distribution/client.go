@@ -77,6 +77,20 @@ func NewClient(rawURL string, tokens *registryapp.TokenService) (*Client, error)
 	}, nil
 }
 
+func (c *Client) Available(ctx context.Context) bool {
+	endpoint := c.baseURL.ResolveReference(&url.URL{Path: "/v2/"})
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return false
+	}
+	response, err := c.http.Do(request)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = response.Body.Close() }()
+	return response.StatusCode == http.StatusOK || response.StatusCode == http.StatusUnauthorized
+}
+
 func (c *Client) ListProjectRepositories(ctx context.Context, project string) ([]string, error) {
 	prefix := project + "/"
 	result := make([]string, 0)

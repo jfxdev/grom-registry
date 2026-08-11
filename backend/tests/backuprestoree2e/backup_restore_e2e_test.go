@@ -37,6 +37,10 @@ func TestBackupRestoreJourney(t *testing.T) {
 	root := repositoryRoot(t)
 	port := reservePort(t)
 	recoveryPort := reservePort(t)
+	postgresPort := 0
+	if os.Getenv("GROM_BACKUP_RESTORE_POSTGRES") == "1" {
+		postgresPort = reservePort(t)
+	}
 	project := fmt.Sprintf("grombackupe2e%d%d", os.Getpid(), time.Now().UnixNano())
 	publicURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	registry := strings.TrimPrefix(publicURL, "http://")
@@ -49,6 +53,9 @@ func TestBackupRestoreJourney(t *testing.T) {
 		fmt.Sprintf("GROM_RECOVERY_PORT=%d", recoveryPort), "GROM_VERSION=dev",
 		"BACKUP_MOUNT_ROOT="+t.TempDir(), "BACKUP_SET_NAME=unused-e2e-backup",
 	)
+	if postgresPort != 0 {
+		env = append(env, fmt.Sprintf("GROM_POSTGRES_PORT=%d", postgresPort))
+	}
 	stack := composeStack{root: root, project: project, env: env}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -187,6 +194,9 @@ func (stack composeStack) compose(ctx context.Context, arguments ...string) (str
 	args := []string{"compose", "--ansi", "never", "--project-name", stack.project,
 		"--file", filepath.Join(stack.root, "deploy", "compose", "docker-compose.yml"),
 		"--file", filepath.Join(stack.root, "deploy", "backup", "docker-compose.backup.yml")}
+	if os.Getenv("GROM_BACKUP_RESTORE_POSTGRES") == "1" {
+		args = append(args, "--file", filepath.Join(stack.root, "deploy", "compose", "docker-compose.postgres.yml"))
+	}
 	args = append(args, arguments...)
 	return run(ctx, stack.root, stack.env, nil, "docker", args...)
 }

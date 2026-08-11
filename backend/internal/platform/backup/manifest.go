@@ -15,9 +15,11 @@ import (
 const (
 	FormatVersion         = 1
 	QuiescedFormatVersion = 2
+	PostgresFormatVersion = 3
 	MaxManifestSize       = 1 << 20
 	MaxArchivePath        = 4096
 	MaxConfigSize         = 16 << 20
+	MaxDatabaseBackupSize = 16 << 30
 )
 
 const (
@@ -25,6 +27,7 @@ const (
 	ComponentSigningCerts       = "signing-certs"
 	ComponentRegistryData       = "registry-data"
 	ComponentDistributionConfig = "distribution-config"
+	ComponentPostgresDump       = "postgres-dump"
 )
 
 type Manifest struct {
@@ -56,8 +59,16 @@ var requiredComponents = []Component{
 	{Name: ComponentDistributionConfig, File: "distribution-config.yml", Kind: "file"},
 }
 
+var postgresRequiredComponents = []Component{
+	{Name: ComponentGromData, File: "grom-data.tar", Kind: "tar"},
+	{Name: ComponentPostgresDump, File: "postgres.dump", Kind: "file"},
+	{Name: ComponentSigningCerts, File: "signing-certs.tar", Kind: "tar"},
+	{Name: ComponentRegistryData, File: "registry-data.tar", Kind: "tar"},
+	{Name: ComponentDistributionConfig, File: "distribution-config.yml", Kind: "file"},
+}
+
 func validateManifest(manifest Manifest) error {
-	if manifest.FormatVersion != FormatVersion && manifest.FormatVersion != QuiescedFormatVersion {
+	if manifest.FormatVersion != FormatVersion && manifest.FormatVersion != QuiescedFormatVersion && manifest.FormatVersion != PostgresFormatVersion {
 		return fmt.Errorf("unsupported backup format version %d", manifest.FormatVersion)
 	}
 	if _, err := uuid.Parse(manifest.BackupID); err != nil {
@@ -67,19 +78,25 @@ func validateManifest(manifest Manifest) error {
 		return fmt.Errorf("backup creation time must be UTC")
 	}
 	if (manifest.FormatVersion == FormatVersion && manifest.Consistency != "offline") ||
-		(manifest.FormatVersion == QuiescedFormatVersion && manifest.Consistency != "quiesced") {
+		((manifest.FormatVersion == QuiescedFormatVersion || manifest.FormatVersion == PostgresFormatVersion) && manifest.Consistency != "quiesced") {
 		return fmt.Errorf("unsupported consistency mode")
 	}
-	if manifest.Database != "sqlite" || manifest.RegistryStorage != "filesystem" {
+	if manifest.RegistryStorage != "filesystem" || (manifest.Database != "sqlite" && manifest.Database != "postgres") ||
+		(manifest.Database == "postgres" && manifest.FormatVersion != PostgresFormatVersion) ||
+		(manifest.Database == "sqlite" && manifest.FormatVersion == PostgresFormatVersion) {
 		return fmt.Errorf("unsupported database or registry storage profile")
 	}
 	if err := validateManifestMetadata(manifest.GromVersion, manifest.DeploymentProfile); err != nil {
 		return err
 	}
-	if len(manifest.Components) != len(requiredComponents) {
-		return fmt.Errorf("backup must declare exactly %d components", len(requiredComponents))
+	expectedComponents := requiredComponents
+	if manifest.Database == "postgres" {
+		expectedComponents = postgresRequiredComponents
 	}
-	for i, expected := range requiredComponents {
+	if len(manifest.Components) != len(expectedComponents) {
+		return fmt.Errorf("backup must declare exactly %d components", len(expectedComponents))
+	}
+	for i, expected := range expectedComponents {
 		component := manifest.Components[i]
 		if component.Name != expected.Name || component.File != expected.File || component.Kind != expected.Kind {
 			return fmt.Errorf("component %d does not match the format contract", i)
@@ -90,8 +107,12 @@ func validateManifest(manifest Manifest) error {
 		if len(component.SHA256) != 64 || !isLowerHex(component.SHA256) {
 			return fmt.Errorf("component %q has an invalid checksum", component.Name)
 		}
+		maxSize := int64(MaxConfigSize)
+		if component.Name == ComponentPostgresDump {
+			maxSize = MaxDatabaseBackupSize
+		}
 		if component.Kind == "file" &&
-			(component.EntryCount != 1 || component.ContentBytes != component.Bytes || component.Bytes > MaxConfigSize) {
+			(component.EntryCount != 1 || component.ContentBytes != component.Bytes || component.Bytes > maxSize) {
 			return fmt.Errorf("component %q has invalid file measurements", component.Name)
 		}
 	}

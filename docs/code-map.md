@@ -38,7 +38,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/product-features.md` | Implemented product capabilities, business rules, permissions, channel coverage, and explicit gaps |
 | `docs/domain-model.md` | Canonical inventory of domain types and ownership |
 | `docs/code-map.md` | Repository navigation and operational entry points |
-| `docs/backup-and-disaster-recovery-implementation-plan.md` | Implemented default SQLite/local-storage backup, empty-volume restore, and recovery acceptance design |
+| `docs/backup-and-disaster-recovery-implementation-plan.md` | Implemented SQLite/PostgreSQL backup, empty-target restore, and recovery acceptance design |
 | `docs/backup-and-disaster-recovery.md` | Operator backup, restore, encrypted retention, drill, and troubleshooting procedure |
 | `docs/release-operations.md` | Operator installation by digest, upgrade, rollback, signing-key posture, and supported matrix |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
@@ -77,7 +77,7 @@ only if an actual split is implemented.
 | `backend/internal/constants/` | Stable named constants organized by concern |
 | `backend/internal/platform/` | Configuration, database setup, server lifecycle, logging, and composition |
 | `backend/internal/platform/config/` | Deployment-profile policy, private-address validation, trusted-proxy ranges, authentication-limit settings, and public URL/cookie validation |
-| `backend/internal/platform/backup/` | Backup manager and agent, portable bundles, recovery web server, versioned sets, safe archives, and staged restore |
+| `backend/internal/platform/backup/` | Backup manager and isolated agent, portable SQLite/PostgreSQL bundles, recovery web server, versioned sets, safe archives, and staged restore |
 | `backend/internal/platform/maintenance/` | Drains active writes and blocks mutations and registry traffic during a quiesced snapshot |
 | `backend/cmd/grom-backup/` | Image entry points for the backup agent, recovery UI, and low-level offline compatibility commands |
 | `backend/internal/httpapi/security.go` | Bounded authentication failure limiter, trusted real-client-IP resolution, and rate-limit responses |
@@ -98,9 +98,10 @@ only if an actual split is implemented.
 | `service-accounts` | Service-account lifecycle, assignments, and nested access-key management |
 | `users` | User profile, password management, and installation user administration |
 | `backups` | Installation-admin recovery-point creation, status, listing, and download |
+| `settings` | Installation-admin operational status for the database backend and Distribution |
 
-Audit presentation and settings modules are planned completion work and do not
-currently exist under `frontend/src/modules`.
+Audit presentation remains planned completion work and does not currently exist
+under `frontend/src/modules`.
 
 Cross-cutting frontend code lives under `frontend/src/shared`.
 Static product artwork lives under `frontend/src/assets`, separated into `icons` and `logos`.
@@ -129,6 +130,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `/api/v1/projects/{project}/repository-inventory`, `/api/v1/projects/{project}/repository-inventory-reconciliations` | Metadata inventory and reconciliation with Distribution |
 | `/api/v1/projects/{project}/lifecycle-previews`, `/api/v1/projects/{project}/lifecycle-runs` | Persisted retention dry-runs and audited manual execution |
 | `/api/v1/deployment` | Public non-sensitive deployment posture used for operator warnings |
+| `/api/v1/settings/status` | Installation-administrator view of the selected application database and Distribution availability |
 | `/api/v1/backups`, `/api/v1/backups/{backupId}`, `/api/v1/backups/{backupId}/download` | Installation-admin paginated backup operations, confirmed local deletion, and portable recovery bundles |
 | `/auth/token` | Registry authentication |
 | `/v2/` | Streaming gateway to Distribution |
@@ -169,6 +171,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `make test-production-image-smoke` | Build the production image from a clean checkout and verify its non-root public runtime surface |
 | `make build` | Build frontend and backend |
 | `make dev` | Start the Go backend and Vite frontend together |
+| `make dev-postgres` | Start a local PostgreSQL service, then the Go backend and Vite frontend using it |
 | `make compose-up` | Build and start Grom plus Distribution |
 | `make compose-up-postgres` | Build and start Grom, Distribution, and PostgreSQL |
 | `make compose-down` | Stop the local stack |

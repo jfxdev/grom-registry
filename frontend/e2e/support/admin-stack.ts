@@ -10,7 +10,7 @@ import type { Runtime } from './runtime'
 const execFileAsync = promisify(execFile)
 const adminEmail = 'admin-e2e@grom.local'
 const adminPassword = 'admin-e2e-password'
-const maxOutput = 16 << 10
+const maxOutput = 4 << 20
 
 function repositoryRoot() {
   return resolve(dirname(fileURLToPath(import.meta.url)), '../../..')

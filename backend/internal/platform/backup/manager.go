@@ -50,6 +50,7 @@ type Manager struct {
 	onComplete        func(context.Context, Summary) error
 	gromVersion       string
 	deploymentProfile string
+	database          string
 	lastOperation     *Operation
 	deleting          bool
 }
@@ -61,9 +62,19 @@ func NewManager(
 	gromVersion, deploymentProfile string,
 	onComplete func(context.Context, Summary) error,
 ) *Manager {
+	return NewManagerWithDatabase(agent, controller, checkpoint, gromVersion, deploymentProfile, "sqlite", onComplete)
+}
+
+func NewManagerWithDatabase(
+	agent Agent,
+	controller *maintenance.Controller,
+	checkpoint func(context.Context) error,
+	gromVersion, deploymentProfile, database string,
+	onComplete func(context.Context, Summary) error,
+) *Manager {
 	return &Manager{
 		agent: agent, maintenance: controller, checkpoint: checkpoint,
-		gromVersion: gromVersion, deploymentProfile: deploymentProfile, onComplete: onComplete,
+		gromVersion: gromVersion, deploymentProfile: deploymentProfile, database: database, onComplete: onComplete,
 	}
 }
 
@@ -169,6 +180,7 @@ func (manager *Manager) run(operationID string) {
 	summary, err := manager.agent.Create(context.Background(), AgentCreateRequest{
 		GromVersion: manager.gromVersion, DeploymentProfile: manager.deploymentProfile,
 		Consistency: "quiesced",
+		Database:    manager.database,
 	})
 	if err != nil {
 		manager.fail(operationID, "Backup creation failed")

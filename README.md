@@ -59,6 +59,15 @@ To use PostgreSQL instead of SQLite:
 make compose-up-postgres
 ```
 
+For the local Go/Vite development loop backed by PostgreSQL, use:
+
+```bash
+make dev-postgres
+```
+
+It starts (or reuses) a loopback-only PostgreSQL container and waits until it
+is ready; stop it later with `make compose-down`.
+
 After creating a project, service account, membership, and access key:
 
 ```bash

@@ -26,12 +26,14 @@ Keep this file aligned with the code that actually exists.
 - Run the isolated browser-driven administrative first-push journey: `make test-admin-e2e`
 - Run the isolated boot, migration, readiness, and API-documentation journey: `make test-boot-acceptance`
 - Run the isolated destructive backup/restore journey: `make test-backup-restore-e2e`
+- Run the isolated destructive PostgreSQL backup/restore journey: `make test-backup-restore-postgres-e2e`
 - Build the clean-checkout production image and smoke-test its public runtime: `make test-production-image-smoke`
 - Exercise the low-level offline backup compatibility tool: `make backup BACKUP_DIR=/absolute/path`
 - Inspect a backup with the development tool: `make backup-inspect BACKUP_PATH=/absolute/path/to/backup`
 - Exercise low-level empty-volume restore: `make restore BACKUP_PATH=/absolute/path/to/backup`
 - Build both applications: `make build`
 - Start backend and frontend together: `cp .env.example .env && make dev`
+- Start backend and frontend with a local PostgreSQL service: `cp .env.example .env && make dev-postgres`
 - Start the full local stack: `cp .env.example .env && make compose-up`
 - Start the local stack with PostgreSQL: `make compose-up-postgres`
 - Stop the local stack: `make compose-down`

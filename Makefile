@@ -1,4 +1,4 @@
-.PHONY: generate test test-postgres test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-production-image-smoke build dev compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
+.PHONY: generate test test-postgres test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-backup-restore-postgres-e2e test-production-image-smoke build dev dev-postgres compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
 
 DEV_ENV_FILE ?= .env
 
@@ -33,6 +33,9 @@ test-boot-acceptance:
 test-backup-restore-e2e:
 	cd backend && GROM_RUN_BACKUP_RESTORE_E2E=1 go test -count=1 -timeout=15m ./tests/backuprestoree2e
 
+test-backup-restore-postgres-e2e:
+	cd backend && GROM_RUN_BACKUP_RESTORE_E2E=1 GROM_BACKUP_RESTORE_POSTGRES=1 go test -count=1 -timeout=15m ./tests/backuprestoree2e
+
 test-production-image-smoke:
 	deploy/compose/smoke-production-image.sh
 
@@ -53,6 +56,7 @@ dev:
 	set -a; \
 	. "$$dev_env_file"; \
 	set +a; \
+	if [ -n "$${GROM_DEV_DATABASE_URL:-}" ]; then export GROM_DATABASE_URL="$$GROM_DEV_DATABASE_URL"; fi; \
 	cleanup() { \
 		trap - INT TERM EXIT; \
 		kill "$$backend_pid" "$$frontend_pid" 2>/dev/null || true; \
@@ -72,6 +76,25 @@ dev:
 	if ! kill -0 "$$backend_pid" 2>/dev/null; then wait "$$backend_pid" || status=$$?; fi; \
 	if ! kill -0 "$$frontend_pid" 2>/dev/null; then wait "$$frontend_pid" || status=$$?; fi; \
 	exit "$$status"
+
+dev-postgres:
+	@if [ ! -f "$(DEV_ENV_FILE)" ]; then \
+		echo "Missing $(DEV_ENV_FILE). Run: cp .env.example .env"; \
+		exit 1; \
+	fi
+	@dev_env_file="$(DEV_ENV_FILE)"; \
+	case "$$dev_env_file" in /*) ;; *) dev_env_file="./$$dev_env_file";; esac; \
+	set -a; . "$$dev_env_file"; set +a; \
+	: "$${GROM_POSTGRES_PASSWORD:=grom-local-password}"; \
+	: "$${GROM_POSTGRES_PORT:=5432}"; \
+	GROM_POSTGRES_PASSWORD="$$GROM_POSTGRES_PASSWORD" GROM_POSTGRES_PORT="$$GROM_POSTGRES_PORT" \
+		docker compose --env-file "$$dev_env_file" -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.postgres.yml up --detach --wait postgres; \
+	if ! docker compose --env-file "$$dev_env_file" -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.postgres.yml exec --no-TTY -e PGPASSWORD="$$GROM_POSTGRES_PASSWORD" postgres \
+		sh -ec 'psql -h 127.0.0.1 -U grom -d grom -c "SELECT 1" >/dev/null'; then \
+		echo "PostgreSQL is running but rejects GROM_POSTGRES_PASSWORD. Use the password that initialized this local volume, or remove only the local PostgreSQL development volume before retrying." >&2; \
+		exit 1; \
+	fi; \
+	$(MAKE) dev GROM_DEV_DATABASE_URL="postgres://grom:$${GROM_POSTGRES_PASSWORD}@127.0.0.1:$${GROM_POSTGRES_PORT}/grom?sslmode=disable"
 
 compose-up:
 	docker compose --env-file .env -f deploy/compose/docker-compose.yml up --build

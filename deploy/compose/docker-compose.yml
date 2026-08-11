@@ -45,6 +45,7 @@ services:
       - grom-data:/data
       - signing-certs:/certs
       - backup-agent-run:/run/grom-backup
+      - database-backups:/database-backups
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
       interval: 2s
@@ -66,6 +67,7 @@ services:
       - distribution-config:/source/distribution-config:ro
       - grom-backups:/backups
       - backup-agent-run:/run/grom-backup
+      - database-backups:/source/database-backups:ro
     network_mode: none
     cap_drop: ["ALL"]
     cap_add: ["DAC_READ_SEARCH"]
@@ -113,6 +115,7 @@ services:
       - signing-certs:/target/signing-certs
       - registry-data:/target/registry-data
       - distribution-config:/target/distribution-config
+      - database-backups:/database-backups
     cap_drop: ["ALL"]
     cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
     security_opt: ["no-new-privileges:true"]
@@ -125,3 +128,4 @@ volumes:
   grom-backups:
   backup-agent-run:
   distribution-config:
+  database-backups:

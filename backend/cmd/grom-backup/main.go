@@ -37,6 +37,7 @@ func run(arguments []string, output io.Writer) error {
 		signingCerts := flags.String("signing-certs-target", "/target/signing-certs", "empty signing target")
 		registryData := flags.String("registry-data-target", "/target/registry-data", "empty registry target")
 		distributionConfig := flags.String("distribution-config-target", "/target/distribution-config/config.yml", "recovered Distribution configuration")
+		postgresURL := flags.String("postgres-database-url", "", "empty PostgreSQL target database URL")
 		maxUpload := flags.Int64("max-upload-bytes", 1<<40, "maximum uncompressed backup payload bytes")
 		if err := flags.Parse(arguments[1:]); err != nil {
 			return err
@@ -50,7 +51,7 @@ func run(arguments []string, output io.Writer) error {
 			ListenAddress: *listen, BackupRoot: *backupRoot,
 			GromDataTarget: *gromData, SigningCertsTarget: *signingCerts,
 			RegistryDataTarget: *registryData, DistributionConfigTarget: *distributionConfig,
-			TargetGromVersion: version, MaxUploadBytes: *maxUpload,
+			TargetGromVersion: version, PostgresDatabaseURL: *postgresURL, MaxUploadBytes: *maxUpload,
 		})
 	case "agent":
 		flags := flag.NewFlagSet("agent", flag.ContinueOnError)
@@ -60,6 +61,7 @@ func run(arguments []string, output io.Writer) error {
 		signingCerts := flags.String("signing-certs", "/source/signing-certs", "signing source")
 		registryData := flags.String("registry-data", "/source/registry-data", "registry source")
 		distributionConfig := flags.String("distribution-config", "/source/distribution-config.yml", "Distribution configuration source")
+		postgresDump := flags.String("postgres-dump", "/source/database-backups/postgres.dump", "PostgreSQL logical dump source")
 		if err := flags.Parse(arguments[1:]); err != nil {
 			return err
 		}
@@ -72,6 +74,7 @@ func run(arguments []string, output io.Writer) error {
 			SocketPath: *socket, DestinationRoot: *destination,
 			GromData: *gromData, SigningCerts: *signingCerts,
 			RegistryData: *registryData, DistributionConfig: *distributionConfig,
+			PostgresDump: *postgresDump,
 		})
 	case "estimate":
 		flags := flag.NewFlagSet("estimate", flag.ContinueOnError)
