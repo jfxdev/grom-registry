@@ -35,7 +35,7 @@ func (c *Client) do(ctx context.Context, method, path string, output any) error 
 	if err != nil {
 		return fmt.Errorf("contact registry maintenance agent: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode > 299 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		return fmt.Errorf("registry maintenance agent returned status %d", response.StatusCode)

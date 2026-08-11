@@ -423,10 +423,6 @@ func (s *Server) runGarbageCollection(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := principalForUser(userFromContext(r.Context()))
 	operationID := foundation.ID(uuid.NewString())
-	if err := s.recordAudit(r, actor, constants.AuditGarbageCollectionStarted, constants.AuditResourceGarbageCollection, operationID, nil); err != nil {
-		s.internalError(w, r, err)
-		return
-	}
 	end, err := s.maintenance.Begin(r.Context())
 	if err != nil {
 		w.Header().Set("Retry-After", "5")
@@ -434,6 +430,10 @@ func (s *Server) runGarbageCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer end()
+	if err := s.recordAudit(r, actor, constants.AuditGarbageCollectionStarted, constants.AuditResourceGarbageCollection, operationID, nil); err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	result, err := s.registryMaintenance.Collect(r.Context())
 	if err != nil {
 		_ = s.recordAudit(r, actor, constants.AuditGarbageCollectionFailed, constants.AuditResourceGarbageCollection, operationID, map[string]any{"message": "registry garbage collection failed"})

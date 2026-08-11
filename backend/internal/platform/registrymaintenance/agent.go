@@ -67,7 +67,9 @@ func Serve(ctx context.Context, options AgentOptions) error {
 	}
 	defer func() { _ = listener.Close(); _ = os.Remove(options.SocketPath) }()
 	if os.Geteuid() == 0 {
-		_ = os.Chown(options.SocketPath, -1, gromServiceGID)
+		if err := os.Chown(options.SocketPath, -1, gromServiceGID); err != nil {
+			return err
+		}
 	}
 	if err := os.Chmod(options.SocketPath, 0o660); err != nil {
 		return err

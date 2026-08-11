@@ -3,11 +3,13 @@ set -euo pipefail
 
 project_name="grom-production-smoke-${RANDOM}-${RANDOM}"
 image_tag="grom-registry:smoke-${project_name}"
+maintenance_image_tag="grom-registry-maintenance:smoke-${project_name}"
 compose_file="deploy/compose/docker-compose.yml"
 bootstrap_password="smoke-production-password"
 
 compose() {
   GROM_IMAGE="${image_tag}" \
+  GROM_REGISTRY_MAINTENANCE_IMAGE="${maintenance_image_tag}" \
   GROM_HTTP_PORT=0 \
   GROM_BOOTSTRAP_ADMIN_PASSWORD="${bootstrap_password}" \
   docker compose --project-name "${project_name}" -f "${compose_file}" "$@"
@@ -16,10 +18,12 @@ compose() {
 cleanup() {
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker image rm --force "${image_tag}" >/dev/null 2>&1 || true
+  docker image rm --force "${maintenance_image_tag}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 docker build --build-arg GROM_VERSION=smoke -t "${image_tag}" .
+docker build --target registry-maintenance -t "${maintenance_image_tag}" .
 
 image_user="$(docker image inspect --format '{{.Config.User}}' "${image_tag}")"
 if [[ "${image_user}" != "grom" ]]; then
