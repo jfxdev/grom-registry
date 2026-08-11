@@ -534,9 +534,9 @@ available only through durable backend persistence in the MVP.
 - Local Compose profiles support the default SQLite stack and an optional
   PostgreSQL stack.
 - Installation administrators create, monitor, list five at a time, download,
-  and delete complete SQLite/local-volume recovery points from **Backup &
-  recovery**. Local deletion requires typed confirmation and does not affect
-  previously downloaded bundles.
+  and delete complete SQLite or PostgreSQL recovery points with local
+  Distribution storage from **Backup & recovery**. Local deletion requires
+  typed confirmation and does not affect previously downloaded bundles.
 - Backup briefly drains and blocks mutations and registry traffic while an
   isolated, networkless agent snapshots the recovery-critical volumes.
 - The same Grom image provides a standalone, loopback-only recovery UI that
@@ -590,8 +590,7 @@ The executable product does not currently provide:
 - registry mirroring or pull-through cache;
 - OIDC or enterprise identity providers;
 - multi-instance active-active operation;
-- scheduled backups, remote-backup credentials, PostgreSQL recovery, or S3
-  recovery;
+- scheduled backups, remote-backup credentials, or S3 recovery;
 - billing, quotas, replication, or a Kubernetes operator.
 
 These omissions are product boundaries, not implicit partial features.

@@ -192,8 +192,9 @@ func TestCreatePostgresUsesRequiredComponentPositions(t *testing.T) {
 	fixture := createFixture(t)
 	dump := filepath.Join(t.TempDir(), "postgres.dump")
 	writeFixtureFile(t, dump, "postgres custom dump", 0o600)
+	root := t.TempDir()
 	inspection, _, err := Create(CreateOptions{
-		DestinationRoot: t.TempDir(), GromData: fixture.gromData,
+		DestinationRoot: root, GromData: fixture.gromData,
 		SigningCerts: fixture.signing, RegistryData: fixture.registry,
 		DistributionConfig: fixture.config, PostgresDump: dump, Database: "postgres",
 		GromVersion: "test-version", DeploymentProfile: "development", Consistency: "quiesced",
@@ -213,6 +214,13 @@ func TestCreatePostgresUsesRequiredComponentPositions(t *testing.T) {
 		if component.Name != expected.Name || component.File != expected.File || component.Kind != expected.Kind {
 			t.Fatalf("component %d = %#v, want name=%q file=%q kind=%q", index, component, expected.Name, expected.File, expected.Kind)
 		}
+	}
+	var bundle bytes.Buffer
+	if _, err := Bundle(root, inspection.Manifest.BackupID, &bundle); err != nil {
+		t.Fatalf("bundle PostgreSQL backup: %v", err)
+	}
+	if _, err := Unbundle(t.TempDir(), bytes.NewReader(bundle.Bytes()), 1<<20); err != nil {
+		t.Fatalf("unbundle PostgreSQL backup: %v", err)
 	}
 }
 

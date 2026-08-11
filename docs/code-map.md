@@ -24,7 +24,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `.github/workflows/release-upgrade-e2e.yml` | Tagged-GHCR-release to checkout-candidate SQLite/local-storage upgrade acceptance check; it is intentionally separate from the required, network-independent registry journey |
 | `.github/workflows/admin-journey-e2e.yml` | Mandatory browser-driven administrative first-push acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/boot-acceptance-e2e.yml` | Mandatory real-Docker default-installation boot, migration, readiness, and API-documentation acceptance check |
-| `.github/workflows/backup-restore-e2e.yml` | Real-Docker volume-loss and recovery acceptance check |
+| `.github/workflows/backup-restore-e2e.yml` | Real-Docker SQLite and PostgreSQL volume-loss and recovery acceptance checks |
 | `.github/workflows/production-image-smoke.yml` | Mandatory clean-checkout production-image build, non-root assertion, and public-surface smoke check |
 | `.github/workflows/release.yml` | Tag-triggered GHCR image publication, SBOM and vulnerability-report generation, release checksums, and GitHub Release assets |
 | `docs/` | Architecture, domain inventory, operations, decisions, and visual identity |
@@ -151,7 +151,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `backend/internal/audit/` | Immutable lifecycle audit event recording |
 | `backend/tests/registrye2e/` | Opt-in public-endpoint registry authorization, slow streaming blob upload, user-session revocation, and full-stack restart-preservation journeys; isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
 | `backend/tests/bootacceptance/` | Opt-in public boot, migration, readiness, and API-documentation acceptance journey through an isolated Compose stack; includes the reviewed prior-schema fixture and a separate real-migration failure fixture |
-| `backend/tests/backuprestoree2e/` | Opt-in destructive volume-loss recovery journey through public Grom and Docker endpoints |
+| `backend/tests/backuprestoree2e/` | Opt-in destructive SQLite or PostgreSQL volume-loss recovery journey through public Grom and Docker endpoints |
 | `frontend/e2e/` | Playwright mocked sign-in smoke plus isolated public-stack first-push and destructive-administration journeys |
 | `frontend/src/modules/registry/` | Inventory and lifecycle API integration |
 
@@ -168,6 +168,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `make test-admin-e2e` | Run isolated real-browser first-push plus destructive access, credential, artifact, lifecycle, repository, project, user, and backup journeys |
 | `make test-boot-acceptance` | Run the isolated default-installation boot, migration, readiness, and API-documentation journey |
 | `make test-backup-restore-e2e` | Destroy and restore an isolated default installation and verify old and new registry activity |
+| `make test-backup-restore-postgres-e2e` | Destroy and restore an isolated PostgreSQL installation and verify old and new registry activity |
 | `make test-production-image-smoke` | Build the production image from a clean checkout and verify its non-root public runtime surface |
 | `make build` | Build frontend and backend |
 | `make dev` | Start the Go backend and Vite frontend together |

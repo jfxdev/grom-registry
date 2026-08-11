@@ -172,8 +172,10 @@ The mandatory real-Docker recovery journeys (SQLite and PostgreSQL):
    signing-key continuity, and restored-session invalidation;
 8. corrupts a bundle and proves that recovery rejects it.
 
-The `Backup Restore E2E` GitHub check runs this journey without uploading any
-database, certificate, token, blob, or recovery bundle as an artifact.
+The `Backup Restore E2E` GitHub Actions workflow contains separate SQLite and
+PostgreSQL jobs for this journey without uploading any database, certificate,
+token, blob, or recovery bundle as an artifact. PostgreSQL is added to the
+supported release matrix only after its required job has passed in CI.
 
 ## Completion checklist
 

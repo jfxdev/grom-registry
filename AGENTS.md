@@ -83,6 +83,10 @@ preserve the administrator, project, Writer access key, repository inventory,
 and pushed blobs across the upgrade and a subsequent restart. Keep it outside
 the network-independent registry journey and do not mark supported upgrades as
 accepted until the tagged-release evidence has passed in CI.
+`PostgreSQL Backup Restore E2E` runs the same destructive recovery journey
+through the PostgreSQL Compose overlay. Do not advertise PostgreSQL as
+supported until its first CI run passes; its status check is required by the
+`main` branch ruleset.
 The mandatory GitHub status checks are `Backend Tests`, `PostgreSQL Tests`,
 `Frontend Tests`, `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
 `Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and
