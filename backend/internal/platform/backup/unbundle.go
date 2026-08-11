@@ -37,7 +37,7 @@ func Unbundle(root string, input io.Reader, maxBytes int64) (Summary, error) {
 	allowed := map[string]struct{}{
 		"manifest.json": {}, "SHA256SUMS": {}, "COMPLETE": {},
 		"grom-data.tar": {}, "signing-certs.tar": {}, "registry-data.tar": {},
-		"distribution-config.yml": {},
+		"distribution-config.yml": {}, "postgres.dump": {},
 	}
 	for {
 		header, err := reader.Next()
@@ -84,7 +84,7 @@ func Unbundle(root string, input io.Reader, maxBytes int64) (Summary, error) {
 			return Summary{}, fmt.Errorf("write uploaded payload")
 		}
 	}
-	if topLevel == "" || len(seen) != len(allowed) {
+	if topLevel == "" {
 		return Summary{}, fmt.Errorf("backup bundle is incomplete")
 	}
 	if _, err := Inspect(partial); err != nil {
