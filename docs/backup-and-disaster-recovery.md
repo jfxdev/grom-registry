@@ -72,8 +72,10 @@ docker compose --env-file .env \
 ```
 
 It listens on `http://127.0.0.1:8081` by default. A direct image deployment can
-use the equivalent `recovery` image command with the five explicit volume
-mounts. Never expose the recovery port to a public or untrusted network.
+use the equivalent `recovery` image command. SQLite recovery requires the
+backup location plus four empty target volumes; PostgreSQL recovery requires
+the backup location plus five empty target volumes, for six mounts total.
+Never expose the recovery port to a public or untrusted network.
 
 The PostgreSQL overlay configures the recovery image with an empty temporary
 PostgreSQL target through `--postgres-database-url`; it starts the recovery
