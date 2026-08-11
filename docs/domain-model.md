@@ -139,6 +139,11 @@ restored ephemeral credentials are invalidated. Backup manifests, operations,
 pagination cursors, and restore markers are platform-operational records rather
 than domain entities.
 
+Distribution garbage collection is likewise a platform operation rather than a
+Registry domain entity. It is serialized by the platform maintenance controller
+and records start, completion or failure audit events with only timestamps and
+reclaimed bytes.
+
 ## Constants ownership
 
 Stable backend constants are defined in `backend/internal/constants`, split by concern.

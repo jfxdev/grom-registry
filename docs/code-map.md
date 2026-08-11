@@ -79,6 +79,7 @@ only if an actual split is implemented.
 | `backend/internal/platform/config/` | Deployment-profile policy, private-address validation, trusted-proxy ranges, authentication-limit settings, and public URL/cookie validation |
 | `backend/internal/platform/backup/` | Backup manager and isolated agent, portable SQLite/PostgreSQL bundles, recovery web server, versioned sets, safe archives, and staged restore |
 | `backend/internal/platform/maintenance/` | Drains active writes and blocks mutations and registry traffic during a quiesced snapshot |
+| `backend/internal/platform/registrymaintenance/` | Unix-socket control client and isolated Distribution supervisor used for storage usage and safe garbage collection |
 | `backend/cmd/grom-backup/` | Image entry points for the backup agent, recovery UI, and low-level offline compatibility commands |
 | `backend/internal/httpapi/security.go` | Bounded authentication failure limiter, trusted real-client-IP resolution, and rate-limit responses |
 | `backend/migrations/` | Ordered migrations applied automatically during boot |
@@ -131,6 +132,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `/api/v1/projects/{project}/lifecycle-previews`, `/api/v1/projects/{project}/lifecycle-runs` | Persisted retention dry-runs and audited manual execution |
 | `/api/v1/deployment` | Public non-sensitive deployment posture used for operator warnings |
 | `/api/v1/settings/status` | Installation-administrator view of the selected application database and Distribution availability |
+| `/api/v1/garbage-collections` | Installation-administrator, audited Distribution garbage collection through the isolated maintenance socket |
 | `/api/v1/backups`, `/api/v1/backups/{backupId}`, `/api/v1/backups/{backupId}/download` | Installation-admin paginated backup operations, confirmed local deletion, and portable recovery bundles |
 | `/auth/token` | Registry authentication |
 | `/v2/` | Streaming gateway to Distribution |

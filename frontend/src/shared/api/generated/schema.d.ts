@@ -68,6 +68,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/garbage-collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["runGarbageCollection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/session": {
         parameters: {
             query?: never;
@@ -680,6 +696,26 @@ export interface components {
             database: "sqlite" | "postgres";
             /** @enum {string} */
             distribution: "available" | "unavailable";
+            storage?: components["schemas"]["StorageUsage"] | null;
+        };
+        StorageUsage: {
+            /**
+             * Format: int64
+             * @description Bytes occupied by files under Distribution's local storage root.
+             */
+            usedBytes: number;
+        };
+        GarbageCollection: {
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            completedAt: string;
+            /** Format: int64 */
+            bytesBefore: number;
+            /** Format: int64 */
+            bytesAfter: number;
+            /** Format: int64 */
+            reclaimedBytes: number;
         };
         /** @enum {string} */
         BackupStatus: "starting" | "quiescing" | "creating" | "complete" | "failed";
@@ -1296,6 +1332,34 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    runGarbageCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Completed Distribution garbage collection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GarbageCollection"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Registry maintenance is unavailable or already active */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     createSession: {

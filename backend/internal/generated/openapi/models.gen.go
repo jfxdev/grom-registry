@@ -697,6 +697,15 @@ type Error struct {
 	RequestId *string `json:"requestId,omitempty"`
 }
 
+// GarbageCollection defines model for GarbageCollection.
+type GarbageCollection struct {
+	BytesAfter     int64     `json:"bytesAfter"`
+	BytesBefore    int64     `json:"bytesBefore"`
+	CompletedAt    time.Time `json:"completedAt"`
+	ReclaimedBytes int64     `json:"reclaimedBytes"`
+	StartedAt      time.Time `json:"startedAt"`
+}
+
 // Health defines model for Health.
 type Health struct {
 	// Status Example: ok
@@ -707,6 +716,7 @@ type Health struct {
 type InstallationStatus struct {
 	Database     InstallationStatusDatabase     `json:"database"`
 	Distribution InstallationStatusDistribution `json:"distribution"`
+	Storage      *StorageUsage                  `json:"storage,omitempty"`
 }
 
 // InstallationStatusDatabase defines model for InstallationStatus.Database.
@@ -1006,6 +1016,12 @@ type SetMembershipRequest struct {
 // Status defines model for Status.
 type Status struct {
 	Status string `json:"status"`
+}
+
+// StorageUsage defines model for StorageUsage.
+type StorageUsage struct {
+	// UsedBytes Bytes occupied by files under Distribution's local storage root.
+	UsedBytes int64 `json:"usedBytes"`
 }
 
 // TagPage defines model for TagPage.

@@ -763,7 +763,10 @@ can delete manifests through Grom after a digest-and-alias preview, repository
 policy evaluation, OCI relationship check, and immediate revalidation. Manual
 deletions are persisted and audited. Subjects with referrers and referrer
 artifacts remain protected; cascade deletion is not implemented. Registry
-garbage collection remains an explicit operator action.
+garbage collection remains an explicit, audited installation-administrator
+action. The management plane reaches a network-isolated Unix-socket sidecar
+rather than Docker; it drains and blocks the only public Registry write path
+before the collector accesses the storage volume.
 
 An installation administrator can manage users and service accounts. Bootstrap
 creates the first user as an installation administrator. Every later user is

@@ -29,6 +29,7 @@ import (
 	identitydomain "github.com/jfxdev/grom/backend/internal/identity/domain"
 	platformbackup "github.com/jfxdev/grom/backend/internal/platform/backup"
 	"github.com/jfxdev/grom/backend/internal/platform/maintenance"
+	"github.com/jfxdev/grom/backend/internal/platform/registrymaintenance"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
 	projectdomain "github.com/jfxdev/grom/backend/internal/projects/domain"
 	registryapp "github.com/jfxdev/grom/backend/internal/registry/application"
@@ -38,37 +39,39 @@ import (
 )
 
 type Server struct {
-	router             chi.Router
-	identity           *identityapp.Service
-	audit              *auditapp.Service
-	projects           *projectapp.Service
-	repositories       *registryapp.RepositoryService
-	inventory          *registryapp.InventoryService
-	artifactDeletions  *registryapp.ArtifactDeletionService
-	lifecycle          *registryapp.LifecycleService
-	registryTokens     *registryapp.TokenService
-	distributionClient *distribution.Client
-	gateway            http.Handler
-	logger             *slog.Logger
-	publicURL          *url.URL
-	secureCookies      bool
-	enableDocs         bool
-	deploymentProfile  string
-	insecureHTTP       bool
-	trustedProxies     []netip.Prefix
-	loginLimiter       *authenticationFailureLimiter
-	registryLimiter    *authenticationFailureLimiter
-	backups            *platformbackup.Manager
-	maintenance        *maintenance.Controller
-	databaseKind       string
+	router              chi.Router
+	identity            *identityapp.Service
+	audit               *auditapp.Service
+	projects            *projectapp.Service
+	repositories        *registryapp.RepositoryService
+	inventory           *registryapp.InventoryService
+	artifactDeletions   *registryapp.ArtifactDeletionService
+	lifecycle           *registryapp.LifecycleService
+	registryTokens      *registryapp.TokenService
+	distributionClient  *distribution.Client
+	gateway             http.Handler
+	logger              *slog.Logger
+	publicURL           *url.URL
+	secureCookies       bool
+	enableDocs          bool
+	deploymentProfile   string
+	insecureHTTP        bool
+	trustedProxies      []netip.Prefix
+	loginLimiter        *authenticationFailureLimiter
+	registryLimiter     *authenticationFailureLimiter
+	backups             *platformbackup.Manager
+	maintenance         *maintenance.Controller
+	databaseKind        string
+	registryMaintenance *registrymaintenance.Client
 }
 
 type currentUserKey struct{}
 
 type OperationalOptions struct {
-	Backups     *platformbackup.Manager
-	Maintenance *maintenance.Controller
-	Database    string
+	Backups             *platformbackup.Manager
+	Maintenance         *maintenance.Controller
+	Database            string
+	RegistryMaintenance *registrymaintenance.Client
 }
 
 func New(
@@ -110,12 +113,13 @@ func New(
 		distributionClient: distributionClient, gateway: gateway, logger: logger,
 		publicURL: parsedPublicURL, secureCookies: secureCookies, enableDocs: enableDocs,
 		deploymentProfile: deploymentProfile, insecureHTTP: insecureHTTP,
-		trustedProxies:  securityOptions.TrustedProxies,
-		loginLimiter:    newAuthenticationFailureLimiter(securityOptions),
-		registryLimiter: newAuthenticationFailureLimiter(securityOptions),
-		backups:         operationalOptions.Backups,
-		maintenance:     operationalOptions.Maintenance,
-		databaseKind:    operationalOptions.Database,
+		trustedProxies:      securityOptions.TrustedProxies,
+		loginLimiter:        newAuthenticationFailureLimiter(securityOptions),
+		registryLimiter:     newAuthenticationFailureLimiter(securityOptions),
+		backups:             operationalOptions.Backups,
+		maintenance:         operationalOptions.Maintenance,
+		databaseKind:        operationalOptions.Database,
+		registryMaintenance: operationalOptions.RegistryMaintenance,
 	}
 	if server.maintenance == nil {
 		server.maintenance = maintenance.New()
@@ -166,6 +170,7 @@ func (s *Server) routes() chi.Router {
 			protected.Use(s.viewerReadOnly)
 			protected.Get("/me", s.currentUser)
 			protected.Get("/settings/status", s.getInstallationStatus)
+			protected.Post("/garbage-collections", s.runGarbageCollection)
 			protected.Put("/me/password", s.changeCurrentUserPassword)
 			protected.Get("/me/registry-tokens", s.listViewerRegistryTokens)
 			protected.Post("/me/registry-tokens", s.createViewerRegistryToken)
@@ -399,7 +404,47 @@ func (s *Server) getInstallationStatus(w http.ResponseWriter, r *http.Request) {
 	if s.distributionClient != nil && s.distributionClient.Available(r.Context()) {
 		distributionStatus = "available"
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"database": s.databaseKind, "distribution": distributionStatus})
+	result := map[string]any{"database": s.databaseKind, "distribution": distributionStatus, "storage": nil}
+	if s.registryMaintenance != nil {
+		if storage, err := s.registryMaintenance.Storage(r.Context()); err == nil {
+			result["storage"] = storage
+		}
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) runGarbageCollection(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	if s.registryMaintenance == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "garbage_collection_unavailable", "Registry maintenance agent is unavailable")
+		return
+	}
+	actor := principalForUser(userFromContext(r.Context()))
+	operationID := foundation.ID(uuid.NewString())
+	if err := s.recordAudit(r, actor, constants.AuditGarbageCollectionStarted, constants.AuditResourceGarbageCollection, operationID, nil); err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	end, err := s.maintenance.Begin(r.Context())
+	if err != nil {
+		w.Header().Set("Retry-After", "5")
+		writeError(w, r, http.StatusServiceUnavailable, "maintenance_active", "Another maintenance operation is active")
+		return
+	}
+	defer end()
+	result, err := s.registryMaintenance.Collect(r.Context())
+	if err != nil {
+		_ = s.recordAudit(r, actor, constants.AuditGarbageCollectionFailed, constants.AuditResourceGarbageCollection, operationID, map[string]any{"message": "registry garbage collection failed"})
+		s.internalError(w, r, err)
+		return
+	}
+	if err := s.recordAudit(r, actor, constants.AuditGarbageCollectionCompleted, constants.AuditResourceGarbageCollection, operationID, map[string]any{"startedAt": result.StartedAt, "completedAt": result.CompletedAt, "reclaimedBytes": result.ReclaimedBytes}); err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) changeCurrentUserPassword(w http.ResponseWriter, r *http.Request) {
@@ -1638,7 +1683,7 @@ func (s *Server) maintenanceGate(next http.Handler) http.Handler {
 
 func requiresQuiescenceTracking(r *http.Request) bool {
 	normalizedPath := path.Clean("/" + strings.TrimPrefix(r.URL.Path, "/"))
-	if r.Method == http.MethodPost && normalizedPath == "/api/v1/backups" {
+	if r.Method == http.MethodPost && (normalizedPath == "/api/v1/backups" || normalizedPath == "/api/v1/garbage-collections") {
 		return false
 	}
 	if r.Method == http.MethodDelete {
