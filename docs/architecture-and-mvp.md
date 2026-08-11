@@ -43,7 +43,7 @@ scanner execution.
 
 | Phase | Status | Current evidence | Remaining exit work |
 |---|---|---|---|
-| Phase 0: executable foundation | Default path accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, an accepted public boot/migration/docs journey, a clean-checkout production-image smoke check, published-image scanning, and a passing separate PostgreSQL test gate exist | Complete PostgreSQL recovery evidence before claiming full PostgreSQL support |
+| Phase 0: executable foundation | Default path accepted | Go and Vue applications, embedded build, Compose, SQLite/PostgreSQL adapters, migrations, bootstrap admin, OpenAPI models, interactive docs, contract validation, generated-code freshness, route/contract checks, mandatory CI jobs, an accepted public boot/migration/docs journey, a clean-checkout production-image smoke check, published-image scanning, a passing PostgreSQL test gate, and implemented PostgreSQL recovery exist | Record the first passing PostgreSQL backup/restore CI journey before claiming full PostgreSQL support |
 | Phase 1: authentication and project authorization | Docker acceptance complete | Sessions, projects, memberships, service accounts, reveal-once keys, registry JWTs and role mapping are covered by application/integration tests and the opt-in real-Docker journey | ORAS before claiming generic OCI support |
 | Phase 2: registry browsing and core UI | Default path accepted | Project, repository, manifest detail, membership, user, service-account, policy, deletion, lifecycle, user-disable flows, cursor pagination, and first-push plus destructive-browser acceptance evidence exist | Broaden quality coverage only when a concrete release need promotes it |
 | Phase 3: operational hardening | Default path accepted | Named deployment profiles, request-body limits, authentication rate limits, trusted-proxy enforcement, production HTTPS/cookie validation, header/idle timeouts, graceful shutdown, private Distribution, a non-root Grom image, UI-driven quiesced backup plus same-image recovery, accepted full-stack restart preservation, a clean-checkout image smoke check, release automation, a published `v0.0.1` release, and tagged-release upgrade evidence exist | Expanded matrices follow advertised capabilities |
@@ -317,7 +317,8 @@ administrative-browser, backup/restore, boot-acceptance, production-image, and
 release-upgrade jobs passed in [PR #27](https://github.com/jfxdev/grom-registry/pull/27).
 The separate mandatory `PostgreSQL Tests` job passed in
 [PR #28](https://github.com/jfxdev/grom-registry/pull/28). PostgreSQL backup
-and recovery remain separate work.**
+and recovery are implemented; `PostgreSQL Backup Restore E2E` is configured
+alongside the SQLite journey and awaits its first CI evidence.**
 
 Work:
 
@@ -376,6 +377,11 @@ Current evidence:
   E2E (Docker)` check on pull requests, `main`, merge queues, and manual
   dispatch. The command passed locally and the mandatory CI check passed on
   August 3, 2026 in [PR #16](https://github.com/jfxdev/grom-registry/pull/16).
+- `.github/workflows/backup-restore-e2e.yml` runs both the existing SQLite
+  `Backup Restore E2E` journey and the PostgreSQL recovery journey. The latter
+  uses `make test-backup-restore-postgres-e2e`; its status check is required
+  by the `main` ruleset, and its first passing CI result remains required before
+  PostgreSQL is included in the supported release matrix.
 - The active `main` branch ruleset is configured to require `Backend Tests`,
   `PostgreSQL Tests`, `Frontend Tests`, `Go Lint`, `Go Vulnerability Check`,
   `Registry E2E (Docker)`,
@@ -1135,8 +1141,9 @@ Supporting both databases requires more than changing the driver, so the followi
 GROM_TEST_POSTGRES_URL=postgres://...` enables the complete PostgreSQL suite
 locally; the dedicated `PostgreSQL Tests` CI job sets the required URL and
 rejects a run that does not configure PostgreSQL. The active `main` branch
-ruleset requires that check. PostgreSQL backup and recovery are not yet part of
-the supported matrix.
+ruleset requires that check. PostgreSQL backup and recovery are implemented;
+their separate required CI journey must pass before PostgreSQL joins the
+supported matrix.
 
 ### Management and protocol entry points
 
@@ -1547,9 +1554,10 @@ Grom instances are supported.
   requires a configured PostgreSQL service and exercises migrations,
   persistence, and advisory-lock timeout/recovery without a skip path. It
   passed in [PR #28](https://github.com/jfxdev/grom-registry/pull/28).
-  PostgreSQL recovery evidence remains required before PostgreSQL is advertised
-  as fully supported. Published release images already receive the documented
-  SBOM and Trivy vulnerability report.
+  PostgreSQL recovery is implemented and has a required E2E journey. Its first
+  CI pass remains necessary before PostgreSQL is advertised as fully supported.
+  Published release images already receive the documented SBOM and Trivy
+  vulnerability report.
 
 Exit criterion: one command starts Grom with SQLite, applies pending migrations
 automatically, and returns an authenticated `/v2/` challenge. The same boot
@@ -1560,7 +1568,7 @@ The default-path release-artifact, image-scanning, operator-documentation, and
 tagged-release upgrade evidence are complete. `v0.0.1` is both the first
 published artifact and the accepted baseline for the SQLite/local-storage
 upgrade journey in [PR #23](https://github.com/jfxdev/grom-registry/pull/23).
-PostgreSQL recovery remains a capability-specific gate.
+PostgreSQL recovery acceptance remains a capability-specific gate.
 
 ### Phase 1: authentication and project authorization
 
@@ -1635,8 +1643,10 @@ post-MVP unless promoted explicitly.
   longer than its short-lived registry JWT, then verifies the committed blob
   remains intact. Header and idle timeouts therefore protect the public server
   without imposing a body-read or response-write deadline on OCI uploads.
-- **Capability-specific:** PostgreSQL, S3, extended ORAS/referrer, and OCI
-  conformance matrices.
+- **Capability-specific:** PostgreSQL recovery acceptance, S3, extended
+  ORAS/referrer, and OCI conformance matrices. PostgreSQL recovery is
+  implemented and its dedicated CI journey is required, but it needs a passing
+  run before the capability is advertised.
 - **Implemented:** release-image, checksum, SBOM, and operator-documentation
   automation exists; the `v0.0.1` release completed artifact publication on
   August 5, 2026. Its upgrade to the checkout candidate was accepted on August
@@ -1660,8 +1670,8 @@ gates apply only to advertised capabilities.
 
 Compatibility expansion is driven by actual installation demand:
 
-1. Complete PostgreSQL backup and recovery evidence when small teams require
-   an external database.
+1. Record a passing PostgreSQL backup and recovery CI journey before supporting
+   external databases.
 2. Complete the S3-compatible storage gate when local storage is insufficient.
 3. Complete representative ORAS and referrer coverage when generic OCI content
    becomes a supported product journey.
@@ -1726,6 +1736,7 @@ Status vocabulary:
 | 21 | ORAS can push and pull representative generic OCI content | Generic OCI support | Missing | ORAS smoke job before advertising generic OCI support |
 | 22 | An S3-backed installation passes push, pull, restart, and restore checks | S3 support | Missing | Documented S3 compatibility job before advertising S3 support |
 | 23 | A published SQLite/local-storage release upgrades without losing metadata, credentials, or blobs | Default MVP | Passing | [PR #23](https://github.com/jfxdev/grom-registry/pull/23) upgrades the published `v0.0.1` baseline to the checkout candidate, verifies administrator, project, Writer key, inventory, blob, and restart preservation |
+| 24 | A PostgreSQL/local-storage backup restores an installation that can authenticate, browse, push, and pull | PostgreSQL support | Unverified | The required `PostgreSQL Backup Restore E2E` check runs `make test-backup-restore-postgres-e2e`; record its first passing CI run before advertising PostgreSQL support |
 
 The default self-hosted MVP is not accepted until every `Default MVP` row is
 `Passing`. Capability-specific rows must pass before that capability is

@@ -147,7 +147,11 @@ trusted proxies, and registry HTTP secret in encrypted storage.
 - The development-only `make backup`, `make backup-inspect`, and `make restore`
   wrappers remain for low-level testing and diagnostics. They are not the
   end-user product interface.
-- `make test-backup-restore-e2e` validates the UI/API backup, portable download,
-  original-volume destruction, recovery UI upload, empty-volume restore,
-  restored sign-in and key identity, old-image pull, new push, and corruption
-  rejection in an isolated Compose project.
+- `make test-backup-restore-e2e` validates the SQLite UI/API backup, portable
+  download, original-volume destruction, recovery UI upload, empty-volume
+  restore, restored sign-in and key identity, old-image pull, new push, and
+  corruption rejection in an isolated Compose project.
+- `make test-backup-restore-postgres-e2e` performs the same journey through
+  the PostgreSQL Compose overlay. Both journeys are configured in the
+  `Backup Restore E2E` GitHub Actions workflow; PostgreSQL support is promoted
+  to the release matrix only after its first required CI run passes.
