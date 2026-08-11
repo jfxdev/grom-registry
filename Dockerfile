@@ -15,7 +15,13 @@ COPY backend/ ./
 RUN rm -rf internal/webassets/dist && mkdir -p internal/webassets/dist
 COPY --from=frontend /src/frontend/dist/ internal/webassets/dist/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${GROM_VERSION}" -o /out/grom ./cmd/grom && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${GROM_VERSION}" -o /out/grom-backup ./cmd/grom-backup
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${GROM_VERSION}" -o /out/grom-backup ./cmd/grom-backup && \
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/grom-registry-maintenance ./cmd/grom-registry-maintenance
+
+FROM registry:3 AS registry-maintenance
+COPY --from=backend /out/grom-registry-maintenance /usr/local/bin/grom-registry-maintenance
+RUN addgroup -S -g 101 grom
+ENTRYPOINT ["/usr/local/bin/grom-registry-maintenance"]
 
 FROM alpine:3.24
 RUN apk add --no-cache postgresql18-client && \

@@ -459,8 +459,12 @@ Deletion is blocked when a protected tag points to the digest, when the artifact
 is an OCI referrer, or when it has OCI referrers. Cascade deletion is not
 implemented.
 
-Deleting a manifest does not immediately reclaim blob storage. Distribution
-garbage collection is a separate operator action.
+Deleting a manifest does not immediately reclaim blob storage. Installation
+administrators can run the separate Distribution garbage-collection action in
+Settings. Grom drains and blocks every public Registry write path before the
+network-isolated maintenance sidecar runs the collector, and the result records
+the reclaimed file bytes. The action is unavailable when the isolated local
+maintenance socket is unavailable.
 
 ## 14. Retention lifecycle
 
@@ -586,7 +590,6 @@ The executable product does not currently provide:
 - vulnerability scanning or admission policies;
 - automatic retention scheduling or autopurge;
 - cascade deletion of OCI subjects and referrers;
-- Distribution blob garbage collection from the management plane;
 - registry mirroring or pull-through cache;
 - OIDC or enterprise identity providers;
 - multi-instance active-active operation;

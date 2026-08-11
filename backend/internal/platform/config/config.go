@@ -21,29 +21,30 @@ const (
 )
 
 type Config struct {
-	HTTPAddress       string
-	DatabaseURL       string
-	RegistryURL       string
-	PublicURL         string
-	DeploymentProfile DeploymentProfile
-	InsecureHTTP      bool
-	DataDir           string
-	SigningKeyPath    string
-	SigningCertPath   string
-	SigningJWKSPath   string
-	BootstrapEmail    string
-	BootstrapUsername string
-	BootstrapPassword string
-	SessionTTL        time.Duration
-	RegistryTokenTTL  time.Duration
-	SecureCookies     bool
-	EnableAPIDocs     bool
-	MigrationLockWait time.Duration
-	TrustedProxies    []netip.Prefix
-	AuthFailureLimit  int
-	AuthFailureWindow time.Duration
-	AuthBlockDuration time.Duration
-	BackupAgentSocket string
+	HTTPAddress               string
+	DatabaseURL               string
+	RegistryURL               string
+	PublicURL                 string
+	DeploymentProfile         DeploymentProfile
+	InsecureHTTP              bool
+	DataDir                   string
+	SigningKeyPath            string
+	SigningCertPath           string
+	SigningJWKSPath           string
+	BootstrapEmail            string
+	BootstrapUsername         string
+	BootstrapPassword         string
+	SessionTTL                time.Duration
+	RegistryTokenTTL          time.Duration
+	SecureCookies             bool
+	EnableAPIDocs             bool
+	MigrationLockWait         time.Duration
+	TrustedProxies            []netip.Prefix
+	AuthFailureLimit          int
+	AuthFailureWindow         time.Duration
+	AuthBlockDuration         time.Duration
+	BackupAgentSocket         string
+	RegistryMaintenanceSocket string
 }
 
 func Load() (Config, error) {
@@ -86,28 +87,29 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
-		HTTPAddress:       env("GROM_HTTP_ADDRESS", ":8080"),
-		DatabaseURL:       env("GROM_DATABASE_URL", "sqlite://"+dataDir+"/grom.db"),
-		RegistryURL:       env("GROM_REGISTRY_URL", "http://distribution:5000"),
-		PublicURL:         strings.TrimRight(env("GROM_PUBLIC_URL", "http://localhost:8080"), "/"),
-		DeploymentProfile: deploymentProfile,
-		DataDir:           dataDir,
-		SigningKeyPath:    env("GROM_SIGNING_KEY_PATH", dataDir+"/signing-key.pem"),
-		SigningCertPath:   env("GROM_SIGNING_CERT_PATH", dataDir+"/signing-cert.pem"),
-		SigningJWKSPath:   env("GROM_SIGNING_JWKS_PATH", dataDir+"/jwks.json"),
-		BootstrapEmail:    strings.ToLower(strings.TrimSpace(env("GROM_BOOTSTRAP_ADMIN_EMAIL", "admin@grom.local"))),
-		BootstrapUsername: strings.TrimSpace(env("GROM_BOOTSTRAP_ADMIN_USERNAME", "admin")),
-		BootstrapPassword: env("GROM_BOOTSTRAP_ADMIN_PASSWORD", ""),
-		SessionTTL:        durationEnv("GROM_SESSION_TTL", constants.DefaultSessionHours*time.Hour),
-		RegistryTokenTTL:  durationEnv("GROM_REGISTRY_TOKEN_TTL", constants.DefaultRegistryTokenTTL*time.Minute),
-		SecureCookies:     secureCookies,
-		EnableAPIDocs:     enableAPIDocs,
-		MigrationLockWait: durationEnv("GROM_MIGRATION_LOCK_TIMEOUT", 30*time.Second),
-		TrustedProxies:    trustedProxies,
-		AuthFailureLimit:  authFailureLimit,
-		AuthFailureWindow: authFailureWindow,
-		AuthBlockDuration: authBlockDuration,
-		BackupAgentSocket: env("GROM_BACKUP_AGENT_SOCKET", ""),
+		HTTPAddress:               env("GROM_HTTP_ADDRESS", ":8080"),
+		DatabaseURL:               env("GROM_DATABASE_URL", "sqlite://"+dataDir+"/grom.db"),
+		RegistryURL:               env("GROM_REGISTRY_URL", "http://distribution:5000"),
+		PublicURL:                 strings.TrimRight(env("GROM_PUBLIC_URL", "http://localhost:8080"), "/"),
+		DeploymentProfile:         deploymentProfile,
+		DataDir:                   dataDir,
+		SigningKeyPath:            env("GROM_SIGNING_KEY_PATH", dataDir+"/signing-key.pem"),
+		SigningCertPath:           env("GROM_SIGNING_CERT_PATH", dataDir+"/signing-cert.pem"),
+		SigningJWKSPath:           env("GROM_SIGNING_JWKS_PATH", dataDir+"/jwks.json"),
+		BootstrapEmail:            strings.ToLower(strings.TrimSpace(env("GROM_BOOTSTRAP_ADMIN_EMAIL", "admin@grom.local"))),
+		BootstrapUsername:         strings.TrimSpace(env("GROM_BOOTSTRAP_ADMIN_USERNAME", "admin")),
+		BootstrapPassword:         env("GROM_BOOTSTRAP_ADMIN_PASSWORD", ""),
+		SessionTTL:                durationEnv("GROM_SESSION_TTL", constants.DefaultSessionHours*time.Hour),
+		RegistryTokenTTL:          durationEnv("GROM_REGISTRY_TOKEN_TTL", constants.DefaultRegistryTokenTTL*time.Minute),
+		SecureCookies:             secureCookies,
+		EnableAPIDocs:             enableAPIDocs,
+		MigrationLockWait:         durationEnv("GROM_MIGRATION_LOCK_TIMEOUT", 30*time.Second),
+		TrustedProxies:            trustedProxies,
+		AuthFailureLimit:          authFailureLimit,
+		AuthFailureWindow:         authFailureWindow,
+		AuthBlockDuration:         authBlockDuration,
+		BackupAgentSocket:         env("GROM_BACKUP_AGENT_SOCKET", ""),
+		RegistryMaintenanceSocket: env("GROM_REGISTRY_MAINTENANCE_SOCKET", ""),
 	}
 	if cfg.BootstrapEmail == "" || cfg.BootstrapUsername == "" || cfg.BootstrapPassword == "" {
 		return Config{}, fmt.Errorf("bootstrap administrator credentials cannot be empty")

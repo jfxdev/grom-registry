@@ -227,6 +227,23 @@ func (c *managementClient) inventory(t *testing.T, project, repository string) [
 	return inventory.Items
 }
 
+func (c *managementClient) deleteArtifact(t *testing.T, project, repository, reference string) {
+	t.Helper()
+	request := openapi.ArtifactDeletionRequest{Repository: repository, Reference: reference}
+	var preview openapi.ArtifactDeletionPreview
+	c.doJSON(t, http.MethodPost, "/api/v1/projects/"+url.PathEscape(project)+"/artifact-deletion-previews", request, &preview, http.StatusOK)
+	request.ExpectedDigest = &preview.Digest
+	request.ExpectedTags = &preview.AffectedTags
+	c.doJSON(t, http.MethodPost, "/api/v1/projects/"+url.PathEscape(project)+"/artifact-deletions", request, nil, http.StatusOK)
+}
+
+func (c *managementClient) garbageCollect(t *testing.T) openapi.GarbageCollection {
+	t.Helper()
+	var result openapi.GarbageCollection
+	c.doJSON(t, http.MethodPost, "/api/v1/garbage-collections", nil, &result, http.StatusOK)
+	return result
+}
+
 func (c *managementClient) exchangeToken(
 	ctx context.Context,
 	username, secret, repository string,

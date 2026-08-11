@@ -23,6 +23,7 @@ import (
 	"github.com/jfxdev/grom/backend/internal/platform/config"
 	"github.com/jfxdev/grom/backend/internal/platform/database"
 	"github.com/jfxdev/grom/backend/internal/platform/maintenance"
+	"github.com/jfxdev/grom/backend/internal/platform/registrymaintenance"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
 	projectstore "github.com/jfxdev/grom/backend/internal/projects/infrastructure/persistence/bun"
 	registryapp "github.com/jfxdev/grom/backend/internal/registry/application"
@@ -174,6 +175,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	var registryMaintenanceClient *registrymaintenance.Client
+	if cfg.RegistryMaintenanceSocket != "" {
+		registryMaintenanceClient = registrymaintenance.NewClient(cfg.RegistryMaintenanceSocket)
+	}
 	apiServer, err := httpapi.New(
 		identityService, auditService, projectService, repositoryService, inventoryService,
 		artifactDeletionService, lifecycleService,
@@ -185,7 +190,7 @@ func run(logger *slog.Logger) error {
 			TrustedProxies: cfg.TrustedProxies, AuthFailureLimit: cfg.AuthFailureLimit,
 			AuthFailureWindow: cfg.AuthFailureWindow, AuthBlockDuration: cfg.AuthBlockDuration,
 		},
-		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController, Database: string(databaseKind)},
+		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController, Database: string(databaseKind), RegistryMaintenance: registryMaintenanceClient},
 	)
 	if err != nil {
 		return err

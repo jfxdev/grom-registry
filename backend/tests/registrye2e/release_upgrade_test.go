@@ -24,7 +24,7 @@ func TestTaggedReleaseUpgradePreservesRegistryState(t *testing.T) {
 		t.Skip("set GROM_RUN_RELEASE_UPGRADE_E2E=1 or run make test-release-upgrade-e2e")
 	}
 
-	stack, candidateImage := startReleaseUpgradeStack(t)
+	stack, candidateImage, maintenanceImage := startReleaseUpgradeStack(t)
 	admin := newManagementClient(t, stack.publicURL)
 	admin.login(t)
 	admin.createProject(t, "Upgrade", "upgrade")
@@ -40,7 +40,7 @@ func TestTaggedReleaseUpgradePreservesRegistryState(t *testing.T) {
 	writerDocker.push(t, firstTag)
 	waitForRestartObservation(t, admin, "upgrade", "upgrade/app", []string{"v1"})
 
-	upgradeReleaseStack(t, stack, candidateImage)
+	upgradeReleaseStack(t, stack, candidateImage, maintenanceImage)
 
 	upgradedAdmin := newManagementClient(t, stack.publicURL)
 	upgradedAdmin.login(t)
@@ -73,7 +73,7 @@ func TestTaggedReleaseUpgradePreservesRegistryState(t *testing.T) {
 	upgradedWriter.pull(t, firstTag)
 }
 
-func startReleaseUpgradeStack(t *testing.T) (*testStack, string) {
+func startReleaseUpgradeStack(t *testing.T) (*testStack, string, string) {
 	t.Helper()
 	requireDocker(t)
 	baseImage := os.Getenv("GROM_UPGRADE_FROM_IMAGE")
@@ -100,6 +100,7 @@ func startReleaseUpgradeStack(t *testing.T) (*testStack, string) {
 		project = fmt.Sprintf("gromupgradee2e%d%d", os.Getpid(), time.Now().UnixNano())
 	}
 	candidateImage := "grom-registry-upgrade-" + project + ":candidate"
+	maintenanceImage := "grom-registry-upgrade-" + project + ":maintenance"
 	publicURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	stack := &testStack{
 		root:        root,
@@ -109,6 +110,7 @@ func startReleaseUpgradeStack(t *testing.T) (*testStack, string) {
 		registry:    strings.TrimPrefix(publicURL, "http://"),
 		env: append(os.Environ(),
 			"GROM_IMAGE="+baseImage,
+			"GROM_REGISTRY_MAINTENANCE_IMAGE="+maintenanceImage,
 			"DOCKER_DEFAULT_PLATFORM="+platform,
 			"GROM_BIND_ADDRESS=127.0.0.1",
 			fmt.Sprintf("GROM_HTTP_PORT=%d", port),
@@ -137,6 +139,7 @@ func startReleaseUpgradeStack(t *testing.T) (*testStack, string) {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), commandTimeout)
 		defer cleanupCancel()
 		_, _ = runCommand(cleanupCtx, root, nil, nil, "docker", "image", "rm", "--force", candidateImage)
+		_, _ = runCommand(cleanupCtx, root, nil, nil, "docker", "image", "rm", "--force", maintenanceImage)
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
@@ -153,18 +156,26 @@ func startReleaseUpgradeStack(t *testing.T) (*testStack, string) {
 		t.Fatalf("build upgrade candidate image: %v\n%s", err, bounded(output))
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), 6*time.Minute)
+	output, err = runCommand(ctx, root, nil, nil,
+		"docker", "build", "--platform", platform, "--pull=false", "--target", "registry-maintenance", "--tag", maintenanceImage, root)
+	cancel()
+	if err != nil {
+		t.Fatalf("build upgrade maintenance sidecar image: %v\n%s", err, bounded(output))
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), 6*time.Minute)
 	output, err = stack.compose(ctx, "up", "--no-build", "--detach")
 	cancel()
 	if err != nil {
 		t.Fatalf("start tagged base installation: %v\n%s", err, bounded(output))
 	}
 	waitForPublicStack(t, stack.publicURL)
-	return stack, candidateImage
+	return stack, candidateImage, maintenanceImage
 }
 
-func upgradeReleaseStack(t *testing.T, stack *testStack, candidateImage string) {
+func upgradeReleaseStack(t *testing.T, stack *testStack, candidateImage, maintenanceImage string) {
 	t.Helper()
 	stack.env = replaceEnvironment(stack.env, "GROM_IMAGE", candidateImage)
+	stack.env = replaceEnvironment(stack.env, "GROM_REGISTRY_MAINTENANCE_IMAGE", maintenanceImage)
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	output, err := stack.compose(ctx, "down", "--remove-orphans")
 	cancel()

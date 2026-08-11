@@ -62,6 +62,23 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/garbage-collections:
+    post:
+      tags: [System]
+      operationId: runGarbageCollection
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Completed Distribution garbage collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GarbageCollection"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: Registry maintenance is unavailable or already active
   /api/v1/session:
     post:
       tags: [Identity]
@@ -1281,6 +1298,39 @@ components:
         distribution:
           type: string
           enum: [available, unavailable]
+        storage:
+          allOf:
+            - $ref: "#/components/schemas/StorageUsage"
+          nullable: true
+    StorageUsage:
+      type: object
+      required: [usedBytes]
+      properties:
+        usedBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Bytes occupied by files under Distribution's local storage root.
+    GarbageCollection:
+      type: object
+      required: [startedAt, completedAt, bytesBefore, bytesAfter, reclaimedBytes]
+      properties:
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        bytesBefore:
+          type: integer
+          format: int64
+        bytesAfter:
+          type: integer
+          format: int64
+        reclaimedBytes:
+          type: integer
+          format: int64
+          minimum: 0
     BackupStatus:
       type: string
       enum: [starting, quiescing, creating, complete, failed]
