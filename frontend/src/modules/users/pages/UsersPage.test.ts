@@ -123,6 +123,8 @@ describe('UsersPage', () => {
     await flushPromises()
 
     expect(wrapper.find('.list-pagination [aria-label="Pagination"]').exists()).toBe(true)
+    expect(wrapper.find('.user-row + .list-pagination').exists()).toBe(true)
+    expect(wrapper.find('.user-row .list-pagination').exists()).toBe(false)
   })
 
   it('labels the loaded users as the current page rather than a global total', async () => {
@@ -142,7 +144,11 @@ describe('UsersPage', () => {
     expect(header.text()).not.toContain('Role')
     expect(header.text()).not.toContain('Access')
     expect(wrapper.get('button').text()).toContain('New user')
-    expect(wrapper.get('.user-actions').text()).toContain('Reset password')
+    const regularUser = wrapper.findAll('.user-row').find((row) => row.text().includes('sam@registry.test'))!
+    const actions = regularUser.get('.user-actions')
+    expect(actions.text()).toContain('Reset password')
+    expect(actions.find('[aria-label="Change role for sam"]').exists()).toBe(true)
+    expect(actions.find('button[aria-label="Disable user sam"]').exists()).toBe(true)
   })
 
   it('navigates pages and resets the cursor when the search changes', async () => {

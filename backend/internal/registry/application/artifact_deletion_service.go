@@ -188,13 +188,13 @@ func (s *ArtifactDeletionService) Execute(
 		deletion.Status = constants.ArtifactDeletionFailed
 		deletion.Message = deleteErr.Error()
 		deletion.CompletedAt = &completedAt
+		for _, deletedDigest := range deletedDigests {
+			_ = s.store.MarkManifestDeleted(ctx, target.ID, deletedDigest, completedAt)
+		}
 		if completeErr := s.store.CompleteArtifactDeletion(
 			ctx, deletion.ID, deletion.Status, deletion.Message, completedAt,
 		); completeErr != nil {
 			return nil, completeErr
-		}
-		for _, deletedDigest := range deletedDigests {
-			_ = s.store.MarkManifestDeleted(ctx, target.ID, deletedDigest, completedAt)
 		}
 		s.auditDeletionFailure(ctx, actor, deletion, deleteErr, len(deletedDigests) > 0)
 		return deletion, deleteErr
@@ -212,7 +212,7 @@ func (s *ArtifactDeletionService) Execute(
 		}
 	}
 	deletion.Status = constants.ArtifactDeletionCompleted
-	deletion.Message = fmt.Sprintf("manifest and %d unreferenced child manifests deleted; storage is reclaimed by a later garbage collection", len(preview.ChildDigests))
+	deletion.Message = fmt.Sprintf("manifest and %d unreferenced child manifests deleted; storage is reclaimed by a later garbage collection", len(deletedDigests)-1)
 	deletion.CompletedAt = &completedAt
 	if err := s.store.CompleteArtifactDeletion(
 		ctx, deletion.ID, deletion.Status, deletion.Message, completedAt,

@@ -386,7 +386,7 @@ func (s *LifecycleService) Execute(
 				failed++
 			} else {
 				item.Status = constants.LifecycleItemDeleted
-				item.Message = fmt.Sprintf("manifest and %d unreferenced child manifests deleted; storage is reclaimed by a later garbage collection", len(children))
+				item.Message = fmt.Sprintf("manifest and %d unreferenced child manifests deleted; storage is reclaimed by a later garbage collection", len(deletedDigests)-1)
 				deleted++
 				for _, deletedDigest := range deletedDigests {
 					if err := s.store.MarkManifestDeleted(ctx, target.ID, deletedDigest, s.now()); err != nil {

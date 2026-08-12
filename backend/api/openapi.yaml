@@ -861,6 +861,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          description: Persisted failed or partially completed manifest deletion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactDeletion"
   /api/v1/projects/{project}/repository-inventory:
     get:
       tags: [Registry Lifecycle]

@@ -21,6 +21,9 @@ func TestAddManifestPlatforms(t *testing.T) {
 		t.Cleanup(func() { _ = sqlDB.Close() })
 		db := bun.NewDB(sqlDB, sqlitedialect.New())
 		t.Cleanup(func() { _ = db.Close() })
+		if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := db.ExecContext(ctx, "CREATE TABLE registry_manifests (id TEXT PRIMARY KEY)"); err != nil {
 			t.Fatal(err)
 		}
@@ -57,5 +60,15 @@ func assertManifestPlatforms(t *testing.T, ctx context.Context, db *bun.DB) {
 		(manifest_id, digest, os, architecture, variant, compressed_size)
 		VALUES ('manifest', 'sha256:one', 'linux', 'amd64', '', 1000)`); err == nil {
 		t.Fatal("expected duplicate manifest child digest to be rejected")
+	}
+	if _, err := db.ExecContext(ctx, "DELETE FROM registry_manifests WHERE id = 'manifest'"); err != nil {
+		t.Fatal(err)
+	}
+	count, err := db.NewSelect().Table("registry_manifest_platforms").Count(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected manifest platform rows to cascade on parent deletion, got %d", count)
 	}
 }

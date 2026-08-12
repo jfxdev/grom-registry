@@ -35,7 +35,7 @@ type Repository interface {
 	FindServiceAccountByUsername(ctx context.Context, username string) (*ServiceAccount, error)
 	DisableServiceAccount(ctx context.Context, id foundation.ID) error
 
-	CreateServiceAccountAPIToken(ctx context.Context, token *APIToken) error
+	CreateServiceAccountAPIToken(ctx context.Context, token *APIToken, now time.Time, maxActive int) error
 	ListServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID) ([]APIToken, error)
 	CountActiveServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID, now time.Time) (int, error)
 	FindAPITokenByPublicID(ctx context.Context, publicID string) (*APIToken, error)

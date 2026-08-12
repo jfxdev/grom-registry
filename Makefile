@@ -53,7 +53,9 @@ image-publish-local:
 	fi
 	@dev_env_file="$(DEV_ENV_FILE)"; \
 	case "$$dev_env_file" in /*) ;; *) dev_env_file="./$$dev_env_file";; esac; \
-	set -a; . "$$dev_env_file"; set +a; \
+	set -a; . "$$dev_env_file"; dev_env_status=$$?; \
+	if [ $$dev_env_status -ne 0 ]; then exit $$dev_env_status; fi; \
+	set +a; \
 	: "$${GROM_IMAGE:?GROM_IMAGE must be set in $$dev_env_file}"; \
 	: "$${GROM_VERSION:=dev}"; \
 	docker build --build-arg GROM_VERSION="$$GROM_VERSION" --tag "$$GROM_IMAGE" . && \

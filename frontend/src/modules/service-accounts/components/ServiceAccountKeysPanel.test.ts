@@ -16,9 +16,10 @@ vi.mock('../api/serviceAccounts', () => ({
   serviceAccountKeys: { tokens: (id: string) => ['service-accounts', id, 'tokens'] },
 }))
 
-function mountPanel() {
+function mountPanel(attachTo?: HTMLElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return mount(ServiceAccountKeysPanel, {
+    attachTo,
     props: {
       account: { id: 'account-1', name: 'Payments CI', username: 'payments-ci', description: '', createdAt: '2026-08-11T00:00:00Z' },
     },
@@ -56,13 +57,20 @@ describe('ServiceAccountKeysPanel', () => {
 
   it('creates a key from a dialog with the calendar expiration picker', async () => {
     mocks.listServiceAccountTokens.mockResolvedValueOnce({ items: [], activeCount: 0, maxActiveCount: 3 })
-    const wrapper = mountPanel()
+    const wrapper = mountPanel(document.body)
     await flushPromises()
 
-    await wrapper.findAll('button').find((button) => button.text().includes('New key'))!.trigger('click')
+    const trigger = wrapper.findAll('button').find((button) => button.text().includes('New key'))!
+    trigger.element.focus()
+    await trigger.trigger('click')
 
     expect(wrapper.get('dialog[aria-labelledby="create-access-key-title"]').text()).toContain('Create access key')
     expect(wrapper.find('dialog [aria-label="Previous month"]').exists()).toBe(true)
     expect(wrapper.find('dialog input[type="datetime-local"]').exists()).toBe(false)
+
+    await wrapper.get('dialog[aria-labelledby="create-access-key-title"]').trigger('cancel')
+    await flushPromises()
+    expect(document.activeElement).toBe(trigger.element)
+    wrapper.unmount()
   })
 })

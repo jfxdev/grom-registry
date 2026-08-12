@@ -96,16 +96,14 @@ func liveManifest(digest string) registrydomain.ManifestInventory {
 }
 
 type changingIndexDistribution struct {
-	listCalls int
-	deleted   []string
+	listCalls  int
+	fetchCalls int
+	deleted    []string
 }
 
 func (d *changingIndexDistribution) ListRepositoryTags(context.Context, string) ([]string, error) {
 	d.listCalls++
-	if d.listCalls == 1 {
-		return []string{"target"}, nil
-	}
-	return []string{"target", "other"}, nil
+	return []string{"target"}, nil
 }
 
 func (d *changingIndexDistribution) ResolveManifest(_ context.Context, _, reference string) (string, bool, error) {
@@ -123,7 +121,10 @@ func (d *changingIndexDistribution) ResolveManifest(_ context.Context, _, refere
 
 func (d *changingIndexDistribution) FetchManifest(_ context.Context, _, reference string) (*ManifestMetadata, error) {
 	metadata := &ManifestMetadata{Digest: reference}
-	if reference == "sha256:target" || reference == "sha256:other" {
+	if reference == "sha256:other" {
+		d.fetchCalls++
+	}
+	if reference == "sha256:target" || (reference == "sha256:other" && d.fetchCalls > 1) {
 		metadata.Platforms = []registrydomain.ManifestPlatform{{Digest: "sha256:child"}}
 	}
 	return metadata, nil
@@ -142,6 +143,7 @@ func TestDeleteManifestTreeRevalidatesExternalIndexesBeforeEachChild(t *testing.
 	distribution := &changingIndexDistribution{}
 	inventory := []registrydomain.ManifestInventory{
 		manifestWithChildren("sha256:target", "sha256:child"),
+		manifestWithChildren("sha256:other", "sha256:child"),
 		liveManifest("sha256:child"),
 	}
 
@@ -155,5 +157,8 @@ func TestDeleteManifestTreeRevalidatesExternalIndexesBeforeEachChild(t *testing.
 	}
 	if !reflect.DeepEqual(deleted, []string{"sha256:target"}) || !reflect.DeepEqual(distribution.deleted, deleted) {
 		t.Fatalf("child deletion was not stopped: returned=%#v deleted=%#v", deleted, distribution.deleted)
+	}
+	if distribution.listCalls != 1 {
+		t.Fatalf("live tags were listed %d times, want once", distribution.listCalls)
 	}
 }

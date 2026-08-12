@@ -134,7 +134,10 @@ func (r *serviceAccountTokenRepository) CountActiveServiceAccountAPITokens(_ con
 	return r.activeCount, nil
 }
 
-func (r *serviceAccountTokenRepository) CreateServiceAccountAPIToken(_ context.Context, token *identity.APIToken) error {
+func (r *serviceAccountTokenRepository) CreateServiceAccountAPIToken(_ context.Context, token *identity.APIToken, _ time.Time, maxActive int) error {
+	if r.activeCount >= maxActive {
+		return identity.ErrServiceAccountAccessKeyLimit
+	}
 	r.created = token
 	return nil
 }

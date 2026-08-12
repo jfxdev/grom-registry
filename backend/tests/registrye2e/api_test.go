@@ -235,7 +235,11 @@ func (c *managementClient) deleteArtifact(t *testing.T, project, repository, ref
 	request.ExpectedDigest = &preview.Digest
 	request.ExpectedTags = &preview.AffectedTags
 	request.ExpectedChildDigests = &preview.ChildDigests
-	c.doJSON(t, http.MethodPost, "/api/v1/projects/"+url.PathEscape(project)+"/artifact-deletions", request, nil, http.StatusOK)
+	var deletion openapi.ArtifactDeletion
+	c.doJSON(t, http.MethodPost, "/api/v1/projects/"+url.PathEscape(project)+"/artifact-deletions", request, &deletion, http.StatusOK)
+	if deletion.Status != openapi.ArtifactDeletionStatusCompleted {
+		t.Fatalf("artifact deletion returned %q with message %v", deletion.Status, deletion.Message)
+	}
 }
 
 func (c *managementClient) garbageCollect(t *testing.T) openapi.GarbageCollection {

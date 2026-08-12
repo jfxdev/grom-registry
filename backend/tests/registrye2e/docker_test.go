@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -16,6 +17,8 @@ type dockerClient struct {
 	localTags  *[]string
 	credential string
 }
+
+var dockerDigestPattern = regexp.MustCompile(`sha256:[0-9a-f]{64}`)
 
 func newDockerClient(
 	t *testing.T,
@@ -87,7 +90,7 @@ func (d *dockerClient) push(t *testing.T, target string) string {
 	if err != nil {
 		t.Fatalf("docker push %s failed: %v\n%s", target, err, bounded(output))
 	}
-	return output
+	return dockerDigest(t, target, output)
 }
 
 func (d *dockerClient) pushDenied(t *testing.T, target string) string {
@@ -109,7 +112,16 @@ func (d *dockerClient) pull(t *testing.T, target string) string {
 	if err != nil {
 		t.Fatalf("docker pull %s failed: %v\n%s", target, err, bounded(output))
 	}
-	return output
+	return dockerDigest(t, target, output)
+}
+
+func dockerDigest(t *testing.T, target, output string) string {
+	t.Helper()
+	digest := dockerDigestPattern.FindString(output)
+	if digest == "" {
+		t.Fatalf("docker operation for %s did not report a digest\n%s", target, bounded(output))
+	}
+	return digest
 }
 
 func (d *dockerClient) pullDenied(t *testing.T, target string) string {

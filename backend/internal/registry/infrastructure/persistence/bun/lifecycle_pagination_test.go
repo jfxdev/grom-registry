@@ -3,6 +3,8 @@ package bunstore
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,6 +13,67 @@ import (
 	"github.com/jfxdev/grom/backend/internal/platform/database"
 	registrydomain "github.com/jfxdev/grom/backend/internal/registry/domain"
 )
+
+func TestManifestPlatformBulkInsertAndOrderingAcrossDatabases(t *testing.T) {
+	ctx := context.Background()
+	for _, testCase := range []struct {
+		name string
+		url  func(*testing.T) string
+	}{
+		{name: "sqlite", url: func(t *testing.T) string { return "sqlite://" + filepath.Join(t.TempDir(), "platforms.db") }},
+		{name: "postgres", url: func(t *testing.T) string {
+			url := os.Getenv("GROM_TEST_POSTGRES_URL")
+			if url == "" {
+				t.Skip("GROM_TEST_POSTGRES_URL is not configured")
+			}
+			return url
+		}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			db, kind, err := database.Open(ctx, testCase.url(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+			if err := database.Migrate(ctx, db, kind, 5*time.Second, slog.Default()); err != nil {
+				t.Fatal(err)
+			}
+			store := New(db)
+			projectID, repositoryID := foundation.NewID(), foundation.NewID()
+			now := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
+			if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", projectID.String(), "platforms-"+projectID.String(), "Platforms", "test", now); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual, Profile: constants.RepositoryProfileUnknown, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				_, _ = db.ExecContext(context.Background(), "DELETE FROM registry_manifest_platforms WHERE manifest_id IN (SELECT id FROM registry_manifests WHERE repository_id = ?)", repositoryID.String())
+				_, _ = db.ExecContext(context.Background(), "DELETE FROM registry_manifests WHERE repository_id = ?", repositoryID.String())
+				_, _ = db.ExecContext(context.Background(), "DELETE FROM registry_repositories WHERE id = ?", repositoryID.String())
+				_, _ = db.ExecContext(context.Background(), "DELETE FROM projects WHERE id = ?", projectID.String())
+			})
+			observation := registrydomain.ManifestObservation{
+				Digest: "sha256:index",
+				Platforms: []registrydomain.ManifestPlatform{
+					{OS: "linux", Architecture: "amd64", Digest: "sha256:two", CompressedSize: 2},
+					{OS: "linux", Architecture: "amd64", Digest: "sha256:one", CompressedSize: 1},
+				},
+			}
+			if err := store.UpsertManifestObservation(ctx, repositoryID, observation, now); err != nil {
+				t.Fatal(err)
+			}
+			inventory, err := store.ListManifestInventory(ctx, repositoryID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(inventory) != 1 || len(inventory[0].Platforms) != 2 ||
+				inventory[0].Platforms[0].Digest != "sha256:one" || inventory[0].Platforms[1].Digest != "sha256:two" {
+				t.Fatalf("unexpected platform bulk insert or ordering: %#v", inventory)
+			}
+		})
+	}
+}
 
 func TestRegistryHistoryKeysetPages(t *testing.T) {
 	ctx := context.Background()

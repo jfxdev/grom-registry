@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -27,9 +26,8 @@ var (
 const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 type Service struct {
-	repository                identity.Repository
-	sessionTTL                time.Duration
-	serviceAccountTokenCreate sync.Mutex
+	repository identity.Repository
+	sessionTTL time.Duration
 }
 
 type CreatedToken struct {
@@ -335,16 +333,7 @@ func (s *Service) CreateServiceAccountAPIToken(ctx context.Context, serviceAccou
 	if _, err := s.repository.FindServiceAccountByID(ctx, serviceAccountID); err != nil {
 		return nil, err
 	}
-	s.serviceAccountTokenCreate.Lock()
-	defer s.serviceAccountTokenCreate.Unlock()
 	now := time.Now().UTC()
-	activeCount, err := s.repository.CountActiveServiceAccountAPITokens(ctx, serviceAccountID, now)
-	if err != nil {
-		return nil, err
-	}
-	if activeCount >= constants.MaxActiveServiceAccountAccessKeys {
-		return nil, identity.ErrServiceAccountAccessKeyLimit
-	}
 	publicID, err := randomString(10)
 	if err != nil {
 		return nil, err
@@ -366,7 +355,9 @@ func (s *Service) CreateServiceAccountAPIToken(ctx context.Context, serviceAccou
 	if token.Name == "" {
 		return nil, fmt.Errorf("token name is required")
 	}
-	if err := s.repository.CreateServiceAccountAPIToken(ctx, &token); err != nil {
+	if err := s.repository.CreateServiceAccountAPIToken(
+		ctx, &token, now, constants.MaxActiveServiceAccountAccessKeys,
+	); err != nil {
 		return nil, err
 	}
 	return &CreatedToken{Token: token, Secret: "grm_" + publicID + "_" + secret}, nil

@@ -91,7 +91,11 @@ func deleteManifestTree(
 	children []string,
 	inventory []registrydomain.ManifestInventory,
 ) ([]string, error) {
-	if err := revalidateDeletionChildren(ctx, distribution, repository, targetDigest, children, inventory); err != nil {
+	liveTags, err := resolveLiveTagDigests(ctx, distribution, repository)
+	if err != nil {
+		return nil, err
+	}
+	if err := revalidateDeletionChildren(ctx, distribution, repository, targetDigest, children, inventory, liveTags); err != nil {
 		return nil, err
 	}
 	digests := append([]string{targetDigest}, children...)
@@ -99,7 +103,7 @@ func deleteManifestTree(
 	for index, digest := range digests {
 		if index > 0 {
 			if err := revalidateDeletionChildren(
-				ctx, distribution, repository, targetDigest, []string{digest}, inventory,
+				ctx, distribution, repository, targetDigest, []string{digest}, inventory, liveTags,
 			); err != nil {
 				return deleted, err
 			}
@@ -122,12 +126,35 @@ func deleteManifestTree(
 	return deleted, nil
 }
 
+func resolveLiveTagDigests(
+	ctx context.Context,
+	distribution DistributionMetadata,
+	repository string,
+) (map[string]string, error) {
+	tags, err := distribution.ListRepositoryTags(ctx, repository)
+	if err != nil {
+		return nil, fmt.Errorf("revalidate child manifest tags: %w", err)
+	}
+	resolved := make(map[string]string, len(tags))
+	for _, tag := range tags {
+		digest, exists, resolveErr := distribution.ResolveManifest(ctx, repository, tag)
+		if resolveErr != nil {
+			return nil, fmt.Errorf("revalidate child manifest tag %s: %w", tag, resolveErr)
+		}
+		if exists {
+			resolved[tag] = digest
+		}
+	}
+	return resolved, nil
+}
+
 func revalidateDeletionChildren(
 	ctx context.Context,
 	distribution DistributionMetadata,
 	repository, targetDigest string,
 	children []string,
 	inventory []registrydomain.ManifestInventory,
+	liveTags map[string]string,
 ) error {
 	if len(children) == 0 {
 		return nil
@@ -137,19 +164,11 @@ func revalidateDeletionChildren(
 		childSet[digest] = struct{}{}
 	}
 	externalRoots := make(map[string]struct{})
-	tags, err := distribution.ListRepositoryTags(ctx, repository)
-	if err != nil {
-		return fmt.Errorf("revalidate child manifest tags: %w", err)
-	}
-	for _, tag := range tags {
-		digest, exists, resolveErr := distribution.ResolveManifest(ctx, repository, tag)
-		if resolveErr != nil {
-			return fmt.Errorf("revalidate child manifest tag %s: %w", tag, resolveErr)
-		}
-		if _, planned := childSet[digest]; exists && planned {
+	for tag, digest := range liveTags {
+		if _, planned := childSet[digest]; planned {
 			return fmt.Errorf("child manifest %s gained tag %s; review the deletion again", digest, tag)
 		}
-		if exists && digest != targetDigest {
+		if digest != targetDigest {
 			externalRoots[digest] = struct{}{}
 		}
 	}

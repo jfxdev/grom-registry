@@ -11,9 +11,11 @@ import (
 )
 
 type fakeDistributionRuntime struct {
-	starts int
-	stops  int
-	fatal  chan error
+	starts          int
+	stops           int
+	fatal           chan error
+	stopErr         error
+	stopSawCanceled bool
 }
 
 func newFakeDistributionRuntime() *fakeDistributionRuntime {
@@ -21,8 +23,12 @@ func newFakeDistributionRuntime() *fakeDistributionRuntime {
 }
 
 func (r *fakeDistributionRuntime) Start(context.Context) error { r.starts++; return nil }
-func (r *fakeDistributionRuntime) Stop(context.Context) error  { r.stops++; return nil }
-func (r *fakeDistributionRuntime) Fatal() <-chan error         { return r.fatal }
+func (r *fakeDistributionRuntime) Stop(ctx context.Context) error {
+	r.stops++
+	r.stopSawCanceled = ctx.Err() != nil
+	return r.stopErr
+}
+func (r *fakeDistributionRuntime) Fatal() <-chan error { return r.fatal }
 
 func TestDirectoryBytesCountsOnlyRegularFiles(t *testing.T) {
 	root := t.TempDir()
@@ -88,6 +94,26 @@ func TestCollectorReportsStorageAndFailure(t *testing.T) {
 func TestDirectoryBytesRejectsMissingRoot(t *testing.T) {
 	if _, err := directoryBytes(filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Fatal("expected missing root error")
+	}
+}
+
+func TestCollectorUsesOwnedStopContextAndRestartsAfterStopError(t *testing.T) {
+	root := t.TempDir()
+	data := filepath.Join(root, "registry")
+	if err := os.Mkdir(data, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runtime := newFakeDistributionRuntime()
+	runtime.stopErr = errors.New("stop failed")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := (&controller{options: AgentOptions{DataPath: data}, runtime: runtime}).collect(ctx)
+	if err == nil || runtime.stopSawCanceled {
+		t.Fatalf("stop should use an uncanceled agent context: err=%v canceled=%v", err, runtime.stopSawCanceled)
+	}
+	if runtime.starts != 1 || runtime.stops != 1 {
+		t.Fatalf("stop failure recovery transitions = start:%d stop:%d, want 1/1", runtime.starts, runtime.stops)
 	}
 }
 

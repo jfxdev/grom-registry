@@ -1319,7 +1319,7 @@ func (s *Server) deleteArtifact(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if deletion != nil {
-			writeJSON(w, http.StatusOK, deletion)
+			writeJSON(w, http.StatusInternalServerError, deletion)
 			return
 		}
 		writeError(w, r, http.StatusConflict, "deletion_blocked", err.Error())

@@ -179,17 +179,21 @@ func (c *controller) collect(ctx context.Context) (GarbageCollection, error) {
 	}
 	started := time.Now().UTC()
 	if c.runtime == nil {
-		return GarbageCollection{}, fmt.Errorf("Distribution supervisor is unavailable")
-	}
-	stopCtx, cancelStop := context.WithTimeout(ctx, 30*time.Second)
-	defer cancelStop()
-	if err := c.runtime.Stop(stopCtx); err != nil {
-		return GarbageCollection{}, fmt.Errorf("stop Distribution before garbage collection: %w", err)
+		return GarbageCollection{}, fmt.Errorf("distribution supervisor is unavailable")
 	}
 	restart := func() error {
 		startCtx, cancelStart := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelStart()
 		return c.runtime.Start(startCtx)
+	}
+	stopCtx, cancelStop := context.WithTimeout(context.Background(), 30*time.Second)
+	stopErr := c.runtime.Stop(stopCtx)
+	cancelStop()
+	if stopErr != nil {
+		if restartErr := restart(); restartErr != nil {
+			return GarbageCollection{}, fmt.Errorf("stop Distribution before garbage collection: %v; restart Distribution: %w", stopErr, restartErr)
+		}
+		return GarbageCollection{}, fmt.Errorf("stop Distribution before garbage collection: %w", stopErr)
 	}
 	slog.Info("starting Distribution garbage collection", "config_path", c.options.ConfigPath, "bytes_before", before)
 	if err := runGarbageCollect(ctx, c.options.ConfigPath); err != nil {
@@ -219,26 +223,34 @@ func (c *controller) collect(ctx context.Context) (GarbageCollection, error) {
 }
 
 func (r *commandRuntime) Start(ctx context.Context) error {
-	r.mu.Lock()
-	if r.command != nil {
+	for {
+		r.mu.Lock()
+		if r.command == nil {
+			break
+		}
+		if !r.stopping {
+			r.mu.Unlock()
+			return nil
+		}
+		done := r.done
 		r.mu.Unlock()
-		return nil
+		select {
+		case <-done:
+			continue
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	command := newRegistryCommand(r.configPath)
 	done := make(chan error, 1)
+	if err := command.Start(); err != nil {
+		r.mu.Unlock()
+		return err
+	}
 	r.command = command
 	r.done = done
 	r.stopping = false
 	r.mu.Unlock()
-	if err := command.Start(); err != nil {
-		r.mu.Lock()
-		if r.command == command {
-			r.command = nil
-			r.done = nil
-		}
-		r.mu.Unlock()
-		return err
-	}
 	go r.wait(command, done)
 	if err := r.waitReady(ctx); err != nil {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -290,7 +302,7 @@ func (r *commandRuntime) wait(command *exec.Cmd, done chan error) {
 			err = errors.New("process exited without an error")
 		}
 		select {
-		case r.fatal <- fmt.Errorf("Distribution exited unexpectedly: %w", err):
+		case r.fatal <- fmt.Errorf("distribution exited unexpectedly: %w", err):
 		default:
 		}
 	}

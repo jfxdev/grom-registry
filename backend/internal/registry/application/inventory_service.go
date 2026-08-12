@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -44,10 +45,14 @@ type InventoryService struct {
 	distribution   DistributionMetadata
 	resolveProject func(context.Context, string) (foundation.ID, error)
 	now            func() time.Time
+	missingProbeMu sync.Mutex
+	missingProbes  map[string]time.Time
 }
 
+const missingManifestProbeInterval = time.Hour
+
 func NewInventoryService(store registrydomain.Store) *InventoryService {
-	return &InventoryService{store: store, now: func() time.Time { return time.Now().UTC() }}
+	return &InventoryService{store: store, now: func() time.Time { return time.Now().UTC() }, missingProbes: make(map[string]time.Time)}
 }
 
 func (s *InventoryService) SetDistribution(distribution DistributionMetadata) {
@@ -84,21 +89,16 @@ func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, refe
 	}
 	now := s.now()
 	classification := ClassifyManifest(*metadata)
-	observation := registrydomain.ManifestObservation{
-		Digest: metadata.Digest, MediaType: metadata.MediaType, ArtifactType: metadata.ArtifactType,
-		SubjectDigest: metadata.SubjectDigest, ManifestSize: metadata.ManifestSize,
-		Platforms:    metadata.Platforms,
-		ObservedKind: classification.Kind, ArtifactRelationship: classification.Relationship,
-		ClassificationSource: classification.Source, ClassificationConfidence: classification.Confidence,
-	}
+	tag := ""
+	var pushedAt *time.Time
 	if !strings.Contains(reference, ":") {
-		observation.Tag = reference
-		observation.PushedAt = &now
+		tag = reference
+		pushedAt = &now
 	}
-	if _, err := s.upsertMetadataTree(ctx, target.ID, metadata, observation.Tag, observation.PushedAt, now); err != nil {
+	if _, err := s.upsertMetadataTree(ctx, target.ID, metadata, tag, pushedAt, now); err != nil {
 		return err
 	}
-	if observation.Tag != "" && classification.Relationship == constants.ArtifactRelationshipPrimary &&
+	if tag != "" && classification.Relationship == constants.ArtifactRelationshipPrimary &&
 		registrydomain.ApplyInferredProfile(target, classification.Profile, classification.Confidence, now) {
 		return s.store.SaveRepositoryProfile(ctx, target)
 	}
@@ -144,6 +144,7 @@ func (s *InventoryService) Reconcile(
 		}
 		seenTags = append(seenTags, tag)
 		for _, observedDigest := range observedDigests {
+			s.clearMissingProbe(target.ID.String() + ":" + observedDigest)
 			if _, exists := digests[observedDigest]; !exists {
 				digests[observedDigest] = struct{}{}
 				seenDigests = append(seenDigests, observedDigest)
@@ -161,13 +162,19 @@ func (s *InventoryService) Reconcile(
 		if _, exists := digests[manifest.Digest]; exists {
 			continue
 		}
+		probeKey := target.ID.String() + ":" + manifest.Digest
+		if manifest.State == constants.InventoryStateMissing && !s.shouldProbeMissing(probeKey, now) {
+			continue
+		}
 		resolved, exists, resolveErr := s.distribution.ResolveManifest(ctx, fullRepository, manifest.Digest)
 		if resolveErr != nil {
+			s.clearMissingProbe(probeKey)
 			return nil, resolveErr
 		}
 		if !exists || resolved != manifest.Digest {
 			continue
 		}
+		s.clearMissingProbe(probeKey)
 		metadata, fetchErr := s.distribution.FetchManifest(ctx, fullRepository, manifest.Digest)
 		if fetchErr != nil {
 			return nil, fetchErr
@@ -209,6 +216,23 @@ func (s *InventoryService) Reconcile(
 		return nil, err
 	}
 	return s.store.ListManifestInventory(ctx, target.ID)
+}
+
+func (s *InventoryService) shouldProbeMissing(key string, now time.Time) bool {
+	s.missingProbeMu.Lock()
+	defer s.missingProbeMu.Unlock()
+	lastProbe, exists := s.missingProbes[key]
+	if exists && now.Sub(lastProbe) < missingManifestProbeInterval {
+		return false
+	}
+	s.missingProbes[key] = now
+	return true
+}
+
+func (s *InventoryService) clearMissingProbe(key string) {
+	s.missingProbeMu.Lock()
+	delete(s.missingProbes, key)
+	s.missingProbeMu.Unlock()
 }
 
 func (s *InventoryService) upsertMetadataTree(

@@ -417,6 +417,9 @@ describe('ProjectPage membership management', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Delete stable' }))
     await fireEvent.click(await screen.findByRole('button', { name: 'Delete artifact' }))
 
+    expect(mocks.deleteArtifact).toHaveBeenCalledWith('payments', expect.objectContaining({
+      expectedChildDigests: ['sha256:child'],
+    }))
     expect(await screen.findByText('child manifest gained an external reference')).toBeTruthy()
     expect(screen.queryByRole('dialog', { name: 'Delete artifact' })).toBeNull()
   })

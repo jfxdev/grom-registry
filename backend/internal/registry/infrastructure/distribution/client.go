@@ -189,13 +189,15 @@ func (c *Client) ListProjectRepositoriesPage(ctx context.Context, project string
 }
 
 func (c *Client) ListTags(ctx context.Context, repository string) (*TagList, error) {
-	var response TagList
-	token, err := c.tokens.IssueInternal("grom-internal", []registryapp.Access{{
-		Type: "repository", Name: repository, Actions: []string{"pull"},
-	}})
+	token, err := c.issueRepositoryPullToken(repository)
 	if err != nil {
 		return nil, err
 	}
+	return c.listTags(ctx, repository, token)
+}
+
+func (c *Client) listTags(ctx context.Context, repository, token string) (*TagList, error) {
+	var response TagList
 	if err := c.get(ctx, "/v2/"+repository+"/tags/list", token, &response); err != nil {
 		var statusError *responseStatusError
 		if errors.As(err, &statusError) && statusError.statusCode == http.StatusNotFound {
@@ -214,11 +216,15 @@ func (c *Client) ListTags(ctx context.Context, repository string) (*TagList, err
 // ListTagsPage follows Distribution's native lexical tag pagination but
 // returns only its marker, never its private Link header or URL.
 func (c *Client) ListTagsPage(ctx context.Context, repository string, limit int, marker string) (*TagPage, error) {
-	var response TagList
-	token, err := c.tokens.IssueInternal("grom-internal", []registryapp.Access{{Type: "repository", Name: repository, Actions: []string{"pull"}}})
+	token, err := c.issueRepositoryPullToken(repository)
 	if err != nil {
 		return nil, err
 	}
+	return c.listTagsPage(ctx, repository, limit, marker, token)
+}
+
+func (c *Client) listTagsPage(ctx context.Context, repository string, limit int, marker, token string) (*TagPage, error) {
+	var response TagList
 	query := url.Values{"n": []string{fmt.Sprintf("%d", limit)}}
 	if marker != "" {
 		query.Set("last", marker)
@@ -253,24 +259,32 @@ func (c *Client) ListTagsPage(ctx context.Context, repository string, limit int,
 }
 
 func (c *Client) ListRepositoryTags(ctx context.Context, repository string) ([]string, error) {
-	tags, err := c.ListTags(ctx, repository)
+	token, err := c.issueRepositoryPullToken(repository)
 	if err != nil {
 		return nil, err
 	}
-	return c.filterLiveTags(ctx, repository, tags.Tags)
+	tags, err := c.listTags(ctx, repository, token)
+	if err != nil {
+		return nil, err
+	}
+	return c.filterLiveTags(ctx, repository, tags.Tags, token)
 }
 
 // ListLiveTagsPage omits dangling tag links. Distribution can retain a tag in
 // its tag index after the referenced manifest has been deleted by digest.
 func (c *Client) ListLiveTagsPage(ctx context.Context, repository string, limit int, marker string) (*TagPage, error) {
+	token, err := c.issueRepositoryPullToken(repository)
+	if err != nil {
+		return nil, err
+	}
 	result := &TagPage{Name: repository, Tags: []string{}}
 	currentMarker := marker
 	for len(result.Tags) < limit {
-		page, err := c.ListTagsPage(ctx, repository, limit-len(result.Tags), currentMarker)
+		page, err := c.listTagsPage(ctx, repository, limit-len(result.Tags), currentMarker, token)
 		if err != nil {
 			return nil, err
 		}
-		live, err := c.filterLiveTags(ctx, repository, page.Tags)
+		live, err := c.filterLiveTags(ctx, repository, page.Tags, token)
 		if err != nil {
 			return nil, err
 		}
@@ -289,10 +303,10 @@ func (c *Client) ListLiveTagsPage(ctx context.Context, repository string, limit 
 	return result, nil
 }
 
-func (c *Client) filterLiveTags(ctx context.Context, repository string, tags []string) ([]string, error) {
+func (c *Client) filterLiveTags(ctx context.Context, repository string, tags []string, token string) ([]string, error) {
 	result := make([]string, 0, len(tags))
 	for _, tag := range tags {
-		_, exists, err := c.ResolveManifest(ctx, repository, tag)
+		_, exists, err := c.resolveManifest(ctx, repository, tag, token)
 		if err != nil {
 			return nil, err
 		}
@@ -515,12 +529,20 @@ func (c *Client) ManifestExists(ctx context.Context, repository, reference strin
 }
 
 func (c *Client) ResolveManifest(ctx context.Context, repository, reference string) (string, bool, error) {
-	token, err := c.tokens.IssueInternal("grom-internal", []registryapp.Access{{
-		Type: "repository", Name: repository, Actions: []string{"pull"},
-	}})
+	token, err := c.issueRepositoryPullToken(repository)
 	if err != nil {
 		return "", false, err
 	}
+	return c.resolveManifest(ctx, repository, reference, token)
+}
+
+func (c *Client) issueRepositoryPullToken(repository string) (string, error) {
+	return c.tokens.IssueInternal("grom-internal", []registryapp.Access{{
+		Type: "repository", Name: repository, Actions: []string{"pull"},
+	}})
+}
+
+func (c *Client) resolveManifest(ctx context.Context, repository, reference, token string) (string, bool, error) {
 	targetURL := c.baseURL.ResolveReference(&url.URL{Path: "/v2/" + repository + "/manifests/" + reference})
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, targetURL.String(), nil)
 	if err != nil {

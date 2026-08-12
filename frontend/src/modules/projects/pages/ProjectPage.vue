@@ -94,6 +94,8 @@ const tagPagination = useCursorPagination()
 const inventoryPagination = useCursorPagination()
 const deletionPagination = useCursorPagination()
 const lifecyclePagination = useCursorPagination()
+const activeRepositoryOperations = ref(0)
+const repositoryOperationActive = computed(() => activeRepositoryOperations.value > 0)
 
 function openProjectSettings(event: globalThis.MouseEvent) {
   projectSettingsTrigger.value = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
@@ -129,8 +131,8 @@ const tags = useQuery({
   queryKey: computed(() => [...projectKeys.tags(slug.value, selectedRepository.value?.name ?? ''), tagPagination.cursor.value]),
   queryFn: () => listTags(slug.value, selectedRepository.value!.name, tagPagination.cursor.value),
   enabled: computed(() => selectedRepository.value !== null),
-  refetchInterval: 5_000,
-  refetchOnWindowFocus: true,
+  refetchInterval: computed(() => repositoryOperationActive.value ? 5_000 : false),
+  refetchOnWindowFocus: computed(() => repositoryOperationActive.value),
 })
 const artifactDeletionHistory = useQuery({
   queryKey: computed(() => [...projectKeys.artifactDeletions(slug.value, selectedRepository.value?.name ?? ''), deletionPagination.cursor.value]),
@@ -146,8 +148,8 @@ const inventory = useQuery({
   queryKey: computed(() => [...registryKeys.inventory(slug.value, selectedRepository.value?.name ?? ''), inventoryPagination.cursor.value]),
   queryFn: () => listInventory(slug.value, selectedRepository.value!.name, inventoryPagination.cursor.value),
   enabled: computed(() => selectedRepository.value !== null),
-  refetchInterval: 5_000,
-  refetchOnWindowFocus: true,
+  refetchInterval: computed(() => repositoryOperationActive.value ? 5_000 : false),
+  refetchOnWindowFocus: computed(() => repositoryOperationActive.value),
 })
 
 const currentInventoryItems = computed(() =>
@@ -256,6 +258,7 @@ function requestArtifactDeletionPreview(event: globalThis.MouseEvent, tag: strin
 }
 
 const confirmDeletion = useMutation({
+  onMutate: () => { activeRepositoryOperations.value++ },
   mutationFn: () => deleteArtifact(slug.value, {
     repository: deletionPreview.value!.repository,
     reference: deletionReference.value,
@@ -280,6 +283,7 @@ const confirmDeletion = useMutation({
   onError: (caught) => {
     deletionError.value = caught instanceof APIError ? caught.message : 'Could not delete this artifact'
   },
+  onSettled: () => { activeRepositoryOperations.value-- },
 })
 
 const reviewLifecycle = useMutation({
@@ -296,6 +300,7 @@ const reviewLifecycle = useMutation({
 })
 
 const runLifecycle = useMutation({
+  onMutate: () => { activeRepositoryOperations.value++ },
   mutationFn: () => executeLifecycle(slug.value, lifecyclePreview.value!.id, lifecycleReason.value),
   onSuccess: async (run) => {
     const repository = run.repository
@@ -309,6 +314,7 @@ const runLifecycle = useMutation({
   onError: (caught) => {
     lifecycleError.value = caught instanceof APIError ? caught.message : 'Could not execute lifecycle'
   },
+  onSettled: () => { activeRepositoryOperations.value-- },
 })
 
 const availableAccounts = computed(() => {
@@ -367,8 +373,16 @@ function manifestPresence(manifest: ManifestInventory) {
   return manifestTags(manifest).length ? manifestTags(manifest).join(', ') : manifestStateLabel(manifest.state)
 }
 
+const manifestsByTag = computed(() => {
+  const lookup = new Map<string, ManifestInventory>()
+  for (const manifest of pageItems(inventory.data.value)) {
+    for (const tag of manifestTags(manifest)) lookup.set(tag, manifest)
+  }
+  return lookup
+})
+
 function manifestForTag(tag: string) {
-  return pageItems(inventory.data.value).find((manifest) => manifestTags(manifest).includes(tag))
+  return manifestsByTag.value.get(tag)
 }
 
 function platformsForTag(tag: string): ManifestPlatform[] {
@@ -663,7 +677,7 @@ function profileLabel(profile: Repository['profile']) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="platform in platformsForTag(tag)" :key="`${platform.os}/${platform.architecture}/${platform.variant}`" class="border-b last:border-0">
+                <tr v-for="platform in platformsForTag(tag)" :key="platform.digest" class="border-b last:border-0">
                   <td class="px-4 py-3"><code class="text-xs text-accent">{{ platform.digest || manifestForTag(tag)?.digest || '—' }}</code></td>
                   <td class="px-4 py-3 text-muted-foreground">{{ platform.os }}/{{ platform.architecture }}{{ platform.variant ? `/${platform.variant}` : '' }}</td>
                   <td class="px-4 py-3 text-right tabular-nums">{{ formatCompressedSize(platform.compressedSize) }}</td>

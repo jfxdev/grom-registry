@@ -52,8 +52,11 @@ func TestGarbageCollectionReclaimsDeletedManifestStorage(t *testing.T) {
 	// Reusing the same test tag for a different digest must also become visible
 	// immediately through both the registry and Grom's reconciled inventory.
 	replacement := writerDocker.tag(t, variantB, "gc-alpha/app", "v1")
-	writerDocker.push(t, replacement)
+	replacementDigest := writerDocker.push(t, replacement)
 	waitForRestartObservation(t, admin, "gc-alpha", "gc-alpha/app", []string{"v1"})
 	removeLocalTag(t, stack.root, replacement)
-	freshPuller.pull(t, replacement)
+	pulledDigest := freshPuller.pull(t, replacement)
+	if pulledDigest != replacementDigest {
+		t.Fatalf("replacement v1 digest = %s after pull, want %s", pulledDigest, replacementDigest)
+	}
 }

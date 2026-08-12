@@ -66,8 +66,12 @@ func (s *Store) UpsertManifestObservation(
 		if _, err := tx.NewDelete().Model((*manifestPlatformModel)(nil)).Where("manifest_id = ?", model.ID).Exec(ctx); err != nil {
 			return err
 		}
+		platforms := make([]manifestPlatformModel, 0, len(observation.Platforms))
 		for _, platform := range observation.Platforms {
-			if _, err := tx.NewInsert().Model(&manifestPlatformModel{ManifestID: model.ID, OS: platform.OS, Architecture: platform.Architecture, Variant: platform.Variant, Digest: platform.Digest, CompressedSize: platform.CompressedSize}).Exec(ctx); err != nil {
+			platforms = append(platforms, manifestPlatformModel{ManifestID: model.ID, OS: platform.OS, Architecture: platform.Architecture, Variant: platform.Variant, Digest: platform.Digest, CompressedSize: platform.CompressedSize})
+		}
+		if len(platforms) > 0 {
+			if _, err := tx.NewInsert().Model(&platforms).Exec(ctx); err != nil {
 				return err
 			}
 		}
@@ -254,7 +258,7 @@ func (s *Store) manifestInventoryFromModels(ctx context.Context, repositoryID fo
 			tagsByManifest[tag.ManifestID] = append(tagsByManifest[tag.ManifestID], tag.Name)
 		}
 		var platforms []manifestPlatformModel
-		if err := s.db.NewSelect().Model(&platforms).Where("manifest_id IN (?)", bun.List(ids)).OrderExpr("os ASC, architecture ASC, variant ASC").Scan(ctx); err != nil {
+		if err := s.db.NewSelect().Model(&platforms).Where("manifest_id IN (?)", bun.List(ids)).OrderExpr("os ASC, architecture ASC, variant ASC, digest ASC").Scan(ctx); err != nil {
 			return nil, err
 		}
 		for _, platform := range platforms {

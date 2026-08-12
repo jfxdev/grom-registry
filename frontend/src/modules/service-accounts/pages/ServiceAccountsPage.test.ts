@@ -122,6 +122,8 @@ describe('ServiceAccountsPage', () => {
     await flushPromises()
 
     expect(wrapper.find('.list-pagination [aria-label="Pagination"]').exists()).toBe(true)
+    expect(wrapper.find('.account-item + .list-pagination').exists()).toBe(true)
+    expect(wrapper.find('.account-item .list-pagination').exists()).toBe(false)
   })
 
   it('requires the exact service account name before disabling it', async () => {
