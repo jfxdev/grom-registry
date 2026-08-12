@@ -327,10 +327,6 @@ func (c *Client) FetchManifest(ctx context.Context, repository, reference string
 	return c.fetchManifestTree(ctx, repository, reference, token, map[string]bool{})
 }
 
-func (c *Client) fetchManifest(ctx context.Context, repository, reference, token string) (*registryapp.ManifestMetadata, error) {
-	return c.fetchManifestTree(ctx, repository, reference, token, map[string]bool{})
-}
-
 func (c *Client) fetchManifestTree(ctx context.Context, repository, reference, token string, visiting map[string]bool) (*registryapp.ManifestMetadata, error) {
 	if visiting[reference] {
 		return nil, fmt.Errorf("manifest graph contains a cycle at %s", reference)

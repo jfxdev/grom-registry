@@ -65,8 +65,8 @@ func (s *Store) upsertManifestStorageFacts(ctx context.Context, tx bun.Tx, repos
 	for _, descriptor := range descriptors {
 		existing := new(blobDescriptorModel)
 		err := tx.NewSelect().Model(existing).Where("digest = ?", descriptor.Digest).Scan(ctx)
-		switch {
-		case err == nil:
+		switch err {
+		case nil:
 			if existing.SizeBytes != descriptor.SizeBytes {
 				return fmt.Errorf("descriptor %s was observed with inconsistent sizes", descriptor.Digest)
 			}
@@ -75,7 +75,7 @@ func (s *Store) upsertManifestStorageFacts(ctx context.Context, tx bun.Tx, repos
 				Where("digest = ?", descriptor.Digest).Exec(ctx); err != nil {
 				return err
 			}
-		case err == sql.ErrNoRows:
+		case sql.ErrNoRows:
 			if _, err = tx.NewInsert().Model(&blobDescriptorModel{Digest: descriptor.Digest, SizeBytes: descriptor.SizeBytes, MediaType: descriptor.MediaType, FirstSeenAt: observedAt, LastSeenAt: observedAt}).Exec(ctx); err != nil {
 				return err
 			}
