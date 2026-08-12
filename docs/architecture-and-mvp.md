@@ -458,7 +458,10 @@ logical-repository lists. Tags and the repository catalog preserve
 Distribution's native continuation behind Grom cursors; persisted lists use
 database keysets. Administrative search and service-account status filtering
 run on the server before pagination. Page responses expose only items and an
-optional next cursor, never a total or page count.
+optional next cursor, never a total or page count. The access-key page also
+exposes server-authoritative active and maximum-active counts so an older active
+credential remains visible to limit enforcement even when it is not on the
+current history page.
 
 **Planning update on August 3, 2026:** the detailed acceptance plan for the
 remaining browser journey and boot/contract smoke checks is maintained in

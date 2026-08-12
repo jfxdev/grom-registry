@@ -442,6 +442,10 @@ func (s *Service) ListServiceAccountAPITokensPage(ctx context.Context, serviceAc
 	return paged.ListServiceAccountAPITokensPage(ctx, serviceAccountID, request)
 }
 
+func (s *Service) CountActiveServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID) (int, error) {
+	return s.repository.CountActiveServiceAccountAPITokens(ctx, serviceAccountID, time.Now().UTC())
+}
+
 func (s *Service) RevokeServiceAccountAPIToken(ctx context.Context, serviceAccountID, tokenID foundation.ID) error {
 	return s.repository.RevokeServiceAccountAPIToken(ctx, serviceAccountID, tokenID)
 }

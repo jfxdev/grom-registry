@@ -89,13 +89,21 @@ func deleteManifestTree(
 	distribution DistributionMetadata,
 	repository, targetDigest string,
 	children []string,
+	inventory []registrydomain.ManifestInventory,
 ) ([]string, error) {
-	if err := revalidateDeletionChildren(ctx, distribution, repository, children); err != nil {
+	if err := revalidateDeletionChildren(ctx, distribution, repository, targetDigest, children, inventory); err != nil {
 		return nil, err
 	}
 	digests := append([]string{targetDigest}, children...)
 	deleted := make([]string, 0, len(digests))
 	for index, digest := range digests {
+		if index > 0 {
+			if err := revalidateDeletionChildren(
+				ctx, distribution, repository, targetDigest, []string{digest}, inventory,
+			); err != nil {
+				return deleted, err
+			}
+		}
 		resolved, exists, err := distribution.ResolveManifest(ctx, repository, digest)
 		if err != nil {
 			return deleted, err
@@ -117,8 +125,9 @@ func deleteManifestTree(
 func revalidateDeletionChildren(
 	ctx context.Context,
 	distribution DistributionMetadata,
-	repository string,
+	repository, targetDigest string,
 	children []string,
+	inventory []registrydomain.ManifestInventory,
 ) error {
 	if len(children) == 0 {
 		return nil
@@ -127,6 +136,7 @@ func revalidateDeletionChildren(
 	for _, digest := range children {
 		childSet[digest] = struct{}{}
 	}
+	externalRoots := make(map[string]struct{})
 	tags, err := distribution.ListRepositoryTags(ctx, repository)
 	if err != nil {
 		return fmt.Errorf("revalidate child manifest tags: %w", err)
@@ -138,6 +148,36 @@ func revalidateDeletionChildren(
 		}
 		if _, planned := childSet[digest]; exists && planned {
 			return fmt.Errorf("child manifest %s gained tag %s; review the deletion again", digest, tag)
+		}
+		if exists && digest != targetDigest {
+			externalRoots[digest] = struct{}{}
+		}
+	}
+	for _, manifest := range inventory {
+		if manifest.Digest == targetDigest || manifest.State == constants.InventoryStateDeleted || manifest.State == constants.InventoryStateMissing {
+			continue
+		}
+		if _, planned := childSet[manifest.Digest]; planned {
+			continue
+		}
+		if manifestReferencesAnyChild(manifest, childSet) {
+			externalRoots[manifest.Digest] = struct{}{}
+		}
+	}
+	for rootDigest := range externalRoots {
+		resolved, exists, resolveErr := distribution.ResolveManifest(ctx, repository, rootDigest)
+		if resolveErr != nil {
+			return fmt.Errorf("revalidate external index %s: %w", rootDigest, resolveErr)
+		}
+		if !exists || resolved != rootDigest {
+			continue
+		}
+		metadata, fetchErr := distribution.FetchManifest(ctx, repository, rootDigest)
+		if fetchErr != nil {
+			return fmt.Errorf("revalidate external index %s: %w", rootDigest, fetchErr)
+		}
+		if metadataReferencesAnyChild(metadata, childSet) {
+			return fmt.Errorf("child manifest is referenced by live index %s; review the deletion again", rootDigest)
 		}
 	}
 	for _, digest := range children {
@@ -157,4 +197,29 @@ func revalidateDeletionChildren(
 		}
 	}
 	return nil
+}
+
+func manifestReferencesAnyChild(manifest registrydomain.ManifestInventory, children map[string]struct{}) bool {
+	for _, platform := range manifest.Platforms {
+		if _, referenced := children[platform.Digest]; referenced {
+			return true
+		}
+	}
+	return false
+}
+
+func metadataReferencesAnyChild(metadata *ManifestMetadata, children map[string]struct{}) bool {
+	for _, platform := range metadata.Platforms {
+		if platform.Digest != metadata.Digest {
+			if _, referenced := children[platform.Digest]; referenced {
+				return true
+			}
+		}
+	}
+	for index := range metadata.Children {
+		if metadataReferencesAnyChild(&metadata.Children[index], children) {
+			return true
+		}
+	}
+	return false
 }

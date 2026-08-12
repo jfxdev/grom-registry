@@ -273,6 +273,9 @@ const confirmDeletion = useMutation({
       queryKey: projectKeys.artifactDeletions(slug.value, repository),
     })
     deletionPreview.value = null
+    deletionError.value = deletion.status === 'failed'
+      ? deletion.message || 'The deletion only partially completed. Repository state was refreshed.'
+      : ''
   },
   onError: (caught) => {
     deletionError.value = caught instanceof APIError ? caught.message : 'Could not delete this artifact'

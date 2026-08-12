@@ -802,7 +802,20 @@ func (s *Server) listServiceAccountTokens(w http.ResponseWriter, r *http.Request
 		writeError(w, r, http.StatusNotFound, "not_found", "Service account not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, tokens)
+	activeCount, err := s.identity.CountActiveServiceAccountAPITokens(r.Context(), accountID)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Items          []identitydomain.APIToken `json:"items"`
+		NextCursor     string                    `json:"nextCursor,omitempty"`
+		ActiveCount    int                       `json:"activeCount"`
+		MaxActiveCount int                       `json:"maxActiveCount"`
+	}{
+		Items: tokens.Items, NextCursor: tokens.NextCursor,
+		ActiveCount: activeCount, MaxActiveCount: constants.MaxActiveServiceAccountAccessKeys,
+	})
 }
 
 func (s *Server) createServiceAccountToken(w http.ResponseWriter, r *http.Request) {
@@ -1305,6 +1318,10 @@ func (s *Server) deleteArtifact(w http.ResponseWriter, r *http.Request) {
 		principalForUser(userFromContext(r.Context())),
 	)
 	if err != nil {
+		if deletion != nil {
+			writeJSON(w, http.StatusOK, deletion)
+			return
+		}
 		writeError(w, r, http.StatusConflict, "deletion_blocked", err.Error())
 		return
 	}

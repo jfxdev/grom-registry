@@ -1,7 +1,9 @@
 package application
 
 import (
+	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -91,4 +93,67 @@ func manifestWithChildren(digest string, children ...string) registrydomain.Mani
 
 func liveManifest(digest string) registrydomain.ManifestInventory {
 	return registrydomain.ManifestInventory{Digest: digest, State: constants.InventoryStateUntagged}
+}
+
+type changingIndexDistribution struct {
+	listCalls int
+	deleted   []string
+}
+
+func (d *changingIndexDistribution) ListRepositoryTags(context.Context, string) ([]string, error) {
+	d.listCalls++
+	if d.listCalls == 1 {
+		return []string{"target"}, nil
+	}
+	return []string{"target", "other"}, nil
+}
+
+func (d *changingIndexDistribution) ResolveManifest(_ context.Context, _, reference string) (string, bool, error) {
+	switch reference {
+	case "target":
+		return "sha256:target", true, nil
+	case "other":
+		return "sha256:other", true, nil
+	case "sha256:target", "sha256:other", "sha256:child":
+		return reference, true, nil
+	default:
+		return "", false, nil
+	}
+}
+
+func (d *changingIndexDistribution) FetchManifest(_ context.Context, _, reference string) (*ManifestMetadata, error) {
+	metadata := &ManifestMetadata{Digest: reference}
+	if reference == "sha256:target" || reference == "sha256:other" {
+		metadata.Platforms = []registrydomain.ManifestPlatform{{Digest: "sha256:child"}}
+	}
+	return metadata, nil
+}
+
+func (d *changingIndexDistribution) ListReferrers(context.Context, string, string) ([]ManifestDescriptor, error) {
+	return nil, nil
+}
+
+func (d *changingIndexDistribution) DeleteManifest(_ context.Context, _, digest string) error {
+	d.deleted = append(d.deleted, digest)
+	return nil
+}
+
+func TestDeleteManifestTreeRevalidatesExternalIndexesBeforeEachChild(t *testing.T) {
+	distribution := &changingIndexDistribution{}
+	inventory := []registrydomain.ManifestInventory{
+		manifestWithChildren("sha256:target", "sha256:child"),
+		liveManifest("sha256:child"),
+	}
+
+	deleted, err := deleteManifestTree(
+		context.Background(), distribution, "project/api", "sha256:target",
+		[]string{"sha256:child"}, inventory,
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "referenced by live index sha256:other") {
+		t.Fatalf("expected the new external index to block child deletion, got %v", err)
+	}
+	if !reflect.DeepEqual(deleted, []string{"sha256:target"}) || !reflect.DeepEqual(distribution.deleted, deleted) {
+		t.Fatalf("child deletion was not stopped: returned=%#v deleted=%#v", deleted, distribution.deleted)
+	}
 }

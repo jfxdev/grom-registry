@@ -35,19 +35,27 @@ describe('ServiceAccountKeysPanel', () => {
         { id: 'key-2', publicId: 'key-2', name: 'Deploy', serviceAccountId: 'account-1', createdAt: '2026-08-11T00:00:00Z' },
         { id: 'key-3', publicId: 'key-3', name: 'Release', serviceAccountId: 'account-1', createdAt: '2026-08-11T00:00:00Z' },
       ],
+      activeCount: 3,
+      maxActiveCount: 3,
+      nextCursor: 'next-page',
     })
   })
 
-  it('prevents creating a fourth active key and does not render pagination', async () => {
+  it('uses the server-wide active count and renders token pagination', async () => {
     const wrapper = mountPanel()
     await flushPromises()
 
     expect(wrapper.findAll('button').find((button) => button.text().includes('New key'))?.attributes('disabled')).toBeDefined()
-    expect(wrapper.find('[aria-label="Pagination"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="Pagination"]').exists()).toBe(true)
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Next')!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.listServiceAccountTokens).toHaveBeenCalledWith('account-1', 'next-page')
   })
 
   it('creates a key from a dialog with the calendar expiration picker', async () => {
-    mocks.listServiceAccountTokens.mockResolvedValueOnce({ items: [] })
+    mocks.listServiceAccountTokens.mockResolvedValueOnce({ items: [], activeCount: 0, maxActiveCount: 3 })
     const wrapper = mountPanel()
     await flushPromises()
 

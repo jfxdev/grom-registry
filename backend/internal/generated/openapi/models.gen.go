@@ -515,8 +515,13 @@ type APIToken struct {
 
 // APITokenPage defines model for APITokenPage.
 type APITokenPage struct {
-	Items      []APIToken `json:"items"`
-	NextCursor *string    `json:"nextCursor,omitempty"`
+	// ActiveCount Number of currently active access keys across every page for this service account.
+	ActiveCount int        `json:"activeCount"`
+	Items       []APIToken `json:"items"`
+
+	// MaxActiveCount Maximum number of concurrently active access keys allowed for this service account.
+	MaxActiveCount int     `json:"maxActiveCount"`
+	NextCursor     *string `json:"nextCursor,omitempty"`
 }
 
 // ArtifactDeletion defines model for ArtifactDeletion.

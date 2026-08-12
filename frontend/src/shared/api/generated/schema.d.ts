@@ -785,6 +785,10 @@ export interface components {
         APITokenPage: {
             items: components["schemas"]["APIToken"][];
             nextCursor?: string;
+            /** @description Number of currently active access keys across every page for this service account. */
+            activeCount: number;
+            /** @description Maximum number of concurrently active access keys allowed for this service account. */
+            maxActiveCount: number;
         };
         ProjectPage: {
             items: components["schemas"]["Project"][];

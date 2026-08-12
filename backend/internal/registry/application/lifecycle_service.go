@@ -374,7 +374,7 @@ func (s *LifecycleService) Execute(
 		} else {
 			children := deletionChildDigests(item.Digest, current)
 			deletedDigests, deletionErr := deleteManifestTree(
-				ctx, s.distribution, fullRepository, item.Digest, children,
+				ctx, s.distribution, fullRepository, item.Digest, children, current,
 			)
 			if deletionErr != nil {
 				for _, deletedDigest := range deletedDigests {

@@ -326,6 +326,25 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	if err := json.NewDecoder(tokenResponse.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
+	listTokensResponse := httptest.NewRecorder()
+	server.listServiceAccountTokens(listTokensResponse, withUserAndParams(
+		httptest.NewRequest(http.MethodGet, "http://grom/api/v1/service-accounts/"+account.ID.String()+"/tokens", nil),
+		admin, map[string]string{"id": account.ID.String()},
+	))
+	if listTokensResponse.Code != http.StatusOK {
+		t.Fatalf("list tokens: expected 200, got %d: %s", listTokensResponse.Code, listTokensResponse.Body.String())
+	}
+	var tokenPage struct {
+		Items          []identitydomain.APIToken `json:"items"`
+		ActiveCount    int                       `json:"activeCount"`
+		MaxActiveCount int                       `json:"maxActiveCount"`
+	}
+	if err := json.NewDecoder(listTokensResponse.Body).Decode(&tokenPage); err != nil {
+		t.Fatal(err)
+	}
+	if len(tokenPage.Items) != 1 || tokenPage.ActiveCount != 1 || tokenPage.MaxActiveCount != constants.MaxActiveServiceAccountAccessKeys {
+		t.Fatalf("unexpected service-account token page: %#v", tokenPage)
+	}
 
 	revokeResponse := httptest.NewRecorder()
 	server.revokeServiceAccountToken(revokeResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/service-accounts/x/tokens/y", nil), admin, map[string]string{"id": account.ID.String(), "tokenId": created.Token.ID.String()}))

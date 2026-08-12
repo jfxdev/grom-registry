@@ -6,9 +6,9 @@ import { Button } from '@/shared/components/ui/button'
 import { Calendar } from '@/shared/components/ui/calendar'
 import { Dialog } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
-import { MAX_ACTIVE_SERVICE_ACCOUNT_ACCESS_KEYS } from '@/shared/constants'
+import { PaginationControls } from '@/shared/components/ui/pagination'
 import { writeClipboardText } from '@/shared/lib/clipboard'
-import { pageItems } from '@/shared/lib/pagination'
+import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import type { DateValue } from '@internationalized/date'
 import { getLocalTimeZone, today } from '@internationalized/date'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
@@ -23,9 +23,10 @@ import {
 
 const props = defineProps<{ account: ServiceAccount }>()
 const queryClient = useQueryClient()
+const pagination = useCursorPagination()
 const keys = useQuery({
-  queryKey: computed(() => serviceAccountKeys.tokens(props.account.id)),
-  queryFn: () => listServiceAccountTokens(props.account.id),
+  queryKey: computed(() => [...serviceAccountKeys.tokens(props.account.id), pagination.cursor.value]),
+  queryFn: () => listServiceAccountTokens(props.account.id, pagination.cursor.value),
 })
 const keyDialogOpen = ref(false)
 const keyDialogTrigger = ref<globalThis.HTMLElement | null>(null)
@@ -37,10 +38,9 @@ const copied = ref(false)
 const copyError = ref('')
 const currentTime = ref(Date.now())
 const currentTimeTimer = window.setInterval(() => { currentTime.value = Date.now() }, 60_000)
-const activeKeyCount = computed(() => pageItems(keys.data.value).filter((token) =>
-  !token.revokedAt && (!token.expiresAt || new Date(token.expiresAt).getTime() > currentTime.value),
-).length)
-const canCreateKey = computed(() => activeKeyCount.value < MAX_ACTIVE_SERVICE_ACCOUNT_ACCESS_KEYS)
+const activeKeyCount = computed(() => keys.data.value?.activeCount ?? 0)
+const maxActiveKeyCount = computed(() => keys.data.value?.maxActiveCount ?? 1)
+const canCreateKey = computed(() => activeKeyCount.value < maxActiveKeyCount.value)
 const calendarPlaceholder = today(getLocalTimeZone())
 
 onUnmounted(() => window.clearInterval(currentTimeTimer))
@@ -161,6 +161,14 @@ function closeSecret() {
         </div>
       </div>
     </div>
+    <PaginationControls
+      :page="pagination.page.value"
+      :has-previous="pagination.hasPrevious.value"
+      :has-next="Boolean(keys.data.value?.nextCursor)"
+      :disabled="keys.isFetching.value"
+      @previous="pagination.previous()"
+      @next="pagination.next(keys.data.value?.nextCursor)"
+    />
 
     <Dialog
       v-if="keyDialogOpen"

@@ -147,6 +147,10 @@ func (s *ArtifactDeletionService) Execute(
 	if len(preview.BlockedReasons) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(preview.BlockedReasons, "; "))
 	}
+	currentInventory, err := s.inventory.List(ctx, projectID, repository)
+	if err != nil {
+		return nil, err
+	}
 	target, err := s.store.FindRepository(ctx, projectID, repository)
 	if err != nil {
 		return nil, err
@@ -177,7 +181,7 @@ func (s *ArtifactDeletionService) Execute(
 
 	fullRepository := projectSlug + "/" + repository
 	deletedDigests, deleteErr := deleteManifestTree(
-		ctx, s.distribution, fullRepository, deletion.Digest, preview.ChildDigests,
+		ctx, s.distribution, fullRepository, deletion.Digest, preview.ChildDigests, currentInventory,
 	)
 	if deleteErr != nil {
 		completedAt := s.now()

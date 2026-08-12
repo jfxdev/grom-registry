@@ -237,6 +237,9 @@ already downloaded bundle.
   links; they must change the password from their profile or sign out first.
   Never log or persist the plaintext reset token.
 - API tokens are normally credentials owned by service accounts. The sole exception is an installation viewer's profile-scoped, reveal-once registry token: it is revocable by that viewer and must always grant only `pull` from projects with explicit membership. It must never grant `push` or `delete`, even if the viewer has a Writer or Admin project membership. Do not add tokens for other user roles or a global user-token page.
+- A service account may have at most three active access keys. Keep enforcement
+  and the paginated list's active/max counts server-authoritative; the UI must
+  never infer the limit from only the current history page.
 - Avoid Redis, message brokers, dependency-injection frameworks, and background-job frameworks in the MVP.
 
 ## Required documentation maintenance

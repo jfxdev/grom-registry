@@ -220,7 +220,9 @@ from normal lists after the operation completes.
 - A key cannot be listed or revoked through a different service account.
 
 The API and current UI support an optional key expiration timestamp; key lists
-show the configured expiry and distinguish expired keys from revoked keys.
+are cursor-paginated, show the configured expiry, and distinguish expired keys
+from revoked keys. The API calculates the active-key count across the complete
+history so the UI never infers the three-key limit from only the visible page.
 
 ## 7. Projects and memberships
 

@@ -394,6 +394,33 @@ describe('ProjectPage membership management', () => {
     expect(screen.getByRole('button', { name: 'Delete artifact' }).hasAttribute('disabled')).toBe(true)
   })
 
+  it('refreshes repository state and reports a persisted partial deletion', async () => {
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'manual', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.listTags.mockResolvedValue({ name: 'payments/api', tags: ['stable'] })
+    mocks.previewArtifactDeletion.mockResolvedValue({
+      repository: 'api', digest: 'sha256:index', affectedTags: ['stable'], requiresReason: false,
+      blockedReasons: [], relatedArtifacts: [], childDigests: ['sha256:child'],
+    })
+    mocks.deleteArtifact.mockResolvedValue({
+      id: 'deletion-1', repositoryId: 'repository-1', repository: 'api', digest: 'sha256:index',
+      affectedTags: ['stable'], actorId: 'user-1', reason: '', status: 'failed',
+      message: 'child manifest gained an external reference', startedAt: '2026-08-12T00:00:00Z',
+      completedAt: '2026-08-12T00:00:01Z',
+    })
+    mocks.repositoryId = 'repository-1'
+    renderPage()
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Delete stable' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Delete artifact' }))
+
+    expect(await screen.findByText('child manifest gained an external reference')).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Delete artifact' })).toBeNull()
+  })
+
   it('opens a repository in its dedicated route', async () => {
     mocks.listRepositories.mockResolvedValue([{
       id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
