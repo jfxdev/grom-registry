@@ -102,6 +102,10 @@ func deleteManifestTree(
 	deleted := make([]string, 0, len(digests))
 	for index, digest := range digests {
 		if index > 0 {
+			liveTags, err = resolveLiveTagDigests(ctx, distribution, repository)
+			if err != nil {
+				return deleted, err
+			}
 			if err := revalidateDeletionChildren(
 				ctx, distribution, repository, targetDigest, []string{digest}, inventory, liveTags,
 			); err != nil {

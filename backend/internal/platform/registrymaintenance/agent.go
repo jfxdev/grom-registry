@@ -78,6 +78,10 @@ var newRegistryCommand = func(configPath string) *exec.Cmd {
 	return command
 }
 
+var newReadinessClient = func() *http.Client {
+	return &http.Client{Timeout: 2 * time.Second}
+}
+
 var newDistributionRuntime = func(options AgentOptions) distributionRuntime {
 	return &commandRuntime{
 		configPath: options.ConfigPath,
@@ -309,7 +313,7 @@ func (r *commandRuntime) wait(command *exec.Cmd, done chan error) {
 }
 
 func (r *commandRuntime) waitReady(ctx context.Context) error {
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := newReadinessClient()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
