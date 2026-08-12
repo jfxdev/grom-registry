@@ -324,15 +324,31 @@ func (c *Client) FetchManifest(ctx context.Context, repository, reference string
 	if err != nil {
 		return nil, err
 	}
-	return c.fetchManifestTree(ctx, repository, reference, token, map[string]bool{})
+	return c.fetchManifestTree(ctx, repository, reference, token, &manifestTraversal{visiting: map[string]bool{}})
 }
 
-func (c *Client) fetchManifestTree(ctx context.Context, repository, reference, token string, visiting map[string]bool) (*registryapp.ManifestMetadata, error) {
-	if visiting[reference] {
+const maxManifestTraversalDepth = 32
+const maxManifestTraversalNodes = 512
+
+type manifestTraversal struct {
+	visiting map[string]bool
+	depth    int
+	nodes    int
+}
+
+func (c *Client) fetchManifestTree(ctx context.Context, repository, reference, token string, traversal *manifestTraversal) (*registryapp.ManifestMetadata, error) {
+	if traversal.depth > maxManifestTraversalDepth {
+		return nil, fmt.Errorf("manifest graph exceeds maximum depth of %d", maxManifestTraversalDepth)
+	}
+	if traversal.nodes >= maxManifestTraversalNodes {
+		return nil, fmt.Errorf("manifest graph exceeds maximum node count of %d", maxManifestTraversalNodes)
+	}
+	if traversal.visiting[reference] {
 		return nil, fmt.Errorf("manifest graph contains a cycle at %s", reference)
 	}
-	visiting[reference] = true
-	defer delete(visiting, reference)
+	traversal.nodes++
+	traversal.visiting[reference] = true
+	defer delete(traversal.visiting, reference)
 	targetURL := c.baseURL.ResolveReference(&url.URL{Path: "/v2/" + repository + "/manifests/" + reference})
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL.String(), nil)
 	if err != nil {
@@ -382,7 +398,9 @@ func (c *Client) fetchManifestTree(ctx context.Context, repository, reference, t
 	for _, descriptor := range document.Manifests {
 		descriptorMediaTypes = append(descriptorMediaTypes, descriptor.MediaType)
 		descriptors = append(descriptors, registrydomain.Descriptor{Digest: descriptor.Digest, SizeBytes: descriptor.Size, MediaType: descriptor.MediaType, Role: "child_manifest"})
-		child, fetchErr := c.fetchManifestTree(ctx, repository, descriptor.Digest, token, visiting)
+		traversal.depth++
+		child, fetchErr := c.fetchManifestTree(ctx, repository, descriptor.Digest, token, traversal)
+		traversal.depth--
 		if fetchErr != nil {
 			return nil, fmt.Errorf("fetch child manifest %s: %w", descriptor.Digest, fetchErr)
 		}

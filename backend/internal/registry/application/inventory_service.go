@@ -371,6 +371,24 @@ func (s *InventoryService) ProjectUsage(ctx context.Context, projectID foundatio
 	return usage
 }
 
+// ProjectUsages keeps project-list accounting behind one Registry query.
+func (s *InventoryService) ProjectUsages(ctx context.Context, projectIDs []foundation.ID) map[foundation.ID]foundation.AccountedStorageUsage {
+	reader, ok := s.store.(interface {
+		StorageUsageForProjects(context.Context, []foundation.ID) (map[foundation.ID]foundation.AccountedStorageUsage, error)
+	})
+	if ok {
+		usages, err := reader.StorageUsageForProjects(ctx, projectIDs)
+		if err == nil {
+			return usages
+		}
+	}
+	usages := make(map[foundation.ID]foundation.AccountedStorageUsage, len(projectIDs))
+	for _, projectID := range projectIDs {
+		usages[projectID] = foundation.AccountedStorageUsage{Status: "unavailable"}
+	}
+	return usages
+}
+
 func (s *InventoryService) List(ctx context.Context, projectID foundation.ID, repository string) ([]registrydomain.ManifestInventory, error) {
 	target, err := s.store.FindRepository(ctx, projectID, repository)
 	if err != nil {

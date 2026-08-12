@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useSessionStore } from '@/modules/auth/store/session'
 import { APIError } from '@/shared/api/client'
+import type { AccountedStorageUsage } from '@/shared/api/models'
 import { ActionButton, Button, CancelButton } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { PaginationControls } from '@/shared/components/ui/pagination'
@@ -60,8 +61,7 @@ function submitCreate() {
   create.mutate({ name: name.value, slug: slug.value })
 }
 
-function accountedUsageLabel(project: { accountedUsage?: { status: string; accountedBytes?: number | null } }) {
-  const usage = project.accountedUsage
+function accountedUsageLabel(usage: AccountedStorageUsage | null | undefined) {
   if (!usage) return 'Accounting pending'
   if (usage.status === 'pending') return 'Accounting pending'
   if (usage.status === 'stale') return `${formatBytes(usage.accountedBytes)} (stale)`
@@ -145,7 +145,7 @@ function formatBytes(bytes: number | null | undefined) {
             <span class="status-dot" />
             Active
           </div>
-          <p class="project-created">{{ accountedUsageLabel(project) }} accounted</p>
+          <p class="project-created">{{ accountedUsageLabel(project.accountedUsage) }} accounted</p>
           <p class="project-created">Created {{ new Date(project.createdAt).toLocaleDateString() }}</p>
           <ArrowUpRight class="project-open" :size="17" />
         </RouterLink>

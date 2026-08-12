@@ -262,7 +262,7 @@ func (s *Store) completeInventoryReconciliationTx(
 		Exec(ctx); err != nil {
 		return err
 	}
-	return nil
+	return deleteUnreferencedBlobDescriptors(ctx, tx)
 }
 
 func stringSet(values []string) map[string]struct{} {
@@ -382,8 +382,18 @@ func (s *Store) MarkManifestDeleted(ctx context.Context, repositoryID foundation
 			Where("repository_id = ?", repositoryID.String()).Where("manifest_digest = ?", digest).Exec(ctx); err != nil {
 			return err
 		}
+		if err := deleteUnreferencedBlobDescriptors(ctx, tx); err != nil {
+			return err
+		}
 		return s.refreshStorageSnapshots(ctx, tx, repositoryID, deletedAt)
 	})
+}
+
+func deleteUnreferencedBlobDescriptors(ctx context.Context, tx bun.Tx) error {
+	_, err := tx.NewDelete().Model((*blobDescriptorModel)(nil)).
+		Where("NOT EXISTS (SELECT 1 FROM registry_manifest_blob_references WHERE blob_digest = rbd.digest)").
+		Exec(ctx)
+	return err
 }
 
 func (s *Store) CreateArtifactDeletion(ctx context.Context, deletion *registrydomain.ArtifactDeletion) error {

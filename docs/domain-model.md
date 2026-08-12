@@ -135,7 +135,8 @@ they never read Registry persistence tables.
 Successful reconciliation writes its complete observed graph, inventory state,
 and derived snapshots in one transaction; a failed observation leaves the prior
 facts and snapshot intact. Registry also exposes idempotent internal rebuild
-primitives for one repository, one project, or all project scopes.
+primitives for one repository, one project, or all projects; a full rebuild
+refreshes repository snapshots before their project snapshots.
 
 An archived repository remains a logical record until an administrator removes
 it. Removal never deletes OCI content: it requires the repository to be

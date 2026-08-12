@@ -270,7 +270,8 @@ const confirmDeletion = useMutation({
   }),
   onSuccess: async (deletion) => {
     const repository = deletion.repository
-    await queryClient.invalidateQueries({ queryKey: projectKeys.tags(slug.value, repository) })
+	await queryClient.invalidateQueries({ queryKey: projectKeys.detail(slug.value) })
+	await queryClient.invalidateQueries({ queryKey: projectKeys.tags(slug.value, repository) })
     await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
     await queryClient.invalidateQueries({ queryKey: registryKeys.inventory(slug.value, repository) })
     await queryClient.invalidateQueries({
@@ -307,7 +308,8 @@ const runLifecycle = useMutation({
     const repository = run.repository
     lifecycleRun.value = run
     lifecycleError.value = ''
-    await queryClient.invalidateQueries({ queryKey: projectKeys.tags(slug.value, repository) })
+	await queryClient.invalidateQueries({ queryKey: projectKeys.detail(slug.value) })
+	await queryClient.invalidateQueries({ queryKey: projectKeys.tags(slug.value, repository) })
     await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
     await queryClient.invalidateQueries({ queryKey: registryKeys.inventory(slug.value, repository) })
     await queryClient.invalidateQueries({ queryKey: registryKeys.lifecycleRuns(slug.value, repository) })

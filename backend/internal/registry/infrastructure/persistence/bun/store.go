@@ -66,6 +66,7 @@ func (s *Store) ListRepositories(ctx context.Context, projectID foundation.ID) (
 		return nil, err
 	}
 	result := make([]registrydomain.Repository, 0, len(models))
+	withUsage := make([]*registrydomain.Repository, 0, len(models))
 	for i := range models {
 		repository := toRepository(&models[i])
 		policies, err := s.listPolicies(ctx, repository.ID)
@@ -73,11 +74,11 @@ func (s *Store) ListRepositories(ctx context.Context, projectID foundation.ID) (
 			return nil, err
 		}
 		repository.Policies = policies
-		if err := s.attachStorageUsage(ctx, repository); err != nil {
-			return nil, err
-		}
+		withUsage = append(withUsage, repository)
 		result = append(result, *repository)
 	}
+	s.attachStorageUsages(ctx, withUsage)
+	for i := range result { result[i].AccountedUsage = withUsage[i].AccountedUsage }
 	return result, nil
 }
 
@@ -99,6 +100,7 @@ func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.I
 		return foundation.PageResult[registrydomain.Repository]{}, err
 	}
 	result := foundation.PageResult[registrydomain.Repository]{Items: make([]registrydomain.Repository, 0, minRepositoryPage(len(models), request.Limit))}
+	withUsage := make([]*registrydomain.Repository, 0, minRepositoryPage(len(models), request.Limit))
 	for i := 0; i < minRepositoryPage(len(models), request.Limit); i++ {
 		repository := toRepository(&models[i])
 		policies, err := s.listPolicies(ctx, repository.ID)
@@ -106,11 +108,11 @@ func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.I
 			return foundation.PageResult[registrydomain.Repository]{}, err
 		}
 		repository.Policies = policies
-		if err := s.attachStorageUsage(ctx, repository); err != nil {
-			return foundation.PageResult[registrydomain.Repository]{}, err
-		}
+		withUsage = append(withUsage, repository)
 		result.Items = append(result.Items, *repository)
 	}
+	s.attachStorageUsages(ctx, withUsage)
+	for i := range result.Items { result.Items[i].AccountedUsage = withUsage[i].AccountedUsage }
 	if len(models) > request.Limit {
 		last := models[request.Limit-1]
 		cursor, _ := foundation.EncodePageCursor(foundation.PageCursor{Scope: request.Scope, Name: last.Name})
@@ -139,9 +141,7 @@ func (s *Store) FindRepository(ctx context.Context, projectID foundation.ID, nam
 		return nil, err
 	}
 	repository.Policies = policies
-	if err := s.attachStorageUsage(ctx, repository); err != nil {
-		return nil, err
-	}
+	s.attachStorageUsage(ctx, repository)
 	return repository, nil
 }
 
@@ -156,9 +156,7 @@ func (s *Store) FindRepositoryByID(ctx context.Context, repositoryID foundation.
 		return nil, err
 	}
 	repository.Policies = policies
-	if err := s.attachStorageUsage(ctx, repository); err != nil {
-		return nil, err
-	}
+	s.attachStorageUsage(ctx, repository)
 	return repository, nil
 }
 
@@ -206,14 +204,7 @@ func (s *Store) DeleteRepository(ctx context.Context, repositoryID foundation.ID
 		if _, err := tx.NewDelete().Model((*repositoryModel)(nil)).Where("id = ?", repositoryID.String()).Exec(ctx); err != nil {
 			return err
 		}
-		bytes, err := accountedBytes(ctx, tx, "rr.project_id = ?", projectID)
-		if err != nil {
-			return err
-		}
-		at := time.Now().UTC()
-		_, err = tx.NewInsert().Model(&projectStorageSnapshotModel{ProjectID: projectID, AccountedBytes: bytes, AccountingVersion: at.UnixNano(), ReconciledAt: at, Status: storageReady}).
-			On("CONFLICT (project_id) DO UPDATE").Set("accounted_bytes = EXCLUDED.accounted_bytes").Set("accounting_version = EXCLUDED.accounting_version").Set("reconciled_at = EXCLUDED.reconciled_at").Set("status = EXCLUDED.status").Exec(ctx)
-		return err
+		return s.refreshProjectStorageSnapshot(ctx, tx, foundation.ID(projectID), time.Now().UTC())
 	})
 }
 

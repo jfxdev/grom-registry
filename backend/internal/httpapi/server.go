@@ -872,8 +872,13 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
+	projectIDs := make([]foundation.ID, len(projects.Items))
+	for i, project := range projects.Items {
+		projectIDs[i] = project.ID
+	}
+	usages := s.projectUsages(r.Context(), projectIDs)
 	for i := range projects.Items {
-		projects.Items[i].AccountedUsage = s.projectUsage(r.Context(), projects.Items[i].ID)
+		projects.Items[i].AccountedUsage = usages[projects.Items[i].ID]
 	}
 	writeJSON(w, http.StatusOK, projects)
 }
@@ -922,6 +927,17 @@ func (s *Server) projectUsage(ctx context.Context, projectID foundation.ID) foun
 		return foundation.AccountedStorageUsage{Status: "unavailable"}
 	}
 	return s.inventory.ProjectUsage(ctx, projectID)
+}
+
+func (s *Server) projectUsages(ctx context.Context, projectIDs []foundation.ID) map[foundation.ID]foundation.AccountedStorageUsage {
+	if s.inventory == nil {
+		usages := make(map[foundation.ID]foundation.AccountedStorageUsage, len(projectIDs))
+		for _, projectID := range projectIDs {
+			usages[projectID] = foundation.AccountedStorageUsage{Status: "unavailable"}
+		}
+		return usages
+	}
+	return s.inventory.ProjectUsages(ctx, projectIDs)
 }
 
 func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {

@@ -422,3 +422,18 @@ func TestFetchManifestCalculatesLogicalPlatformSizesAndPersistsChildren(t *testi
 		t.Fatalf("unexpected arm64 child metadata: %#v", metadata.Children[1])
 	}
 }
+
+func TestFetchManifestTreeRejectsExcessiveTraversal(t *testing.T) {
+	client := &Client{}
+	for name, traversal := range map[string]*manifestTraversal{
+		"depth": {visiting: map[string]bool{}, depth: maxManifestTraversalDepth + 1},
+		"nodes": {visiting: map[string]bool{}, nodes: maxManifestTraversalNodes},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := client.fetchManifestTree(context.Background(), "project/api", "latest", "token", traversal)
+			if err == nil || !strings.Contains(err.Error(), "maximum") {
+				t.Fatalf("expected traversal limit error, got %v", err)
+			}
+		})
+	}
+}
