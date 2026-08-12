@@ -21,6 +21,61 @@ func (s *Store) UpsertManifestObservation(
 	observation registrydomain.ManifestObservation,
 	observedAt time.Time,
 ) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if err := s.upsertManifestObservationTx(ctx, tx, repositoryID, observation, observedAt); err != nil {
+			return err
+		}
+		return s.refreshStorageSnapshots(ctx, tx, repositoryID, observedAt)
+	})
+}
+
+// UpsertManifestObservationsAtomically applies an observed manifest tree and
+// publishes its accounting snapshot only after every fact has committed.
+func (s *Store) UpsertManifestObservationsAtomically(
+	ctx context.Context,
+	repositoryID foundation.ID,
+	observations []registrydomain.ManifestObservation,
+	observedAt time.Time,
+) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		for _, observation := range observations {
+			if err := s.upsertManifestObservationTx(ctx, tx, repositoryID, observation, observedAt); err != nil {
+				return err
+			}
+		}
+		return s.refreshStorageSnapshots(ctx, tx, repositoryID, observedAt)
+	})
+}
+
+// ReconcileManifestObservationsAtomically keeps a failed reconciliation from
+// publishing a partially observed inventory or a misleading new snapshot.
+func (s *Store) ReconcileManifestObservationsAtomically(
+	ctx context.Context,
+	repositoryID foundation.ID,
+	observations []registrydomain.ManifestObservation,
+	seenTags, seenDigests []string,
+	observedAt time.Time,
+) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		for _, observation := range observations {
+			if err := s.upsertManifestObservationTx(ctx, tx, repositoryID, observation, observedAt); err != nil {
+				return err
+			}
+		}
+		if err := s.completeInventoryReconciliationTx(ctx, tx, repositoryID, seenTags, seenDigests, observedAt); err != nil {
+			return err
+		}
+		return s.refreshStorageSnapshots(ctx, tx, repositoryID, observedAt)
+	})
+}
+
+func (s *Store) upsertManifestObservationTx(
+	ctx context.Context,
+	tx bun.Tx,
+	repositoryID foundation.ID,
+	observation registrydomain.ManifestObservation,
+	observedAt time.Time,
+) error {
 	if observation.ObservedKind == "" {
 		observation.ObservedKind = constants.ArtifactKindUnknownOCI
 	}
@@ -33,92 +88,90 @@ func (s *Store) UpsertManifestObservation(
 	if observation.ClassificationConfidence == "" {
 		observation.ClassificationConfidence = constants.ClassificationConfidenceNone
 	}
-	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		model := &manifestModel{
-			ID: foundation.NewID().String(), RepositoryID: repositoryID.String(),
-			Digest: observation.Digest, MediaType: observation.MediaType,
-			ArtifactType: observation.ArtifactType, SubjectDigest: observation.SubjectDigest,
-			ObservedKind: observation.ObservedKind, ArtifactRelationship: observation.ArtifactRelationship,
-			ClassificationSource:     observation.ClassificationSource,
-			ClassificationConfidence: observation.ClassificationConfidence,
-			ManifestSize:             observation.ManifestSize, State: constants.InventoryStateUntagged,
-			FirstSeenAt: observedAt, LastPushedAt: observation.PushedAt, LastSeenAt: observedAt,
-			UntaggedAt: &observedAt,
-		}
-		manifestInsert := tx.NewInsert().Model(model).
-			On("CONFLICT (repository_id, digest) DO UPDATE").
-			Set("media_type = EXCLUDED.media_type").
-			Set("artifact_type = EXCLUDED.artifact_type").
-			Set("subject_digest = EXCLUDED.subject_digest").
-			Set("observed_kind = EXCLUDED.observed_kind").
-			Set("artifact_relationship = EXCLUDED.artifact_relationship").
-			Set("classification_source = EXCLUDED.classification_source").
-			Set("classification_confidence = EXCLUDED.classification_confidence").
-			Set("manifest_size = EXCLUDED.manifest_size").
-			Set("last_seen_at = EXCLUDED.last_seen_at").
-			Set("deleted_at = NULL")
-		if observation.PushedAt != nil {
-			manifestInsert = manifestInsert.Set("last_pushed_at = EXCLUDED.last_pushed_at")
-		}
-		if err := manifestInsert.Returning("id").Scan(ctx, &model.ID); err != nil {
+	model := &manifestModel{
+		ID: foundation.NewID().String(), RepositoryID: repositoryID.String(),
+		Digest: observation.Digest, MediaType: observation.MediaType,
+		ArtifactType: observation.ArtifactType, SubjectDigest: observation.SubjectDigest,
+		ObservedKind: observation.ObservedKind, ArtifactRelationship: observation.ArtifactRelationship,
+		ClassificationSource:     observation.ClassificationSource,
+		ClassificationConfidence: observation.ClassificationConfidence,
+		ManifestSize:             observation.ManifestSize, State: constants.InventoryStateUntagged,
+		FirstSeenAt: observedAt, LastPushedAt: observation.PushedAt, LastSeenAt: observedAt,
+		UntaggedAt: &observedAt,
+	}
+	manifestInsert := tx.NewInsert().Model(model).
+		On("CONFLICT (repository_id, digest) DO UPDATE").
+		Set("media_type = EXCLUDED.media_type").
+		Set("artifact_type = EXCLUDED.artifact_type").
+		Set("subject_digest = EXCLUDED.subject_digest").
+		Set("observed_kind = EXCLUDED.observed_kind").
+		Set("artifact_relationship = EXCLUDED.artifact_relationship").
+		Set("classification_source = EXCLUDED.classification_source").
+		Set("classification_confidence = EXCLUDED.classification_confidence").
+		Set("manifest_size = EXCLUDED.manifest_size").
+		Set("last_seen_at = EXCLUDED.last_seen_at").
+		Set("deleted_at = NULL")
+	if observation.PushedAt != nil {
+		manifestInsert = manifestInsert.Set("last_pushed_at = EXCLUDED.last_pushed_at")
+	}
+	if err := manifestInsert.Returning("id").Scan(ctx, &model.ID); err != nil {
+		return err
+	}
+	if _, err := tx.NewDelete().Model((*manifestPlatformModel)(nil)).Where("manifest_id = ?", model.ID).Exec(ctx); err != nil {
+		return err
+	}
+	platforms := make([]manifestPlatformModel, 0, len(observation.Platforms))
+	for _, platform := range observation.Platforms {
+		platforms = append(platforms, manifestPlatformModel{ManifestID: model.ID, OS: platform.OS, Architecture: platform.Architecture, Variant: platform.Variant, Digest: platform.Digest, CompressedSize: platform.CompressedSize})
+	}
+	if len(platforms) > 0 {
+		if _, err := tx.NewInsert().Model(&platforms).Exec(ctx); err != nil {
 			return err
 		}
-		if _, err := tx.NewDelete().Model((*manifestPlatformModel)(nil)).Where("manifest_id = ?", model.ID).Exec(ctx); err != nil {
-			return err
-		}
-		platforms := make([]manifestPlatformModel, 0, len(observation.Platforms))
-		for _, platform := range observation.Platforms {
-			platforms = append(platforms, manifestPlatformModel{ManifestID: model.ID, OS: platform.OS, Architecture: platform.Architecture, Variant: platform.Variant, Digest: platform.Digest, CompressedSize: platform.CompressedSize})
-		}
-		if len(platforms) > 0 {
-			if _, err := tx.NewInsert().Model(&platforms).Exec(ctx); err != nil {
-				return err
-			}
-		}
+	}
 
-		if observation.Tag != "" {
-			var oldManifestID string
-			tagErr := tx.NewSelect().Model((*tagModel)(nil)).
-				Column("manifest_id").
-				Where("repository_id = ?", repositoryID.String()).
-				Where("name = ?", observation.Tag).
-				Scan(ctx, &oldManifestID)
-			if tagErr != nil && !errors.Is(tagErr, sql.ErrNoRows) {
-				return tagErr
-			}
-			tag := &tagModel{
-				RepositoryID: repositoryID.String(), Name: observation.Tag, ManifestID: model.ID,
-				FirstSeenAt: observedAt, LastMovedAt: observedAt, LastSeenAt: observedAt,
-			}
-			if _, err := tx.NewInsert().Model(tag).
-				ModelTableExpr("registry_tags AS current_tag").
-				On("CONFLICT (repository_id, name) DO UPDATE").
-				Set("manifest_id = EXCLUDED.manifest_id").
-				Set(`last_moved_at = CASE
+	if observation.Tag != "" {
+		var oldManifestID string
+		tagErr := tx.NewSelect().Model((*tagModel)(nil)).
+			Column("manifest_id").
+			Where("repository_id = ?", repositoryID.String()).
+			Where("name = ?", observation.Tag).
+			Scan(ctx, &oldManifestID)
+		if tagErr != nil && !errors.Is(tagErr, sql.ErrNoRows) {
+			return tagErr
+		}
+		tag := &tagModel{
+			RepositoryID: repositoryID.String(), Name: observation.Tag, ManifestID: model.ID,
+			FirstSeenAt: observedAt, LastMovedAt: observedAt, LastSeenAt: observedAt,
+		}
+		if _, err := tx.NewInsert().Model(tag).
+			ModelTableExpr("registry_tags AS current_tag").
+			On("CONFLICT (repository_id, name) DO UPDATE").
+			Set("manifest_id = EXCLUDED.manifest_id").
+			Set(`last_moved_at = CASE
 					WHEN current_tag.manifest_id <> EXCLUDED.manifest_id THEN EXCLUDED.last_moved_at
 					ELSE current_tag.last_moved_at
 				END`).
-				Set("last_seen_at = EXCLUDED.last_seen_at").
-				Set("detached_at = NULL").
-				Exec(ctx); err != nil {
-				return err
-			}
-			if oldManifestID != "" && oldManifestID != model.ID {
-				if err := refreshManifestState(ctx, tx, oldManifestID, observedAt); err != nil {
-					return err
-				}
-			}
-			if _, err := tx.NewUpdate().Model((*manifestModel)(nil)).
-				Set("state = ?", constants.InventoryStateActive).
-				Set("untagged_at = NULL").
-				Where("id = ?", model.ID).Exec(ctx); err != nil {
-				return err
-			}
-		} else if err := refreshManifestState(ctx, tx, model.ID, observedAt); err != nil {
+			Set("last_seen_at = EXCLUDED.last_seen_at").
+			Set("detached_at = NULL").
+			Exec(ctx); err != nil {
 			return err
 		}
-		return s.upsertManifestStorageFacts(ctx, tx, repositoryID, observation, observedAt)
-	})
+		if oldManifestID != "" && oldManifestID != model.ID {
+			if err := refreshManifestState(ctx, tx, oldManifestID, observedAt); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.NewUpdate().Model((*manifestModel)(nil)).
+			Set("state = ?", constants.InventoryStateActive).
+			Set("untagged_at = NULL").
+			Where("id = ?", model.ID).Exec(ctx); err != nil {
+			return err
+		}
+	} else if err := refreshManifestState(ctx, tx, model.ID, observedAt); err != nil {
+		return err
+	}
+	return s.upsertManifestStorageFacts(ctx, tx, repositoryID, observation, observedAt)
 }
 
 func refreshManifestState(ctx context.Context, tx bun.Tx, manifestID string, now time.Time) error {
@@ -149,48 +202,67 @@ func (s *Store) CompleteInventoryReconciliation(
 	observedAt time.Time,
 ) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		var tags []tagModel
-		if err := tx.NewSelect().Model(&tags).
-			Where("repository_id = ?", repositoryID.String()).
-			Where("detached_at IS NULL").Scan(ctx); err != nil {
+		if err := s.completeInventoryReconciliationTx(ctx, tx, repositoryID, seenTags, seenDigests, observedAt); err != nil {
 			return err
-		}
-		seenTagSet := stringSet(seenTags)
-		affected := map[string]struct{}{}
-		for i := range tags {
-			if _, ok := seenTagSet[tags[i].Name]; ok {
-				continue
-			}
-			tags[i].DetachedAt = &observedAt
-			tags[i].LastSeenAt = observedAt
-			affected[tags[i].ManifestID] = struct{}{}
-			if _, err := tx.NewUpdate().Model(&tags[i]).WherePK().Exec(ctx); err != nil {
-				return err
-			}
-		}
-		for manifestID := range affected {
-			if err := refreshManifestState(ctx, tx, manifestID, observedAt); err != nil {
-				return err
-			}
-		}
-		seenDigestSet := stringSet(seenDigests)
-		var manifests []manifestModel
-		if err := tx.NewSelect().Model(&manifests).
-			Where("repository_id = ?", repositoryID.String()).
-			Where("deleted_at IS NULL").Scan(ctx); err != nil {
-			return err
-		}
-		for i := range manifests {
-			if _, ok := seenDigestSet[manifests[i].Digest]; ok {
-				continue
-			}
-			manifests[i].State = constants.InventoryStateMissing
-			if _, err := tx.NewUpdate().Model(&manifests[i]).WherePK().Exec(ctx); err != nil {
-				return err
-			}
 		}
 		return s.refreshStorageSnapshots(ctx, tx, repositoryID, observedAt)
 	})
+}
+
+func (s *Store) completeInventoryReconciliationTx(
+	ctx context.Context,
+	tx bun.Tx,
+	repositoryID foundation.ID,
+	seenTags, seenDigests []string,
+	observedAt time.Time,
+) error {
+	var tags []tagModel
+	if err := tx.NewSelect().Model(&tags).
+		Where("repository_id = ?", repositoryID.String()).
+		Where("detached_at IS NULL").Scan(ctx); err != nil {
+		return err
+	}
+	seenTagSet := stringSet(seenTags)
+	affected := map[string]struct{}{}
+	for i := range tags {
+		if _, ok := seenTagSet[tags[i].Name]; ok {
+			continue
+		}
+		tags[i].DetachedAt = &observedAt
+		tags[i].LastSeenAt = observedAt
+		affected[tags[i].ManifestID] = struct{}{}
+		if _, err := tx.NewUpdate().Model(&tags[i]).WherePK().Exec(ctx); err != nil {
+			return err
+		}
+	}
+	for manifestID := range affected {
+		if err := refreshManifestState(ctx, tx, manifestID, observedAt); err != nil {
+			return err
+		}
+	}
+	seenDigestSet := stringSet(seenDigests)
+	var manifests []manifestModel
+	if err := tx.NewSelect().Model(&manifests).
+		Where("repository_id = ?", repositoryID.String()).
+		Where("deleted_at IS NULL").Scan(ctx); err != nil {
+		return err
+	}
+	for i := range manifests {
+		if _, ok := seenDigestSet[manifests[i].Digest]; ok {
+			continue
+		}
+		manifests[i].State = constants.InventoryStateMissing
+		if _, err := tx.NewUpdate().Model(&manifests[i]).WherePK().Exec(ctx); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.NewDelete().Model((*manifestBlobReferenceModel)(nil)).
+		Where("repository_id = ?", repositoryID.String()).
+		Where("manifest_digest NOT IN (SELECT digest FROM registry_manifests WHERE repository_id = ? AND state IN (?, ?))", repositoryID.String(), constants.InventoryStateActive, constants.InventoryStateUntagged).
+		Exec(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 func stringSet(values []string) map[string]struct{} {
@@ -304,6 +376,10 @@ func (s *Store) MarkManifestDeleted(ctx context.Context, repositoryID foundation
 			Where("repository_id = ?", repositoryID.String()).
 			Where("digest = ?", digest).Exec(ctx)
 		if err != nil {
+			return err
+		}
+		if _, err := tx.NewDelete().Model((*manifestBlobReferenceModel)(nil)).
+			Where("repository_id = ?", repositoryID.String()).Where("manifest_digest = ?", digest).Exec(ctx); err != nil {
 			return err
 		}
 		return s.refreshStorageSnapshots(ctx, tx, repositoryID, deletedAt)

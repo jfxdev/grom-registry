@@ -96,7 +96,7 @@ func (s *Store) upsertManifestStorageFacts(ctx context.Context, tx bun.Tx, repos
 			return err
 		}
 	}
-	return s.refreshStorageSnapshots(ctx, tx, repositoryID, observedAt)
+	return nil
 }
 
 func normalizedDescriptors(observation registrydomain.ManifestObservation) ([]registrydomain.Descriptor, error) {
@@ -140,13 +140,47 @@ func (s *Store) refreshStorageSnapshots(ctx context.Context, tx bun.Tx, reposito
 		On("CONFLICT (repository_id) DO UPDATE").Set("accounted_bytes = EXCLUDED.accounted_bytes").Set("inventory_version = EXCLUDED.inventory_version").Set("reconciled_at = EXCLUDED.reconciled_at").Set("status = EXCLUDED.status").Exec(ctx); err != nil {
 		return err
 	}
-	projectBytes, err := accountedBytes(ctx, tx, "rr.project_id = ?", projectID)
+	return s.refreshProjectStorageSnapshot(ctx, tx, foundation.ID(projectID), at)
+}
+
+func (s *Store) refreshProjectStorageSnapshot(ctx context.Context, tx bun.Tx, projectID foundation.ID, at time.Time) error {
+	projectBytes, err := accountedBytes(ctx, tx, "rr.project_id = ?", projectID.String())
 	if err != nil {
 		return err
 	}
-	_, err = tx.NewInsert().Model(&projectStorageSnapshotModel{ProjectID: projectID, AccountedBytes: projectBytes, AccountingVersion: version, ReconciledAt: at, Status: storageReady}).
+	version := at.UnixNano()
+	_, err = tx.NewInsert().Model(&projectStorageSnapshotModel{ProjectID: projectID.String(), AccountedBytes: projectBytes, AccountingVersion: version, ReconciledAt: at, Status: storageReady}).
 		On("CONFLICT (project_id) DO UPDATE").Set("accounted_bytes = EXCLUDED.accounted_bytes").Set("accounting_version = EXCLUDED.accounting_version").Set("reconciled_at = EXCLUDED.reconciled_at").Set("status = EXCLUDED.status").Exec(ctx)
 	return err
+}
+
+// RebuildRepositoryStorage is an idempotent repair primitive. It never reads
+// Distribution storage; the aggregate is always rebuilt from Registry facts.
+func (s *Store) RebuildRepositoryStorage(ctx context.Context, repositoryID foundation.ID, at time.Time) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return s.refreshStorageSnapshots(ctx, tx, repositoryID, at)
+	})
+}
+
+func (s *Store) RebuildProjectStorage(ctx context.Context, projectID foundation.ID, at time.Time) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return s.refreshProjectStorageSnapshot(ctx, tx, projectID, at)
+	})
+}
+
+func (s *Store) RebuildAllStorage(ctx context.Context, at time.Time) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var projects []repositoryModel
+		if err := tx.NewSelect().Model(&projects).Column("project_id").Distinct().OrderExpr("project_id ASC").Scan(ctx); err != nil {
+			return err
+		}
+		for _, project := range projects {
+			if err := s.refreshProjectStorageSnapshot(ctx, tx, foundation.ID(project.ProjectID), at); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func accountedBytes(ctx context.Context, tx bun.Tx, scope string, value any) (int64, error) {

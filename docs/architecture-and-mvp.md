@@ -684,7 +684,9 @@ flowchart LR
 - **Relational database:** SQLite by default or PostgreSQL, accessed through the Bun ORM, for users, memberships, service accounts, token hashes, sessions, and audit events.
 - **Registry accounting facts:** descriptor and reachability records in the same
   relational database, with rebuildable repository and project snapshots; they
-  contain no blobs or Distribution filesystem paths.
+  contain no blobs or Distribution filesystem paths. A reconciliation commits
+  its complete graph and both snapshots atomically, while internal rebuilds
+  derive the same values from those facts.
 - **Blob storage:** local filesystem by default; S3-compatible storage through Distribution configuration.
 
 With SQLite, the default deployment still has only the Grom and Distribution containers.

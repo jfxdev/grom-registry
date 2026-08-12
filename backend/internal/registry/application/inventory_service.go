@@ -31,6 +31,11 @@ type storageStaleMarker interface {
 	MarkRepositoryStorageStale(context.Context, foundation.ID) error
 }
 
+type atomicInventoryStore interface {
+	UpsertManifestObservationsAtomically(context.Context, foundation.ID, []registrydomain.ManifestObservation, time.Time) error
+	ReconcileManifestObservationsAtomically(context.Context, foundation.ID, []registrydomain.ManifestObservation, []string, []string, time.Time) error
+}
+
 type ManifestDescriptor struct {
 	Digest       string
 	MediaType    string
@@ -102,7 +107,15 @@ func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, refe
 		tag = reference
 		pushedAt = &now
 	}
-	if _, err := s.upsertMetadataTree(ctx, target.ID, metadata, tag, pushedAt, now); err != nil {
+	observations, _, err := collectMetadataTree(metadata, tag, pushedAt)
+	if err == nil {
+		if atomic, ok := s.store.(atomicInventoryStore); ok {
+			err = atomic.UpsertManifestObservationsAtomically(ctx, target.ID, observations, now)
+		} else {
+			_, err = s.upsertMetadataTree(ctx, target.ID, metadata, tag, pushedAt, now)
+		}
+	}
+	if err != nil {
 		s.markStorageStale(ctx, target.ID)
 		return err
 	}
@@ -136,6 +149,8 @@ func (s *InventoryService) Reconcile(
 	seenTags := make([]string, 0, len(tags))
 	seenDigests := make([]string, 0, len(tags))
 	digests := map[string]struct{}{}
+	observations := make([]registrydomain.ManifestObservation, 0, len(tags))
+	profileChanged := false
 	for _, tag := range tags {
 		metadata, fetchErr := s.distribution.FetchManifest(ctx, fullRepository, tag)
 		if fetchErr != nil {
@@ -143,16 +158,15 @@ func (s *InventoryService) Reconcile(
 			return nil, fetchErr
 		}
 		classification := ClassifyManifest(*metadata)
-		observedDigests, err := s.upsertMetadataTree(ctx, target.ID, metadata, tag, nil, now)
+		observed, observedDigests, err := collectMetadataTree(metadata, tag, nil)
 		if err != nil {
 			s.markStorageStale(ctx, target.ID)
 			return nil, err
 		}
+		observations = append(observations, observed...)
 		if classification.Relationship == constants.ArtifactRelationshipPrimary &&
 			registrydomain.ApplyInferredProfile(target, classification.Profile, classification.Confidence, now) {
-			if err := s.store.SaveRepositoryProfile(ctx, target); err != nil {
-				return nil, err
-			}
+			profileChanged = true
 		}
 		seenTags = append(seenTags, tag)
 		for _, observedDigest := range observedDigests {
@@ -193,11 +207,12 @@ func (s *InventoryService) Reconcile(
 			s.markStorageStale(ctx, target.ID)
 			return nil, fetchErr
 		}
-		observedDigests, err := s.upsertMetadataTree(ctx, target.ID, metadata, "", nil, now)
+		observed, observedDigests, err := collectMetadataTree(metadata, "", nil)
 		if err != nil {
 			s.markStorageStale(ctx, target.ID)
 			return nil, err
 		}
+		observations = append(observations, observed...)
 		for _, observedDigest := range observedDigests {
 			if _, exists := digests[observedDigest]; !exists {
 				digests[observedDigest] = struct{}{}
@@ -227,11 +242,12 @@ func (s *InventoryService) Reconcile(
 				s.markStorageStale(ctx, target.ID)
 				return nil, fmt.Errorf("referrer descriptor %s has inconsistent metadata", descriptor.Digest)
 			}
-			observedDigests, err := s.upsertMetadataTree(ctx, target.ID, metadata, "", nil, now)
+			observed, observedDigests, err := collectMetadataTree(metadata, "", nil)
 			if err != nil {
 				s.markStorageStale(ctx, target.ID)
 				return nil, err
 			}
+			observations = append(observations, observed...)
 			for _, observedDigest := range observedDigests {
 				if _, exists := digests[observedDigest]; !exists {
 					digests[observedDigest] = struct{}{}
@@ -240,9 +256,26 @@ func (s *InventoryService) Reconcile(
 			}
 		}
 	}
-	if err := s.store.CompleteInventoryReconciliation(ctx, target.ID, seenTags, seenDigests, now); err != nil {
+	if atomic, ok := s.store.(atomicInventoryStore); ok {
+		err = atomic.ReconcileManifestObservationsAtomically(ctx, target.ID, observations, seenTags, seenDigests, now)
+	} else {
+		for _, observation := range observations {
+			if err = s.store.UpsertManifestObservation(ctx, target.ID, observation, now); err != nil {
+				break
+			}
+		}
+		if err == nil {
+			err = s.store.CompleteInventoryReconciliation(ctx, target.ID, seenTags, seenDigests, now)
+		}
+	}
+	if err != nil {
 		s.markStorageStale(ctx, target.ID)
 		return nil, err
+	}
+	if profileChanged {
+		if err := s.store.SaveRepositoryProfile(ctx, target); err != nil {
+			return nil, err
+		}
 	}
 	return s.store.ListManifestInventory(ctx, target.ID)
 }
@@ -286,6 +319,23 @@ func (s *InventoryService) upsertMetadataTree(
 		digests = append(digests, childDigests...)
 	}
 	return digests, nil
+}
+
+func collectMetadataTree(metadata *ManifestMetadata, tag string, pushedAt *time.Time) ([]registrydomain.ManifestObservation, []string, error) {
+	if metadata == nil || metadata.Digest == "" {
+		return nil, nil, fmt.Errorf("invalid manifest metadata")
+	}
+	observations := []registrydomain.ManifestObservation{observationFromMetadata(metadata, tag, pushedAt)}
+	digests := []string{metadata.Digest}
+	for i := range metadata.Children {
+		children, childDigests, err := collectMetadataTree(&metadata.Children[i], "", nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		observations = append(observations, children...)
+		digests = append(digests, childDigests...)
+	}
+	return observations, digests, nil
 }
 
 func observationFromMetadata(metadata *ManifestMetadata, tag string, pushedAt *time.Time) registrydomain.ManifestObservation {

@@ -12,15 +12,31 @@ import (
 
 func TestAddRegistryStorageAccounting(t *testing.T) {
 	ctx := context.Background()
-	sqlDB, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	db := bun.NewDB(sqlDB, sqlitedialect.New())
-	t.Cleanup(func() { _ = db.Close() })
+	t.Run("sqlite", func(t *testing.T) {
+		sqlDB, err := sql.Open(sqliteshim.ShimName, ":memory:")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = sqlDB.Close() })
+		db := bun.NewDB(sqlDB, sqlitedialect.New())
+		t.Cleanup(func() { _ = db.Close() })
+		if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+			t.Fatal(err)
+		}
+		assertRegistryStorageAccountingMigration(t, ctx, db)
+	})
+	t.Run("postgres", func(t *testing.T) {
+		db := openPostgresMigrationTestDB(t, ctx)
+		if _, err := db.ExecContext(ctx, "SET search_path TO pg_temp"); err != nil {
+			t.Fatal(err)
+		}
+		assertRegistryStorageAccountingMigration(t, ctx, db)
+	})
+}
+
+func assertRegistryStorageAccountingMigration(t *testing.T, ctx context.Context, db *bun.DB) {
+	t.Helper()
 	for _, statement := range []string{
-		"PRAGMA foreign_keys = ON",
 		"CREATE TABLE projects (id TEXT PRIMARY KEY)",
 		"CREATE TABLE registry_repositories (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE)",
 	} {

@@ -42,7 +42,6 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `docs/backup-and-disaster-recovery.md` | Operator backup, restore, encrypted retention, drill, and troubleshooting procedure |
 | `docs/release-operations.md` | Operator installation by digest, upgrade, rollback, signing-key posture, and supported matrix |
 | `docs/registry-e2e-implementation-plan.md` | Implemented real-Docker authorization, policy, inventory, and test-harness design and evidence |
-| `docs/harbor-style-storage-accounting-implementation-plan.md` | Implemented Harbor-style persisted OCI descriptor accounting by repository and project, including delivery and coverage verification |
 | `docs/mvp-acceptance-implementation-plan.md` | Implemented and accepted public-browser first-push, boot/readiness/API-docs, session-revocation, and restart-preservation acceptance work |
 | `docs/pagination-and-destructive-browser-acceptance-plan.md` | Planned public-browser acceptance of destructive flows |
 | `docs/visual-identity.md` | Approved visual direction, responsive rules, and UI acceptance criteria |
@@ -86,7 +85,7 @@ only if an actual split is implemented.
 | `backend/migrations/` | Ordered migrations applied automatically during boot |
 | `backend/api/openapi.yaml` | Canonical HTTP API contract |
 | `backend/internal/generated/openapi/` | Generated Go transport contracts; never edit manually |
-| `backend/internal/registry/infrastructure/persistence/bun/` | Logical repository, policy, inventory, descriptor/accounting facts and snapshots, deletion, lifecycle persistence, and keyset-paginated registry history and repository lists |
+| `backend/internal/registry/infrastructure/persistence/bun/` | Logical repository, policy, inventory, atomic descriptor/accounting facts and snapshots, internal rebuild primitives, deletion, lifecycle persistence, and keyset-paginated registry history and repository lists |
 | `backend/internal/identity/infrastructure/persistence/bun/pagination.go` | Keyset-paginated, server-filtered administrative users, service accounts, and access keys |
 | `backend/internal/projects/infrastructure/persistence/bun/pagination.go` | Keyset-paginated visible projects and principal-keyset project memberships |
 

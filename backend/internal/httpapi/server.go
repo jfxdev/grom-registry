@@ -873,7 +873,7 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range projects.Items {
-		projects.Items[i].AccountedUsage = s.inventory.ProjectUsage(r.Context(), projects.Items[i].ID)
+		projects.Items[i].AccountedUsage = s.projectUsage(r.Context(), projects.Items[i].ID)
 	}
 	writeJSON(w, http.StatusOK, projects)
 }
@@ -910,11 +910,18 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
 		return
 	}
-	project.AccountedUsage = s.inventory.ProjectUsage(r.Context(), project.ID)
+	project.AccountedUsage = s.projectUsage(r.Context(), project.ID)
 	writeJSON(w, http.StatusOK, struct {
 		*projectdomain.Project
 		CanManage bool `json:"canManage"`
 	}{Project: project, CanManage: s.projects.CanManage(r.Context(), principalForUser(user), user.SystemAdmin, project)})
+}
+
+func (s *Server) projectUsage(ctx context.Context, projectID foundation.ID) foundation.AccountedStorageUsage {
+	if s.inventory == nil {
+		return foundation.AccountedStorageUsage{Status: "unavailable"}
+	}
+	return s.inventory.ProjectUsage(ctx, projectID)
 }
 
 func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {

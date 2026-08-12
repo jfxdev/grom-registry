@@ -94,3 +94,90 @@ func TestStorageAccountingRejectsInconsistentDescriptorSize(t *testing.T) {
 		t.Fatalf("snapshot must survive failed observation: usage=%+v err=%v", usage, err)
 	}
 }
+
+func TestAtomicReconciliationRollsBackFactsAndSnapshots(t *testing.T) {
+	ctx := context.Background()
+	db, kind, err := database.Open(ctx, "sqlite://"+filepath.Join(t.TempDir(), "storage-atomic.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := database.Migrate(ctx, db, kind, time.Second, slog.Default()); err != nil {
+		t.Fatal(err)
+	}
+	store := New(db)
+	now := time.Now().UTC()
+	projectID, repositoryID := foundation.NewID(), foundation.NewID()
+	if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", projectID.String(), projectID.String(), "test", "test", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusActive, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	initial := registrydomain.ManifestObservation{Digest: "sha256:initial", ManifestSize: 1, Tag: "latest", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared", SizeBytes: 10, Role: "layer"}}}
+	if err := store.UpsertManifestObservation(ctx, repositoryID, initial, now); err != nil {
+		t.Fatal(err)
+	}
+	err = store.ReconcileManifestObservationsAtomically(ctx, repositoryID, []registrydomain.ManifestObservation{
+		{Digest: "sha256:new", ManifestSize: 2, Tag: "new", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:new-layer", SizeBytes: 20, Role: "layer"}}},
+		{Digest: "sha256:broken", ManifestSize: 3, Tag: "broken", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared", SizeBytes: 99, Role: "layer"}}},
+	}, []string{"new", "broken"}, []string{"sha256:new", "sha256:broken"}, now.Add(time.Minute))
+	if err == nil {
+		t.Fatal("expected inconsistent descriptor failure")
+	}
+	usage, err := store.StorageUsageForProject(ctx, projectID)
+	if err != nil || usage.AccountedBytes == nil || *usage.AccountedBytes != 11 || usage.Status != storageReady {
+		t.Fatalf("old snapshot must survive failed reconciliation: usage=%+v err=%v", usage, err)
+	}
+	inventory, err := store.ListManifestInventory(ctx, repositoryID)
+	if err != nil || len(inventory) != 1 || inventory[0].Digest != initial.Digest {
+		t.Fatalf("failed reconciliation must not publish partial inventory: %#v err=%v", inventory, err)
+	}
+}
+
+func TestStorageRebuildsRestoreReadySnapshotsFromFacts(t *testing.T) {
+	ctx := context.Background()
+	db, kind, err := database.Open(ctx, "sqlite://"+filepath.Join(t.TempDir(), "storage-rebuild.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := database.Migrate(ctx, db, kind, time.Second, slog.Default()); err != nil {
+		t.Fatal(err)
+	}
+	store := New(db)
+	now := time.Now().UTC()
+	projectID, repositoryID := foundation.NewID(), foundation.NewID()
+	if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", projectID.String(), projectID.String(), "test", "test", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusActive, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:one", ManifestSize: 1, Tag: "latest", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:layer", SizeBytes: 10, Role: "layer"}}}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkRepositoryStorageStale(ctx, repositoryID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RebuildRepositoryStorage(ctx, repositoryID, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	usage, err := store.StorageUsageForProject(ctx, projectID)
+	if err != nil || usage.Status != storageReady || usage.AccountedBytes == nil || *usage.AccountedBytes != 11 {
+		t.Fatalf("repository rebuild did not restore snapshot: usage=%+v err=%v", usage, err)
+	}
+	if err := store.MarkRepositoryStorageStale(ctx, repositoryID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RebuildProjectStorage(ctx, projectID, now.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	usage, err = store.StorageUsageForProject(ctx, projectID)
+	if err != nil || usage.Status != storageReady {
+		t.Fatalf("project rebuild did not restore ready status: usage=%+v err=%v", usage, err)
+	}
+	if err := store.RebuildAllStorage(ctx, now.Add(3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+}
