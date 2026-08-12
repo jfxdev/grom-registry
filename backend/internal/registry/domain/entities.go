@@ -7,21 +7,22 @@ import (
 )
 
 type Repository struct {
-	ID                 foundation.ID `json:"id"`
-	ProjectID          foundation.ID `json:"projectId"`
-	Name               string        `json:"name"`
-	Description        string        `json:"description"`
-	Status             string        `json:"status"`
-	CreationSource     string        `json:"creationSource"`
-	Profile            string        `json:"profile"`
-	ProfileSource      string        `json:"profileSource"`
-	ProfileConfidence  string        `json:"profileConfidence"`
-	ProfileInferredAt  *time.Time    `json:"profileInferredAt,omitempty"`
-	ProfileNeedsReview bool          `json:"profileNeedsReview"`
-	PolicyVersion      int           `json:"policyVersion"`
-	Policies           []Policy      `json:"policies"`
-	CreatedAt          time.Time     `json:"createdAt"`
-	UpdatedAt          time.Time     `json:"updatedAt"`
+	ID                 foundation.ID                    `json:"id"`
+	ProjectID          foundation.ID                    `json:"projectId"`
+	Name               string                           `json:"name"`
+	Description        string                           `json:"description"`
+	Status             string                           `json:"status"`
+	CreationSource     string                           `json:"creationSource"`
+	Profile            string                           `json:"profile"`
+	ProfileSource      string                           `json:"profileSource"`
+	ProfileConfidence  string                           `json:"profileConfidence"`
+	ProfileInferredAt  *time.Time                       `json:"profileInferredAt,omitempty"`
+	ProfileNeedsReview bool                             `json:"profileNeedsReview"`
+	PolicyVersion      int                              `json:"policyVersion"`
+	Policies           []Policy                         `json:"policies"`
+	AccountedUsage     foundation.AccountedStorageUsage `json:"accountedUsage"`
+	CreatedAt          time.Time                        `json:"createdAt"`
+	UpdatedAt          time.Time                        `json:"updatedAt"`
 }
 
 type Policy struct {
@@ -120,6 +121,17 @@ type ManifestObservation struct {
 	Platforms                []ManifestPlatform
 	Tag                      string
 	PushedAt                 *time.Time
+	Descriptors              []Descriptor
+}
+
+// Descriptor is a content-addressed OCI object observed through Distribution.
+// Role describes its edge from the owning manifest; deduplication always uses
+// Digest, never SizeBytes or Role.
+type Descriptor struct {
+	Digest    string
+	SizeBytes int64
+	MediaType string
+	Role      string
 }
 
 type LifecyclePreview struct {

@@ -659,6 +659,9 @@ intentionally outside the MVP.
 8. **Permit an explicit private-network tradeoff.** Private-LAN HTTP may be
    allowed only by the `permissive` profile with a visible warning; public
    addresses and `strict` deployments require HTTPS.
+9. **Separate logical and physical storage.** Registry accounting deduplicates
+   live OCI descriptor digests within a repository or project; only the
+   isolated maintenance agent measures physical Distribution filesystem bytes.
 
 ## 3. Recommended architecture
 
@@ -679,6 +682,9 @@ flowchart LR
 - **Grom:** one Go binary containing the API, token service, streaming reverse proxy, and embedded frontend assets.
 - **Distribution:** an unmodified `distribution/distribution` v3 registry process on the private container network.
 - **Relational database:** SQLite by default or PostgreSQL, accessed through the Bun ORM, for users, memberships, service accounts, token hashes, sessions, and audit events.
+- **Registry accounting facts:** descriptor and reachability records in the same
+  relational database, with rebuildable repository and project snapshots; they
+  contain no blobs or Distribution filesystem paths.
 - **Blob storage:** local filesystem by default; S3-compatible storage through Distribution configuration.
 
 With SQLite, the default deployment still has only the Grom and Distribution containers.

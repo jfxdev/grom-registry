@@ -84,6 +84,11 @@ deletion cascades only the now-empty project's memberships.
 | `ManifestInventory` | Entity | Historical metadata for a Distribution manifest, including aliases, observation times, OCI type, subject relationship, and observed platform descriptors |
 | `ManifestPlatform` | Value object | OS, architecture, optional variant, child digest, and logical compressed config-plus-layer size for one platform represented by a manifest or image index |
 | `ManifestObservation` | Value object | Metadata captured from a successful manifest push or reconciliation |
+| `Descriptor` | Value object | Immutable observed OCI descriptor digest, byte size, media type, and manifest-edge role |
+| `BlobDescriptor` | Registry persistence fact | Canonical size of one content-addressed descriptor; an inconsistent later size is rejected |
+| `ManifestBlobReference` | Registry persistence fact | One manifest-to-descriptor reachability edge scoped to a logical repository |
+| `RepositoryStorageSnapshot` | Registry read cache | Rebuildable unique live-descriptor total for one repository, with readiness state and reconciliation time |
+| `ProjectStorageSnapshot` | Registry read cache | Rebuildable unique live-descriptor total across a project's repositories |
 | `ManifestClassification` | Value object | Observed OCI kind, primary/referrer relationship, inferred repository profile, evidence source, and confidence |
 | `LifecyclePreview` | Entity | Persisted, expiring dry-run calculated from a reconciled inventory, policy-set version, and evaluator version |
 | `LifecyclePreviewItem` | Child entity | Digest-level eligible, retained, or blocked lifecycle decision with expected aliases and reasons |
@@ -118,6 +123,15 @@ Only tagged primary manifests influence a repository profile. Auxiliary referrer
 remain visible in the inventory without changing the profile. Conflicting
 specific primary classifications produce a reviewable `mixed` profile; inference
 never activates a policy or rejects content.
+
+Registry also owns accounted storage usage. It records descriptor facts and
+manifest reachability edges observed through authenticated Distribution APIs,
+then rebuilds repository and project snapshots by deduplicating live
+(`active` or `untagged`) descriptor digests. This logical total is not the
+physical Distribution volume: a digest shared between projects counts in each
+project and a deleted manifest stops counting before a later blob GC reclaims
+filesystem space. Projects obtain this value through a narrow Registry query;
+they never read Registry persistence tables.
 
 An archived repository remains a logical record until an administrator removes
 it. Removal never deletes OCI content: it requires the repository to be

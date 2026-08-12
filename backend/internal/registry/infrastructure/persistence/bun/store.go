@@ -73,6 +73,9 @@ func (s *Store) ListRepositories(ctx context.Context, projectID foundation.ID) (
 			return nil, err
 		}
 		repository.Policies = policies
+		if err := s.attachStorageUsage(ctx, repository); err != nil {
+			return nil, err
+		}
 		result = append(result, *repository)
 	}
 	return result, nil
@@ -103,6 +106,9 @@ func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.I
 			return foundation.PageResult[registrydomain.Repository]{}, err
 		}
 		repository.Policies = policies
+		if err := s.attachStorageUsage(ctx, repository); err != nil {
+			return foundation.PageResult[registrydomain.Repository]{}, err
+		}
 		result.Items = append(result.Items, *repository)
 	}
 	if len(models) > request.Limit {
@@ -133,6 +139,9 @@ func (s *Store) FindRepository(ctx context.Context, projectID foundation.ID, nam
 		return nil, err
 	}
 	repository.Policies = policies
+	if err := s.attachStorageUsage(ctx, repository); err != nil {
+		return nil, err
+	}
 	return repository, nil
 }
 
@@ -147,6 +156,9 @@ func (s *Store) FindRepositoryByID(ctx context.Context, repositoryID foundation.
 		return nil, err
 	}
 	repository.Policies = policies
+	if err := s.attachStorageUsage(ctx, repository); err != nil {
+		return nil, err
+	}
 	return repository, nil
 }
 
@@ -186,8 +198,23 @@ func (s *Store) RepositoryHasLiveManifests(ctx context.Context, repositoryID fou
 }
 
 func (s *Store) DeleteRepository(ctx context.Context, repositoryID foundation.ID) error {
-	_, err := s.db.NewDelete().Model((*repositoryModel)(nil)).Where("id = ?", repositoryID.String()).Exec(ctx)
-	return err
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var projectID string
+		if err := tx.NewSelect().Model((*repositoryModel)(nil)).Column("project_id").Where("id = ?", repositoryID.String()).Scan(ctx, &projectID); err != nil {
+			return err
+		}
+		if _, err := tx.NewDelete().Model((*repositoryModel)(nil)).Where("id = ?", repositoryID.String()).Exec(ctx); err != nil {
+			return err
+		}
+		bytes, err := accountedBytes(ctx, tx, "rr.project_id = ?", projectID)
+		if err != nil {
+			return err
+		}
+		at := time.Now().UTC()
+		_, err = tx.NewInsert().Model(&projectStorageSnapshotModel{ProjectID: projectID, AccountedBytes: bytes, AccountingVersion: at.UnixNano(), ReconciledAt: at, Status: storageReady}).
+			On("CONFLICT (project_id) DO UPDATE").Set("accounted_bytes = EXCLUDED.accounted_bytes").Set("accounting_version = EXCLUDED.accounting_version").Set("reconciled_at = EXCLUDED.reconciled_at").Set("status = EXCLUDED.status").Exec(ctx)
+		return err
+	})
 }
 
 func (s *Store) SaveRepositoryProfile(ctx context.Context, repository *registrydomain.Repository) error {
@@ -293,8 +320,9 @@ func toRepository(model *repositoryModel) *registrydomain.Repository {
 		Profile: model.Profile, ProfileSource: model.ProfileSource,
 		ProfileConfidence: model.ProfileConfidence, ProfileInferredAt: model.ProfileInferredAt,
 		ProfileNeedsReview: model.ProfileNeedsReview, PolicyVersion: model.PolicyVersion,
-		Policies:  []registrydomain.Policy{},
-		CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
+		Policies:       []registrydomain.Policy{},
+		AccountedUsage: foundation.PendingStorageUsage(),
+		CreatedAt:      model.CreatedAt, UpdatedAt: model.UpdatedAt,
 	}
 }
 

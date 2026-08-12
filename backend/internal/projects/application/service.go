@@ -50,7 +50,7 @@ func (s *Service) Create(
 		return nil, fmt.Errorf("project name and a valid lowercase slug are required")
 	}
 	project := &projectdomain.Project{
-		ID: foundation.NewID(), Slug: slug, Name: name, CreatedBy: actor.ID, CreatedAt: time.Now().UTC(),
+		ID: foundation.NewID(), Slug: slug, Name: name, CreatedBy: actor.ID, CreatedAt: time.Now().UTC(), AccountedUsage: foundation.PendingStorageUsage(),
 	}
 	membership := &projectdomain.Membership{
 		ProjectID: project.ID, PrincipalKind: actor.Kind, PrincipalID: actor.ID,

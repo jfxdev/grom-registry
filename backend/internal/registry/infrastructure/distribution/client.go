@@ -324,10 +324,19 @@ func (c *Client) FetchManifest(ctx context.Context, repository, reference string
 	if err != nil {
 		return nil, err
 	}
-	return c.fetchManifest(ctx, repository, reference, token)
+	return c.fetchManifestTree(ctx, repository, reference, token, map[string]bool{})
 }
 
 func (c *Client) fetchManifest(ctx context.Context, repository, reference, token string) (*registryapp.ManifestMetadata, error) {
+	return c.fetchManifestTree(ctx, repository, reference, token, map[string]bool{})
+}
+
+func (c *Client) fetchManifestTree(ctx context.Context, repository, reference, token string, visiting map[string]bool) (*registryapp.ManifestMetadata, error) {
+	if visiting[reference] {
+		return nil, fmt.Errorf("manifest graph contains a cycle at %s", reference)
+	}
+	visiting[reference] = true
+	defer delete(visiting, reference)
 	targetURL := c.baseURL.ResolveReference(&url.URL{Path: "/v2/" + repository + "/manifests/" + reference})
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL.String(), nil)
 	if err != nil {
@@ -363,15 +372,21 @@ func (c *Client) fetchManifest(ctx context.Context, repository, reference, token
 		subject = document.Subject.Digest
 	}
 	layerMediaTypes := make([]string, 0, len(document.Layers))
+	descriptors := []registrydomain.Descriptor{{Digest: digest, SizeBytes: int64(len(raw)), MediaType: mediaTypeOrHeader(document.MediaType, response.Header.Get("Content-Type")), Role: "manifest"}}
+	if document.Config.Digest != "" {
+		descriptors = append(descriptors, registrydomain.Descriptor{Digest: document.Config.Digest, SizeBytes: document.Config.Size, MediaType: document.Config.MediaType, Role: "config"})
+	}
 	for _, layer := range document.Layers {
 		layerMediaTypes = append(layerMediaTypes, layer.MediaType)
+		descriptors = append(descriptors, registrydomain.Descriptor{Digest: layer.Digest, SizeBytes: layer.Size, MediaType: layer.MediaType, Role: "layer"})
 	}
 	descriptorMediaTypes := make([]string, 0, len(document.Manifests))
 	platforms := make([]registrydomain.ManifestPlatform, 0, len(document.Manifests))
 	children := make([]registryapp.ManifestMetadata, 0, len(document.Manifests))
 	for _, descriptor := range document.Manifests {
 		descriptorMediaTypes = append(descriptorMediaTypes, descriptor.MediaType)
-		child, fetchErr := c.fetchManifest(ctx, repository, descriptor.Digest, token)
+		descriptors = append(descriptors, registrydomain.Descriptor{Digest: descriptor.Digest, SizeBytes: descriptor.Size, MediaType: descriptor.MediaType, Role: "child_manifest"})
+		child, fetchErr := c.fetchManifestTree(ctx, repository, descriptor.Digest, token, visiting)
 		if fetchErr != nil {
 			return nil, fmt.Errorf("fetch child manifest %s: %w", descriptor.Digest, fetchErr)
 		}
@@ -408,7 +423,15 @@ func (c *Client) fetchManifest(ctx context.Context, repository, reference, token
 		DescriptorMediaTypes: descriptorMediaTypes,
 		Platforms:            platforms,
 		Children:             children,
+		Descriptors:          descriptors,
 	}, nil
+}
+
+func mediaTypeOrHeader(mediaType, header string) string {
+	if mediaType != "" {
+		return mediaType
+	}
+	return header
 }
 
 func (c *Client) fetchImagePlatform(ctx context.Context, repository, digest, token string) (registrydomain.ManifestPlatform, error) {

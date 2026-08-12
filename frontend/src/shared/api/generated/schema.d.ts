@@ -924,6 +924,7 @@ export interface components {
             createdBy: string;
             /** Format: date-time */
             createdAt: string;
+            accountedUsage: components["schemas"]["AccountedStorageUsage"];
             /** @description Whether the signed-in actor may manage this project. */
             canManage?: boolean;
         };
@@ -1004,10 +1005,20 @@ export interface components {
             profileNeedsReview: boolean;
             policyVersion: number;
             policies: components["schemas"]["RepositoryPolicy"][];
+            accountedUsage: components["schemas"]["AccountedStorageUsage"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** @description Logical OCI descriptor bytes reachable in this scope. This is not physical Distribution filesystem usage; shared descriptors count once inside the scope and may count in another project. */
+        AccountedStorageUsage: {
+            /** @enum {string} */
+            status: "ready" | "pending" | "stale" | "unavailable";
+            /** Format: int64 */
+            accountedBytes?: number | null;
+            /** Format: date-time */
+            reconciledAt?: string | null;
         };
         CreateRepositoryRequest: {
             name: string;

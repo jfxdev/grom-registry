@@ -872,6 +872,9 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
+	for i := range projects.Items {
+		projects.Items[i].AccountedUsage = s.inventory.ProjectUsage(r.Context(), projects.Items[i].ID)
+	}
 	writeJSON(w, http.StatusOK, projects)
 }
 
@@ -907,6 +910,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
 		return
 	}
+	project.AccountedUsage = s.inventory.ProjectUsage(r.Context(), project.ID)
 	writeJSON(w, http.StatusOK, struct {
 		*projectdomain.Project
 		CanManage bool `json:"canManage"`

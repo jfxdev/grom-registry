@@ -12,6 +12,7 @@ import {
 import { APIError } from '@/shared/api/client'
 import type {
   ArtifactDeletionPreview,
+  AccountedStorageUsage,
   LifecyclePreview,
   LifecycleRun,
   ManifestInventory,
@@ -397,6 +398,21 @@ function formatCompressedSize(bytes: number | undefined) {
   return `${value.toLocaleString(undefined, { maximumFractionDigits: index === 0 ? 0 : 2 })} ${units[index]}`
 }
 
+function formatAccountedBytes(bytes: number | null | undefined) {
+  if (bytes === null || bytes === undefined) return '—'
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${(bytes / (1024 ** index)).toLocaleString(undefined, { maximumFractionDigits: index === 0 ? 0 : 2 })} ${units[index]}`
+}
+
+function accountedUsageLabel(usage: AccountedStorageUsage | undefined) {
+  if (!usage) return 'Accounting pending'
+  if (usage.status === 'pending') return 'Accounting pending'
+  if (usage.status === 'unavailable') return 'Accounting unavailable'
+  return formatAccountedBytes(usage.accountedBytes)
+}
+
 function editMember(kind: PrincipalKind, id: string, role: ProjectRole) {
   memberKind.value = kind
   memberId.value = id
@@ -443,6 +459,11 @@ function profileLabel(profile: Repository['profile']) {
         <p class="eyebrow">Project namespace</p>
         <h1 class="page-title">{{ project.data.value?.name ?? slug }}</h1>
         <p class="project-registry-url font-mono">{{ registryHost }}/{{ slug }}/</p>
+        <p class="mt-2 text-sm text-muted-foreground">
+          Accounted registry usage: <strong class="text-foreground">{{ project.data.value ? accountedUsageLabel(project.data.value.accountedUsage) : 'Loading…' }}</strong>
+          <span v-if="project.data.value?.accountedUsage?.status === 'stale'"> — last successful accounting is stale.</span>
+        </p>
+        <p class="mt-1 text-xs text-muted-foreground">Shared descriptors count once in this project. Physical installation storage is shown in Settings.</p>
       </div>
       <div class="flex items-center gap-2">
         <Badge tone="success">Active</Badge>
@@ -483,6 +504,7 @@ function profileLabel(profile: Repository['profile']) {
               {{ repository.policies.length }} policies · {{ repository.status }}
               <template v-if="repository.creationSource === 'push'"> · created by push</template>
             </p>
+            <p class="text-xs text-muted-foreground">{{ accountedUsageLabel(repository.accountedUsage) }} accounted<span v-if="repository.accountedUsage?.status === 'stale'"> · stale</span></p>
           </div>
           <span class="flex items-center gap-2 text-accent"><Settings2 :size="14" /> →</span>
         </button>
@@ -617,6 +639,11 @@ function profileLabel(profile: Repository['profile']) {
           <p v-if="selectedRepository.profileNeedsReview" class="mt-2 text-xs text-destructive">
             Different primary artifact types were detected in this repository.
           </p>
+          <p class="mt-3 text-sm text-muted-foreground">
+            Accounted registry usage: <strong class="text-foreground">{{ accountedUsageLabel(selectedRepository.accountedUsage) }}</strong>
+            <span v-if="selectedRepository.accountedUsage?.status === 'stale'"> — last successful accounting is stale.</span>
+          </p>
+          <p v-if="selectedRepository.accountedUsage?.reconciledAt" class="mt-1 text-xs text-muted-foreground">Last reconciled {{ new Date(selectedRepository.accountedUsage.reconciledAt!).toLocaleString() }}. This is logical descriptor usage, not reclaimable physical storage.</p>
         </div>
         <div class="flex items-center gap-2">
           <Button

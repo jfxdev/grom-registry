@@ -419,6 +419,15 @@ Grom stores metadata, not content, for observed manifests:
   config plus its compressed layers. These values describe pull content and are
   intentionally distinct from deduplicated physical bytes reclaimed by GC.
 
+Repository and project pages also show **accounted registry usage** after a
+successful inventory pass. It is the sum of unique live OCI descriptor digests
+in that scope, so repeated tags and shared layers count once inside a project.
+The same shared descriptor counts in each project that references it. Pending,
+stale, and unavailable accounting are shown explicitly rather than as `0 B`.
+Settings remains the only place that reports physical registry filesystem
+storage; GC reports reclaimed physical bytes and does not itself rewrite
+accounted usage.
+
 Successful tagged manifest pushes are observed automatically. A reconciliation
 reads live tags, recursively inventories image-index children, revalidates known
 untagged digests, discovers OCI referrers, updates inventory, and marks

@@ -9,6 +9,30 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AccountedStorageUsageStatus.
+const (
+	AccountedStorageUsageStatusPending     AccountedStorageUsageStatus = "pending"
+	AccountedStorageUsageStatusReady       AccountedStorageUsageStatus = "ready"
+	AccountedStorageUsageStatusStale       AccountedStorageUsageStatus = "stale"
+	AccountedStorageUsageStatusUnavailable AccountedStorageUsageStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the AccountedStorageUsageStatus enum.
+func (e AccountedStorageUsageStatus) Valid() bool {
+	switch e {
+	case AccountedStorageUsageStatusPending:
+		return true
+	case AccountedStorageUsageStatusReady:
+		return true
+	case AccountedStorageUsageStatusStale:
+		return true
+	case AccountedStorageUsageStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ArtifactDeletionStatus.
 const (
 	ArtifactDeletionStatusCompleted ArtifactDeletionStatus = "completed"
@@ -194,16 +218,16 @@ func (e InstallationStatusDatabase) Valid() bool {
 
 // Defines values for InstallationStatusDistribution.
 const (
-	Available   InstallationStatusDistribution = "available"
-	Unavailable InstallationStatusDistribution = "unavailable"
+	InstallationStatusDistributionAvailable   InstallationStatusDistribution = "available"
+	InstallationStatusDistributionUnavailable InstallationStatusDistribution = "unavailable"
 )
 
 // Valid indicates whether the value is a known member of the InstallationStatusDistribution enum.
 func (e InstallationStatusDistribution) Valid() bool {
 	switch e {
-	case Available:
+	case InstallationStatusDistributionAvailable:
 		return true
-	case Unavailable:
+	case InstallationStatusDistributionUnavailable:
 		return true
 	default:
 		return false
@@ -257,22 +281,22 @@ func (e LifecycleDecision) Valid() bool {
 
 // Defines values for LifecyclePreviewStatus.
 const (
-	Executed  LifecyclePreviewStatus = "executed"
-	Executing LifecyclePreviewStatus = "executing"
-	Expired   LifecyclePreviewStatus = "expired"
-	Ready     LifecyclePreviewStatus = "ready"
+	LifecyclePreviewStatusExecuted  LifecyclePreviewStatus = "executed"
+	LifecyclePreviewStatusExecuting LifecyclePreviewStatus = "executing"
+	LifecyclePreviewStatusExpired   LifecyclePreviewStatus = "expired"
+	LifecyclePreviewStatusReady     LifecyclePreviewStatus = "ready"
 )
 
 // Valid indicates whether the value is a known member of the LifecyclePreviewStatus enum.
 func (e LifecyclePreviewStatus) Valid() bool {
 	switch e {
-	case Executed:
+	case LifecyclePreviewStatusExecuted:
 		return true
-	case Executing:
+	case LifecyclePreviewStatusExecuting:
 		return true
-	case Expired:
+	case LifecyclePreviewStatusExpired:
 		return true
-	case Ready:
+	case LifecyclePreviewStatusReady:
 		return true
 	default:
 		return false
@@ -523,6 +547,16 @@ type APITokenPage struct {
 	MaxActiveCount int     `json:"maxActiveCount"`
 	NextCursor     *string `json:"nextCursor,omitempty"`
 }
+
+// AccountedStorageUsage Logical OCI descriptor bytes reachable in this scope. This is not physical Distribution filesystem usage; shared descriptors count once inside the scope and may count in another project.
+type AccountedStorageUsage struct {
+	AccountedBytes *int64                      `json:"accountedBytes,omitempty"`
+	ReconciledAt   *time.Time                  `json:"reconciledAt,omitempty"`
+	Status         AccountedStorageUsageStatus `json:"status"`
+}
+
+// AccountedStorageUsageStatus defines model for AccountedStorageUsage.Status.
+type AccountedStorageUsageStatus string
 
 // ArtifactDeletion defines model for ArtifactDeletion.
 type ArtifactDeletion struct {
@@ -893,6 +927,9 @@ type PrincipalKind string
 
 // Project defines model for Project.
 type Project struct {
+	// AccountedUsage Logical OCI descriptor bytes reachable in this scope. This is not physical Distribution filesystem usage; shared descriptors count once inside the scope and may count in another project.
+	AccountedUsage AccountedStorageUsage `json:"accountedUsage"`
+
 	// CanManage Whether the signed-in actor may manage this project.
 	CanManage *bool              `json:"canManage,omitempty"`
 	CreatedAt time.Time          `json:"createdAt"`
@@ -927,7 +964,9 @@ type ReplaceRepositoryPoliciesRequest struct {
 
 // Repository defines model for Repository.
 type Repository struct {
-	CreatedAt time.Time `json:"createdAt"`
+	// AccountedUsage Logical OCI descriptor bytes reachable in this scope. This is not physical Distribution filesystem usage; shared descriptors count once inside the scope and may count in another project.
+	AccountedUsage AccountedStorageUsage `json:"accountedUsage"`
+	CreatedAt      time.Time             `json:"createdAt"`
 
 	// CreationSource How the logical repository was first registered in Grom.
 	CreationSource RepositoryCreationSource `json:"creationSource"`

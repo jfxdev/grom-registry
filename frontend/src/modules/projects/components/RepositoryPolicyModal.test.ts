@@ -26,6 +26,7 @@ const repository: Repository = {
   profileNeedsReview: false,
   policyVersion: 0,
   policies: [],
+  accountedUsage: { status: 'pending' },
   createdAt: '2026-07-27T12:00:00Z',
   updatedAt: '2026-07-27T12:00:00Z',
 }

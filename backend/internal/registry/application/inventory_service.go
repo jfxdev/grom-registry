@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,11 @@ type ManifestMetadata struct {
 	DescriptorMediaTypes []string
 	Platforms            []registrydomain.ManifestPlatform
 	Children             []ManifestMetadata
+	Descriptors          []registrydomain.Descriptor
+}
+
+type storageStaleMarker interface {
+	MarkRepositoryStorageStale(context.Context, foundation.ID) error
 }
 
 type ManifestDescriptor struct {
@@ -85,6 +91,7 @@ func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, refe
 	}
 	metadata, err := s.distribution.FetchManifest(ctx, fullRepository, manifestReference)
 	if err != nil {
+		s.markStorageStale(ctx, target.ID)
 		return err
 	}
 	now := s.now()
@@ -96,6 +103,7 @@ func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, refe
 		pushedAt = &now
 	}
 	if _, err := s.upsertMetadataTree(ctx, target.ID, metadata, tag, pushedAt, now); err != nil {
+		s.markStorageStale(ctx, target.ID)
 		return err
 	}
 	if tag != "" && classification.Relationship == constants.ArtifactRelationshipPrimary &&
@@ -120,8 +128,10 @@ func (s *InventoryService) Reconcile(
 	fullRepository := projectSlug + "/" + repository
 	tags, err := s.distribution.ListRepositoryTags(ctx, fullRepository)
 	if err != nil {
+		s.markStorageStale(ctx, target.ID)
 		return nil, err
 	}
+	sort.Strings(tags)
 	now := s.now()
 	seenTags := make([]string, 0, len(tags))
 	seenDigests := make([]string, 0, len(tags))
@@ -129,11 +139,13 @@ func (s *InventoryService) Reconcile(
 	for _, tag := range tags {
 		metadata, fetchErr := s.distribution.FetchManifest(ctx, fullRepository, tag)
 		if fetchErr != nil {
+			s.markStorageStale(ctx, target.ID)
 			return nil, fetchErr
 		}
 		classification := ClassifyManifest(*metadata)
 		observedDigests, err := s.upsertMetadataTree(ctx, target.ID, metadata, tag, nil, now)
 		if err != nil {
+			s.markStorageStale(ctx, target.ID)
 			return nil, err
 		}
 		if classification.Relationship == constants.ArtifactRelationshipPrimary &&
@@ -168,6 +180,7 @@ func (s *InventoryService) Reconcile(
 		}
 		resolved, exists, resolveErr := s.distribution.ResolveManifest(ctx, fullRepository, manifest.Digest)
 		if resolveErr != nil {
+			s.markStorageStale(ctx, target.ID)
 			s.clearMissingProbe(probeKey)
 			return nil, resolveErr
 		}
@@ -177,10 +190,12 @@ func (s *InventoryService) Reconcile(
 		s.clearMissingProbe(probeKey)
 		metadata, fetchErr := s.distribution.FetchManifest(ctx, fullRepository, manifest.Digest)
 		if fetchErr != nil {
+			s.markStorageStale(ctx, target.ID)
 			return nil, fetchErr
 		}
 		observedDigests, err := s.upsertMetadataTree(ctx, target.ID, metadata, "", nil, now)
 		if err != nil {
+			s.markStorageStale(ctx, target.ID)
 			return nil, err
 		}
 		for _, observedDigest := range observedDigests {
@@ -190,18 +205,31 @@ func (s *InventoryService) Reconcile(
 			}
 		}
 	}
-	for _, subjectDigest := range append([]string(nil), seenDigests...) {
+	for i := 0; i < len(seenDigests); i++ {
+		subjectDigest := seenDigests[i]
 		referrers, referrerErr := s.distribution.ListReferrers(ctx, fullRepository, subjectDigest)
 		if referrerErr != nil {
+			s.markStorageStale(ctx, target.ID)
 			return nil, referrerErr
 		}
+		sort.Slice(referrers, func(i, j int) bool { return referrers[i].Digest < referrers[j].Digest })
 		for _, descriptor := range referrers {
+			if descriptor.Digest == "" || descriptor.Size < 0 {
+				s.markStorageStale(ctx, target.ID)
+				return nil, fmt.Errorf("invalid referrer descriptor")
+			}
 			metadata, fetchErr := s.distribution.FetchManifest(ctx, fullRepository, descriptor.Digest)
 			if fetchErr != nil {
+				s.markStorageStale(ctx, target.ID)
 				return nil, fetchErr
+			}
+			if metadata.Digest != descriptor.Digest || metadata.ManifestSize != descriptor.Size {
+				s.markStorageStale(ctx, target.ID)
+				return nil, fmt.Errorf("referrer descriptor %s has inconsistent metadata", descriptor.Digest)
 			}
 			observedDigests, err := s.upsertMetadataTree(ctx, target.ID, metadata, "", nil, now)
 			if err != nil {
+				s.markStorageStale(ctx, target.ID)
 				return nil, err
 			}
 			for _, observedDigest := range observedDigests {
@@ -213,6 +241,7 @@ func (s *InventoryService) Reconcile(
 		}
 	}
 	if err := s.store.CompleteInventoryReconciliation(ctx, target.ID, seenTags, seenDigests, now); err != nil {
+		s.markStorageStale(ctx, target.ID)
 		return nil, err
 	}
 	return s.store.ListManifestInventory(ctx, target.ID)
@@ -265,9 +294,31 @@ func observationFromMetadata(metadata *ManifestMetadata, tag string, pushedAt *t
 		Digest: metadata.Digest, MediaType: metadata.MediaType, ArtifactType: metadata.ArtifactType,
 		SubjectDigest: metadata.SubjectDigest, ManifestSize: metadata.ManifestSize,
 		Platforms: metadata.Platforms, Tag: tag, PushedAt: pushedAt,
+		Descriptors:  metadata.Descriptors,
 		ObservedKind: classification.Kind, ArtifactRelationship: classification.Relationship,
 		ClassificationSource: classification.Source, ClassificationConfidence: classification.Confidence,
 	}
+}
+
+func (s *InventoryService) markStorageStale(ctx context.Context, repositoryID foundation.ID) {
+	if marker, ok := s.store.(storageStaleMarker); ok {
+		_ = marker.MarkRepositoryStorageStale(ctx, repositoryID)
+	}
+}
+
+// ProjectUsage keeps the Projects context behind a narrow Registry query.
+func (s *InventoryService) ProjectUsage(ctx context.Context, projectID foundation.ID) foundation.AccountedStorageUsage {
+	reader, ok := s.store.(interface {
+		StorageUsageForProject(context.Context, foundation.ID) (foundation.AccountedStorageUsage, error)
+	})
+	if !ok {
+		return foundation.AccountedStorageUsage{Status: "unavailable"}
+	}
+	usage, err := reader.StorageUsageForProject(ctx, projectID)
+	if err != nil {
+		return foundation.AccountedStorageUsage{Status: "unavailable"}
+	}
+	return usage
 }
 
 func (s *InventoryService) List(ctx context.Context, projectID foundation.ID, repository string) ([]registrydomain.ManifestInventory, error) {

@@ -117,7 +117,7 @@ func (s *Store) UpsertManifestObservation(
 		} else if err := refreshManifestState(ctx, tx, model.ID, observedAt); err != nil {
 			return err
 		}
-		return nil
+		return s.upsertManifestStorageFacts(ctx, tx, repositoryID, observation, observedAt)
 	})
 }
 
@@ -189,7 +189,7 @@ func (s *Store) CompleteInventoryReconciliation(
 				return err
 			}
 		}
-		return nil
+		return s.refreshStorageSnapshots(ctx, tx, repositoryID, observedAt)
 	})
 }
 
@@ -303,7 +303,10 @@ func (s *Store) MarkManifestDeleted(ctx context.Context, repositoryID foundation
 			Set("deleted_at = ?", deletedAt).
 			Where("repository_id = ?", repositoryID.String()).
 			Where("digest = ?", digest).Exec(ctx)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.refreshStorageSnapshots(ctx, tx, repositoryID, deletedAt)
 	})
 }
 
