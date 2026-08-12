@@ -515,8 +515,13 @@ type APIToken struct {
 
 // APITokenPage defines model for APITokenPage.
 type APITokenPage struct {
-	Items      []APIToken `json:"items"`
-	NextCursor *string    `json:"nextCursor,omitempty"`
+	// ActiveCount Number of currently active access keys across every page for this service account.
+	ActiveCount int        `json:"activeCount"`
+	Items       []APIToken `json:"items"`
+
+	// MaxActiveCount Maximum number of concurrently active access keys allowed for this service account.
+	MaxActiveCount int     `json:"maxActiveCount"`
+	NextCursor     *string `json:"nextCursor,omitempty"`
 }
 
 // ArtifactDeletion defines model for ArtifactDeletion.
@@ -545,8 +550,11 @@ type ArtifactDeletionPage struct {
 
 // ArtifactDeletionPreview defines model for ArtifactDeletionPreview.
 type ArtifactDeletionPreview struct {
-	AffectedTags     []string `json:"affectedTags"`
-	BlockedReasons   []string `json:"blockedReasons"`
+	AffectedTags   []string `json:"affectedTags"`
+	BlockedReasons []string `json:"blockedReasons"`
+
+	// ChildDigests Untagged child manifests that will also be deleted because no live tag, index, or OCI referrer outside this deletion references them.
+	ChildDigests     []string `json:"childDigests"`
 	Digest           string   `json:"digest"`
 	RelatedArtifacts []string `json:"relatedArtifacts"`
 	Repository       string   `json:"repository"`
@@ -555,11 +563,12 @@ type ArtifactDeletionPreview struct {
 
 // ArtifactDeletionRequest defines model for ArtifactDeletionRequest.
 type ArtifactDeletionRequest struct {
-	ExpectedDigest *string   `json:"expectedDigest,omitempty"`
-	ExpectedTags   *[]string `json:"expectedTags,omitempty"`
-	Reason         *string   `json:"reason,omitempty"`
-	Reference      string    `json:"reference"`
-	Repository     string    `json:"repository"`
+	ExpectedChildDigests *[]string `json:"expectedChildDigests,omitempty"`
+	ExpectedDigest       *string   `json:"expectedDigest,omitempty"`
+	ExpectedTags         *[]string `json:"expectedTags,omitempty"`
+	Reason               *string   `json:"reason,omitempty"`
+	Reference            string    `json:"reference"`
+	Repository           string    `json:"repository"`
 }
 
 // ArtifactKind defines model for ArtifactKind.
@@ -815,20 +824,34 @@ type ManifestInventory struct {
 	Id                       string                   `json:"id"`
 	LastPushedAt             *time.Time               `json:"lastPushedAt,omitempty"`
 	LastSeenAt               time.Time                `json:"lastSeenAt"`
-	ManifestSize             int64                    `json:"manifestSize"`
-	MediaType                *string                  `json:"mediaType,omitempty"`
-	ObservedKind             ArtifactKind             `json:"observedKind"`
-	RepositoryId             string                   `json:"repositoryId"`
-	State                    InventoryState           `json:"state"`
-	SubjectDigest            *string                  `json:"subjectDigest,omitempty"`
-	Tags                     []string                 `json:"tags"`
-	UntaggedAt               *time.Time               `json:"untaggedAt,omitempty"`
+
+	// ManifestSize Serialized manifest or image-index JSON size in bytes; this is metadata size, not image content size or reclaimable storage.
+	ManifestSize  int64              `json:"manifestSize"`
+	MediaType     *string            `json:"mediaType,omitempty"`
+	ObservedKind  ArtifactKind       `json:"observedKind"`
+	Platforms     []ManifestPlatform `json:"platforms"`
+	RepositoryId  string             `json:"repositoryId"`
+	State         InventoryState     `json:"state"`
+	SubjectDigest *string            `json:"subjectDigest,omitempty"`
+	Tags          []string           `json:"tags"`
+	UntaggedAt    *time.Time         `json:"untaggedAt,omitempty"`
 }
 
 // ManifestInventoryPage defines model for ManifestInventoryPage.
 type ManifestInventoryPage struct {
 	Items      []ManifestInventory `json:"items"`
 	NextCursor *string             `json:"nextCursor,omitempty"`
+}
+
+// ManifestPlatform defines model for ManifestPlatform.
+type ManifestPlatform struct {
+	Architecture string `json:"architecture"`
+
+	// CompressedSize Logical compressed content size for this platform, calculated from its config and layer descriptors; shared blobs mean this is not reclaimable storage.
+	CompressedSize int64   `json:"compressedSize"`
+	Digest         *string `json:"digest,omitempty"`
+	Os             string  `json:"os"`
+	Variant        *string `json:"variant,omitempty"`
 }
 
 // Membership defines model for Membership.

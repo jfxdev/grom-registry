@@ -85,7 +85,11 @@ services:
         condition: service_completed_successfully
 
   distribution:
-    image: registry:3
+    image: ${GROM_REGISTRY_MAINTENANCE_IMAGE:-grom-registry-maintenance:local}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: registry-maintenance
     environment:
       REGISTRY_AUTH_TOKEN_REALM: ${GROM_PUBLIC_URL:-http://localhost:8080}/auth/token
       REGISTRY_AUTH_TOKEN_SERVICE: grom-registry
@@ -97,28 +101,12 @@ services:
       - distribution-config:/etc/distribution:ro
       - registry-data:/var/lib/registry
       - signing-certs:/certs:ro
+      - registry-maintenance-run:/run/grom-registry-maintenance
     depends_on:
       grom:
         condition: service_healthy
       distribution-config-init:
         condition: service_completed_successfully
-    restart: unless-stopped
-
-  registry-maintenance-agent:
-    image: ${GROM_REGISTRY_MAINTENANCE_IMAGE:-grom-registry-maintenance:local}
-    build:
-      context: ../..
-      dockerfile: Dockerfile
-      target: registry-maintenance
-    user: "0:101"
-    volumes:
-      - registry-data:/var/lib/registry
-      - distribution-config:/etc/distribution:ro
-      - registry-maintenance-run:/run/grom-registry-maintenance
-    network_mode: none
-    cap_drop: ["ALL"]
-    cap_add: ["DAC_READ_SEARCH"]
-    security_opt: ["no-new-privileges:true"]
     healthcheck:
       test: ["CMD", "test", "-S", "/run/grom-registry-maintenance/agent.sock"]
       interval: 2s

@@ -37,6 +37,7 @@ export type ArtifactDeletionPreview = components['schemas']['ArtifactDeletionPre
 export type ArtifactDeletion = components['schemas']['ArtifactDeletion']
 export type ArtifactDeletionPage = components['schemas']['ArtifactDeletionPage']
 export type ManifestInventory = components['schemas']['ManifestInventory']
+export type ManifestPlatform = components['schemas']['ManifestPlatform']
 export type ManifestInventoryPage = components['schemas']['ManifestInventoryPage']
 export type LifecyclePreview = components['schemas']['LifecyclePreview']
 export type LifecyclePreviewItem = components['schemas']['LifecyclePreviewItem']

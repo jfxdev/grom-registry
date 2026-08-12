@@ -321,6 +321,10 @@ func (s *LifecycleService) Execute(
 	deleted, failed, skipped := 0, 0, 0
 	fullRepository := projectSlug + "/" + target.Name
 	current, reconcileErr := s.inventory.Reconcile(ctx, projectID, projectSlug, target.Name)
+	// Keep the execution's evolving safety view local. Store implementations may
+	// return cached slices, while later candidates still need to see earlier
+	// deletions from this same run.
+	current = append([]registrydomain.ManifestInventory(nil), current...)
 	currentByDigest := map[string]registrydomain.ManifestInventory{}
 	for _, manifest := range current {
 		currentByDigest[manifest.Digest] = manifest
@@ -367,19 +371,33 @@ func (s *LifecycleService) Execute(
 			item.Status = constants.LifecycleItemSkipped
 			item.Message = "artifact changed or is no longer eligible; create a new preview"
 			skipped++
-		} else if err := s.distribution.DeleteManifest(ctx, fullRepository, item.Digest); err != nil {
-			item.Status = constants.LifecycleItemFailed
-			item.Message = err.Error()
-			failed++
 		} else {
-			item.Status = constants.LifecycleItemDeleted
-			item.Message = "manifest deleted; storage is reclaimed by a later garbage collection"
-			deleted++
-			if err := s.store.MarkManifestDeleted(ctx, target.ID, item.Digest, s.now()); err != nil {
+			children := deletionChildDigests(item.Digest, current)
+			deletedDigests, deletionErr := deleteManifestTree(
+				ctx, s.distribution, fullRepository, item.Digest, children, current,
+			)
+			if deletionErr != nil {
+				for _, deletedDigest := range deletedDigests {
+					_ = s.store.MarkManifestDeleted(ctx, target.ID, deletedDigest, s.now())
+					markInventoryDeleted(current, deletedDigest)
+				}
 				item.Status = constants.LifecycleItemFailed
-				item.Message = "manifest deleted but inventory update failed"
-				deleted--
+				item.Message = deletionErr.Error()
 				failed++
+			} else {
+				item.Status = constants.LifecycleItemDeleted
+				item.Message = fmt.Sprintf("manifest and %d unreferenced child manifests deleted; storage is reclaimed by a later garbage collection", len(deletedDigests)-1)
+				deleted++
+				for _, deletedDigest := range deletedDigests {
+					if err := s.store.MarkManifestDeleted(ctx, target.ID, deletedDigest, s.now()); err != nil {
+						item.Status = constants.LifecycleItemFailed
+						item.Message = "manifest deleted but inventory update failed"
+						deleted--
+						failed++
+						break
+					}
+					markInventoryDeleted(current, deletedDigest)
+				}
 			}
 		}
 		item.UpdatedAt = s.now()
@@ -426,6 +444,16 @@ func (s *LifecycleService) Execute(
 		}
 	}
 	return run, nil
+}
+
+func markInventoryDeleted(inventory []registrydomain.ManifestInventory, digest string) {
+	for index := range inventory {
+		if inventory[index].Digest == digest {
+			inventory[index].State = constants.InventoryStateDeleted
+			inventory[index].Tags = []string{}
+			return
+		}
+	}
 }
 
 func (s *LifecycleService) revalidateLifecycleCandidate(

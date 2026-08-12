@@ -32,6 +32,7 @@ Keep this file aligned with the code that actually exists.
 - Inspect a backup with the development tool: `make backup-inspect BACKUP_PATH=/absolute/path/to/backup`
 - Exercise low-level empty-volume restore: `make restore BACKUP_PATH=/absolute/path/to/backup`
 - Build both applications: `make build`
+- Build and publish a local Docker image using `.env`: `make image-publish-local`
 - Start backend and frontend together: `cp .env.example .env && make dev`
 - Start backend and frontend with a local PostgreSQL service: `cp .env.example .env && make dev-postgres`
 - Start the full local stack: `cp .env.example .env && make compose-up`
@@ -74,6 +75,12 @@ recreate or inspect its volumes directly. It also streams an authenticated OCI
 blob upload for longer than the short-lived registry JWT and verifies the
 committed blob, so do not introduce body-read or response-write server timeouts
 that would terminate long uploads.
+The garbage-collection journey must delete and collect a fixture, republish the
+same digest under the same tag, prove it is listed and pullable with fresh Docker
+credentials, then repeat with a different digest. The maintenance process must
+stop its supervised Distribution child before local-storage GC and start a fresh,
+ready child afterward; never run the collector concurrently with Distribution or
+replace this with Docker-socket process control.
 `make test-release-upgrade-e2e` is a separate, non-ruleset release-acceptance
 journey: it pulls the image in `GROM_UPGRADE_FROM_IMAGE` (defaulting to the
 current published baseline) for `GROM_UPGRADE_PLATFORM` (defaulting to
@@ -210,6 +217,7 @@ already downloaded bundle.
 - Retention policy configuration supports an inventory-backed dry-run and an explicit, audited manual execution. Selecting retention never deletes content by itself; scheduled autopurge is not implemented.
 - Lifecycle execution must reconcile with Distribution, revalidate every candidate immediately before deletion, and skip changed content.
 - OCI subject/referrer relationships are inventoried and block lifecycle deletion in the current implementation. Do not add cascade deletion without an explicit policy and roadmap decision.
+- Deleting an image index may additionally delete only its untagged child manifests proven unreferenced by another live index, tag, or OCI referrer. Keep this distinct from forbidden OCI subject/referrer cascade deletion, expose the exact child set in the preview, and revalidate every digest before deletion.
 - Manual artifact deletion also blocks subjects with referrers and referrer artifacts. It must persist the operation, update inventory, and audit the outcome; do not bypass the application service from an HTTP handler.
 - Lifecycle manifest deletion and Distribution blob garbage collection remain separate operations.
 - Repository profiles are inferred passively from tagged primary OCI manifests. Referrers such as SBOMs and signatures never change the repository profile.
@@ -229,6 +237,9 @@ already downloaded bundle.
   links; they must change the password from their profile or sign out first.
   Never log or persist the plaintext reset token.
 - API tokens are normally credentials owned by service accounts. The sole exception is an installation viewer's profile-scoped, reveal-once registry token: it is revocable by that viewer and must always grant only `pull` from projects with explicit membership. It must never grant `push` or `delete`, even if the viewer has a Writer or Admin project membership. Do not add tokens for other user roles or a global user-token page.
+- A service account may have at most three active access keys. Keep enforcement
+  and the paginated list's active/max counts server-authoritative; the UI must
+  never infer the limit from only the current history page.
 - Avoid Redis, message brokers, dependency-injection frameworks, and background-job frameworks in the MVP.
 
 ## Required documentation maintenance

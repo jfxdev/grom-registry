@@ -79,7 +79,7 @@ only if an actual split is implemented.
 | `backend/internal/platform/config/` | Deployment-profile policy, private-address validation, trusted-proxy ranges, authentication-limit settings, and public URL/cookie validation |
 | `backend/internal/platform/backup/` | Backup manager and isolated agent, portable SQLite/PostgreSQL bundles, recovery web server, versioned sets, safe archives, and staged restore |
 | `backend/internal/platform/maintenance/` | Drains active writes and blocks mutations and registry traffic during a quiesced snapshot |
-| `backend/internal/platform/registrymaintenance/` | Unix-socket control client and isolated Distribution supervisor used for storage usage and safe garbage collection |
+| `backend/internal/platform/registrymaintenance/` | Unix-socket control client and Distribution process supervisor; stops the private child process for exclusive local-storage garbage collection and restarts it after readiness succeeds |
 | `backend/cmd/grom-backup/` | Image entry points for the backup agent, recovery UI, and low-level offline compatibility commands |
 | `backend/internal/httpapi/security.go` | Bounded authentication failure limiter, trusted real-client-IP resolution, and rate-limit responses |
 | `backend/migrations/` | Ordered migrations applied automatically during boot |
@@ -146,12 +146,13 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `backend/internal/registry/application/inventory_service.go` | Push observation and Distribution reconciliation |
 | `backend/internal/registry/application/classifier.go` | Passive OCI artifact classification and repository-profile evidence |
 | `backend/internal/registry/application/artifact_deletion_service.go` | Manual deletion preview, OCI relationship protection, revalidation, persistence, and audit |
+| `backend/internal/registry/application/manifest_deletion.go` | Shared image-index deletion planner that preserves tagged, shared, missing, and OCI-referrer-protected child manifests |
 | `backend/internal/registry/application/lifecycle_service.go` | Retention planning, live revalidation, and manual execution |
 | `backend/internal/registry/infrastructure/distribution/gateway.go` | Public `/v2` reverse proxy, forwarding headers, manifest policy enforcement, and push observation |
-| `backend/internal/registry/infrastructure/distribution/client.go` | Internal Distribution metadata client; encapsulates native catalog and tag pagination behind Grom cursors |
+| `backend/internal/registry/infrastructure/distribution/client.go` | Internal Distribution metadata client; filters dangling tag links, recursively reads image-index children, and calculates logical config-plus-layer platform sizes |
 | `backend/internal/registry/infrastructure/persistence/bun/lifecycle.go` | Inventory, preview, run, and execution-lock persistence |
 | `backend/internal/audit/` | Immutable lifecycle audit event recording |
-| `backend/tests/registrye2e/` | Opt-in public-endpoint registry authorization, slow streaming blob upload, user-session revocation, and full-stack restart-preservation journeys; isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
+| `backend/tests/registrye2e/` | Opt-in public-endpoint registry authorization, slow streaming blob upload, GC same-digest/different-digest republishing, user-session revocation, and full-stack restart-preservation journeys; isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
 | `backend/tests/bootacceptance/` | Opt-in public boot, migration, readiness, and API-documentation acceptance journey through an isolated Compose stack; includes the reviewed prior-schema fixture and a separate real-migration failure fixture |
 | `backend/tests/backuprestoree2e/` | Opt-in destructive SQLite or PostgreSQL volume-loss recovery journey through public Grom and Docker endpoints |
 | `frontend/e2e/` | Playwright mocked sign-in smoke plus isolated public-stack first-push and destructive-administration journeys |
@@ -173,6 +174,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `make test-backup-restore-postgres-e2e` | Destroy and restore an isolated PostgreSQL installation and verify old and new registry activity |
 | `make test-production-image-smoke` | Build the production image from a clean checkout and verify its non-root public runtime surface |
 | `make build` | Build frontend and backend |
+| `make image-publish-local` | Build the Docker image with `GROM_VERSION` and push the `GROM_IMAGE` target defined in `.env` |
 | `make dev` | Start the Go backend and Vite frontend together |
 | `make dev-postgres` | Start a local PostgreSQL service, then the Go backend and Vite frontend using it |
 | `make compose-up` | Build and start Grom plus Distribution |

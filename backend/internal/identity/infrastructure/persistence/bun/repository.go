@@ -335,14 +335,67 @@ func (r *Repository) DisableServiceAccount(ctx context.Context, id foundation.ID
 	return nil
 }
 
-func (r *Repository) CreateServiceAccountAPIToken(ctx context.Context, token *identity.APIToken) error {
+func (r *Repository) CreateServiceAccountAPIToken(
+	ctx context.Context,
+	token *identity.APIToken,
+	now time.Time,
+	maxActive int,
+) error {
 	model := &apiTokenModel{
 		ID: token.ID.String(), PublicID: token.PublicID, PrincipalKind: constants.PrincipalServiceAccount,
 		PrincipalID: token.ServiceAccountID.String(), Name: token.Name, SecretHash: token.SecretHash,
 		CreatedAt: token.CreatedAt, ExpiresAt: token.ExpiresAt,
 	}
-	_, err := r.db.NewInsert().Model(model).Exec(ctx)
-	return err
+	return r.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// PostgreSQL serializes creators through a row lock. SQLite does not
+		// support SELECT FOR UPDATE, so this harmless write acquires its single
+		// writer lock before the count is read.
+		if r.db.Dialect().Name() == dialect.PG {
+			var id string
+			if err := tx.NewSelect().Model((*serviceAccountModel)(nil)).
+				Column("id").Where("id = ?", token.ServiceAccountID.String()).
+				Where("disabled_at IS NULL").For("UPDATE").Scan(ctx, &id); err != nil {
+				return err
+			}
+		} else {
+			result, err := tx.NewUpdate().Model((*serviceAccountModel)(nil)).
+				Set("username = username").Where("id = ?", token.ServiceAccountID.String()).
+				Where("disabled_at IS NULL").Exec(ctx)
+			if err != nil {
+				return err
+			}
+			affected, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if affected == 0 {
+				return sql.ErrNoRows
+			}
+		}
+		activeCount, err := tx.NewSelect().Model((*apiTokenModel)(nil)).
+			Where("principal_kind = ?", constants.PrincipalServiceAccount).
+			Where("principal_id = ?", token.ServiceAccountID.String()).
+			Where("revoked_at IS NULL").
+			Where("(expires_at IS NULL OR expires_at > ?)", now).
+			Count(ctx)
+		if err != nil {
+			return err
+		}
+		if activeCount >= maxActive {
+			return identity.ErrServiceAccountAccessKeyLimit
+		}
+		_, err = tx.NewInsert().Model(model).Exec(ctx)
+		return err
+	})
+}
+
+func (r *Repository) CountActiveServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID, now time.Time) (int, error) {
+	return r.db.NewSelect().Model((*apiTokenModel)(nil)).
+		Where("principal_kind = ?", constants.PrincipalServiceAccount).
+		Where("principal_id = ?", serviceAccountID.String()).
+		Where("revoked_at IS NULL").
+		Where("(expires_at IS NULL OR expires_at > ?)", now).
+		Count(ctx)
 }
 
 func (r *Repository) CreateViewerAPIToken(ctx context.Context, token *identity.APIToken) error {

@@ -17,6 +17,7 @@ type deletionTestStore struct {
 	inventory   []registrydomain.ManifestInventory
 	deletion    *registrydomain.ArtifactDeletion
 	marked      string
+	markedAll   []string
 	markErr     error
 	completeErr error
 }
@@ -61,17 +62,25 @@ func (s *deletionTestStore) UpsertManifestObservation(
 ) error {
 	for i := range s.inventory {
 		if s.inventory[i].Digest == observation.Digest {
+			s.inventory[i].Platforms = observation.Platforms
 			if observation.Tag != "" {
 				s.inventory[i].Tags = []string{observation.Tag}
+				s.inventory[i].State = constants.InventoryStateActive
 			}
 			return nil
 		}
 	}
+	tags := []string{}
+	state := constants.InventoryStateUntagged
+	if observation.Tag != "" {
+		tags = []string{observation.Tag}
+		state = constants.InventoryStateActive
+	}
 	s.inventory = append(s.inventory, registrydomain.ManifestInventory{
 		ID: foundation.NewID(), RepositoryID: repositoryID, Digest: observation.Digest,
 		MediaType: observation.MediaType, ArtifactType: observation.ArtifactType,
-		SubjectDigest: observation.SubjectDigest, Tags: []string{observation.Tag},
-		State: constants.InventoryStateActive, FirstSeenAt: observedAt, LastSeenAt: observedAt,
+		SubjectDigest: observation.SubjectDigest, Platforms: observation.Platforms, Tags: tags,
+		State: state, FirstSeenAt: observedAt, LastSeenAt: observedAt,
 	})
 	return nil
 }
@@ -128,14 +137,19 @@ func (s *deletionTestStore) MarkManifestDeleted(
 	_ time.Time,
 ) error {
 	s.marked = digest
+	s.markedAll = append(s.markedAll, digest)
 	return s.markErr
 }
 
 type deletionTestDistribution struct {
-	digest    string
-	referrers []ManifestDescriptor
-	deleted   string
-	deleteErr error
+	digest          string
+	children        []ManifestMetadata
+	referrers       []ManifestDescriptor
+	deleted         string
+	deletedAll      []string
+	deleteErr       error
+	deleteErrDigest string
+	missing         map[string]bool
 }
 
 func (d *deletionTestDistribution) ListRepositoryTags(context.Context, string) ([]string, error) {
@@ -149,6 +163,14 @@ func (d *deletionTestDistribution) ResolveManifest(
 	if reference == "dev" || reference == d.digest {
 		return d.digest, true, nil
 	}
+	for _, child := range d.children {
+		if reference == child.Digest {
+			if d.missing[reference] {
+				return "", false, nil
+			}
+			return child.Digest, true, nil
+		}
+	}
 	return "", false, nil
 }
 
@@ -156,12 +178,24 @@ func (d *deletionTestDistribution) FetchManifest(
 	_ context.Context,
 	_, reference string,
 ) (*ManifestMetadata, error) {
-	digest := d.digest
 	if reference != "dev" && reference != d.digest {
-		digest = reference
+		for _, child := range d.children {
+			if reference == child.Digest {
+				copy := child
+				return &copy, nil
+			}
+		}
 	}
 	return &ManifestMetadata{
-		Digest: digest, MediaType: "application/vnd.oci.image.manifest.v1+json",
+		Digest: d.digest, MediaType: "application/vnd.oci.image.manifest.v1+json",
+		Platforms: func() []registrydomain.ManifestPlatform {
+			platforms := make([]registrydomain.ManifestPlatform, 0, len(d.children))
+			for _, child := range d.children {
+				platforms = append(platforms, registrydomain.ManifestPlatform{Digest: child.Digest})
+			}
+			return platforms
+		}(),
+		Children: d.children,
 	}, nil
 }
 
@@ -179,7 +213,11 @@ func (d *deletionTestDistribution) DeleteManifest(
 	digest string,
 ) error {
 	d.deleted = digest
-	return d.deleteErr
+	d.deletedAll = append(d.deletedAll, digest)
+	if d.deleteErr != nil && (d.deleteErrDigest == "" || d.deleteErrDigest == digest) {
+		return d.deleteErr
+	}
+	return nil
 }
 
 type deletionTestAudit struct {
@@ -219,7 +257,7 @@ func TestArtifactDeletionPersistsAndMarksInventory(t *testing.T) {
 
 	result, err := service.Execute(
 		context.Background(), projectID, "payments", "api", "dev", "cleanup",
-		"sha256:artifact", []string{"dev"},
+		"sha256:artifact", []string{"dev"}, []string{},
 		foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: foundation.NewID()},
 	)
 	if err != nil {
@@ -234,6 +272,94 @@ func TestArtifactDeletionPersistsAndMarksInventory(t *testing.T) {
 		audit.actions[0] != constants.AuditArtifactDeletionStarted ||
 		audit.actions[1] != constants.AuditArtifactDeletionCompleted {
 		t.Fatalf("unexpected audit actions: %#v", audit.actions)
+	}
+}
+
+func TestArtifactDeletionIncludesOnlyThePreviewedOrphanedPlatformChildren(t *testing.T) {
+	projectID := foundation.NewID()
+	repository := &registrydomain.Repository{ID: foundation.NewID(), ProjectID: projectID, Name: "api"}
+	store := &deletionTestStore{repository: repository}
+	distribution := &deletionTestDistribution{
+		digest: "sha256:index",
+		children: []ManifestMetadata{{
+			Digest: "sha256:platform", MediaType: "application/vnd.oci.image.manifest.v1+json",
+		}},
+	}
+	inventory := NewInventoryService(store)
+	inventory.SetDistribution(distribution)
+	service := NewArtifactDeletionService(store, NewRepositoryService(store), inventory, distribution, nil)
+
+	preview, err := service.Preview(context.Background(), projectID, "payments", "api", "dev", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.ChildDigests) != 1 || preview.ChildDigests[0] != "sha256:platform" {
+		t.Fatalf("unexpected child deletion preview: %#v", preview)
+	}
+	result, err := service.Execute(
+		context.Background(), projectID, "payments", "api", "dev", "cleanup",
+		"sha256:index", []string{"dev"}, preview.ChildDigests,
+		foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: foundation.NewID()},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != constants.ArtifactDeletionCompleted ||
+		len(distribution.deletedAll) != 2 || distribution.deletedAll[0] != "sha256:index" || distribution.deletedAll[1] != "sha256:platform" ||
+		len(store.markedAll) != 2 {
+		t.Fatalf("unexpected index deletion: result=%#v deleted=%#v marked=%#v", result, distribution.deletedAll, store.markedAll)
+	}
+}
+
+func TestArtifactDeletionRecordsSuccessfulDigestsBeforeFailedCompletion(t *testing.T) {
+	projectID := foundation.NewID()
+	repository := &registrydomain.Repository{ID: foundation.NewID(), ProjectID: projectID, Name: "api"}
+	store := &deletionTestStore{repository: repository, completeErr: errors.New("completion unavailable")}
+	distribution := &deletionTestDistribution{
+		digest:    "sha256:index",
+		children:  []ManifestMetadata{{Digest: "sha256:child"}},
+		deleteErr: errors.New("child delete failed"), deleteErrDigest: "sha256:child",
+	}
+	inventory := NewInventoryService(store)
+	inventory.SetDistribution(distribution)
+	service := NewArtifactDeletionService(store, NewRepositoryService(store), inventory, distribution, nil)
+
+	_, err := service.Execute(
+		context.Background(), projectID, "payments", "api", "dev", "cleanup",
+		"sha256:index", []string{"dev"}, []string{"sha256:child"},
+		foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: foundation.NewID()},
+	)
+	if !errors.Is(err, store.completeErr) {
+		t.Fatalf("expected completion error, got %v", err)
+	}
+	if len(store.markedAll) != 1 || store.markedAll[0] != "sha256:index" {
+		t.Fatalf("successfully deleted target was not recorded before completion: %#v", store.markedAll)
+	}
+}
+
+func TestArtifactDeletionCompletionCountsOnlyDeletedChildren(t *testing.T) {
+	projectID := foundation.NewID()
+	repository := &registrydomain.Repository{ID: foundation.NewID(), ProjectID: projectID, Name: "api"}
+	store := &deletionTestStore{repository: repository}
+	distribution := &deletionTestDistribution{
+		digest:   "sha256:index",
+		children: []ManifestMetadata{{Digest: "sha256:child"}},
+		missing:  map[string]bool{"sha256:child": true},
+	}
+	inventory := NewInventoryService(store)
+	inventory.SetDistribution(distribution)
+	service := NewArtifactDeletionService(store, NewRepositoryService(store), inventory, distribution, nil)
+
+	result, err := service.Execute(
+		context.Background(), projectID, "payments", "api", "dev", "cleanup",
+		"sha256:index", []string{"dev"}, []string{"sha256:child"},
+		foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: foundation.NewID()},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Message != "manifest and 0 unreferenced child manifests deleted; storage is reclaimed by a later garbage collection" {
+		t.Fatalf("unexpected completion message %q", result.Message)
 	}
 }
 
@@ -302,7 +428,7 @@ func TestArtifactDeletionAuditsExecutionFailures(t *testing.T) {
 
 			deletion, err := service.Execute(
 				context.Background(), projectID, "payments", "api", "dev", "cleanup",
-				"sha256:artifact", []string{"dev"},
+				"sha256:artifact", []string{"dev"}, []string{},
 				foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: foundation.NewID()},
 			)
 			if err == nil || deletion == nil || distribution.deleted != "sha256:artifact" {
@@ -343,7 +469,7 @@ func TestArtifactDeletionDoesNotReachDistributionWhenStartAuditFails(t *testing.
 
 	deletion, err := service.Execute(
 		context.Background(), projectID, "payments", "api", "dev", "cleanup",
-		"sha256:artifact", []string{"dev"},
+		"sha256:artifact", []string{"dev"}, []string{},
 		foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: foundation.NewID()},
 	)
 

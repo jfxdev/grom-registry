@@ -20,7 +20,7 @@ services:
       timeout: 2s
       retries: 30
     ports:
-      - "127.0.0.1:${GROM_POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${GROM_POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped

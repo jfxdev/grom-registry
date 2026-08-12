@@ -95,6 +95,10 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.routerPush }),
 }))
 
+vi.mock('../components/RepositoryCreateModal.vue', () => ({
+  default: { template: '<button type="button" @click="$emit(\'created\')">Repository created</button>' },
+}))
+
 function mountPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return mount(ProjectPage, {
@@ -176,6 +180,17 @@ describe('ProjectPage membership management', () => {
 
     expect(wrapper.find('button[aria-label="Project settings"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('Add service account')
+  })
+
+  it('reloads repositories after a repository is created', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await buttonWithText(wrapper, 'New repository').trigger('click')
+    await buttonWithText(wrapper, 'Repository created').trigger('click')
+    await flushPromises()
+
+    expect(mocks.listRepositories).toHaveBeenCalledTimes(2)
   })
 
   it('uses the labelled delete button for project deletion', async () => {
@@ -261,12 +276,34 @@ describe('ProjectPage membership management', () => {
     renderPage()
 
     expect(await screen.findByText(/Different primary artifact types/)).toBeTruthy()
+    expect(await screen.findByText('stable')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Digest' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'OS/ARCH' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Compressed size' })).toBeTruthy()
     expect(await screen.findByText('Deletion history')).toBeTruthy()
     expect(await screen.findByText(/No reason/)).toBeTruthy()
     await fireEvent.click(await screen.findByRole('button', { name: /sha256:abc/ }))
     expect(screen.getByRole('dialog', { name: 'Manifest details' })).toBeTruthy()
-    expect(screen.getByText('Untagged')).toBeTruthy()
+    expect(screen.getAllByText('Active')).not.toHaveLength(0)
     expect(screen.getByText('sha256:subject')).toBeTruthy()
+  })
+
+  it('renders an untagged manifest when a stale response contains null tags', async () => {
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'push', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.listInventory.mockResolvedValue([{
+      id: 'manifest-1', digest: 'sha256:untagged', mediaType: '', artifactType: '', subjectDigest: '',
+      observedKind: 'container_image', artifactRelationship: 'primary', classificationSource: 'inferred', classificationConfidence: 'high',
+      manifestSize: 42, state: 'deleted', firstSeenAt: '2026-07-29T00:00:00Z', lastSeenAt: '2026-07-30T00:00:00Z', tags: null,
+    }])
+    mocks.repositoryId = 'repository-1'
+
+    renderPage()
+
+    expect(await screen.findByText(/Historical record.*42 B manifest metadata/)).toBeTruthy()
   })
 
   it('loads a routed repository that is outside the current list page', async () => {
@@ -346,7 +383,7 @@ describe('ProjectPage membership management', () => {
     mocks.listTags.mockResolvedValue({ name: 'payments/api', tags: ['stable'] })
     mocks.previewArtifactDeletion.mockResolvedValue({
       repository: 'api', digest: 'sha256:stable', affectedTags: [], requiresReason: true,
-      blockedReasons: ['The manifest has referrers'], relatedArtifacts: ['sha256:signature'],
+      blockedReasons: ['The manifest has referrers'], relatedArtifacts: ['sha256:signature'], childDigests: [],
     })
     mocks.repositoryId = 'repository-1'
     renderPage()
@@ -355,6 +392,36 @@ describe('ProjectPage membership management', () => {
     expect(screen.getByText('sha256:signature')).toBeTruthy()
     expect(screen.getByText('Untagged manifest')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Delete artifact' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('refreshes repository state and reports a persisted partial deletion', async () => {
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'manual', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.listTags.mockResolvedValue({ name: 'payments/api', tags: ['stable'] })
+    mocks.previewArtifactDeletion.mockResolvedValue({
+      repository: 'api', digest: 'sha256:index', affectedTags: ['stable'], requiresReason: false,
+      blockedReasons: [], relatedArtifacts: [], childDigests: ['sha256:child'],
+    })
+    mocks.deleteArtifact.mockResolvedValue({
+      id: 'deletion-1', repositoryId: 'repository-1', repository: 'api', digest: 'sha256:index',
+      affectedTags: ['stable'], actorId: 'user-1', reason: '', status: 'failed',
+      message: 'child manifest gained an external reference', startedAt: '2026-08-12T00:00:00Z',
+      completedAt: '2026-08-12T00:00:01Z',
+    })
+    mocks.repositoryId = 'repository-1'
+    renderPage()
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Delete stable' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Delete artifact' }))
+
+    expect(mocks.deleteArtifact).toHaveBeenCalledWith('payments', expect.objectContaining({
+      expectedChildDigests: ['sha256:child'],
+    }))
+    expect(await screen.findByText('child manifest gained an external reference')).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Delete artifact' })).toBeNull()
   })
 
   it('opens a repository in its dedicated route', async () => {

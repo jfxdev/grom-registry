@@ -107,4 +107,14 @@ describe('ProjectsPage', () => {
     expect(wrapper.text()).toContain('No matching projects')
     expect(wrapper.text()).toContain('0 of 1 on this page')
   })
+
+  it('separates the pagination footer from the project list', async () => {
+    mocks.listProjects.mockResolvedValue([{ id: 'project-1', name: 'Payments', slug: 'payments', createdBy: 'user-1', createdAt: '2026-07-29T10:00:00Z' }])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('.panel-pagination [aria-label="Pagination"]').exists()).toBe(true)
+    expect(wrapper.find('.project-list + .panel-pagination').exists()).toBe(true)
+    expect(wrapper.find('.project-list .panel-pagination').exists()).toBe(false)
+  })
 })

@@ -60,6 +60,7 @@ type ArtifactDeletionPreview struct {
 	RequiresReason   bool     `json:"requiresReason"`
 	BlockedReasons   []string `json:"blockedReasons"`
 	RelatedArtifacts []string `json:"relatedArtifacts"`
+	ChildDigests     []string `json:"childDigests"`
 }
 
 type ArtifactDeletion struct {
@@ -77,24 +78,33 @@ type ArtifactDeletion struct {
 }
 
 type ManifestInventory struct {
-	ID                       foundation.ID `json:"id"`
-	RepositoryID             foundation.ID `json:"repositoryId"`
-	Digest                   string        `json:"digest"`
-	MediaType                string        `json:"mediaType,omitempty"`
-	ArtifactType             string        `json:"artifactType,omitempty"`
-	SubjectDigest            string        `json:"subjectDigest,omitempty"`
-	ObservedKind             string        `json:"observedKind"`
-	ArtifactRelationship     string        `json:"artifactRelationship"`
-	ClassificationSource     string        `json:"classificationSource"`
-	ClassificationConfidence string        `json:"classificationConfidence"`
-	ManifestSize             int64         `json:"manifestSize"`
-	Tags                     []string      `json:"tags"`
-	State                    string        `json:"state"`
-	FirstSeenAt              time.Time     `json:"firstSeenAt"`
-	LastPushedAt             *time.Time    `json:"lastPushedAt,omitempty"`
-	LastSeenAt               time.Time     `json:"lastSeenAt"`
-	UntaggedAt               *time.Time    `json:"untaggedAt,omitempty"`
-	DeletedAt                *time.Time    `json:"deletedAt,omitempty"`
+	ID                       foundation.ID      `json:"id"`
+	RepositoryID             foundation.ID      `json:"repositoryId"`
+	Digest                   string             `json:"digest"`
+	MediaType                string             `json:"mediaType,omitempty"`
+	ArtifactType             string             `json:"artifactType,omitempty"`
+	SubjectDigest            string             `json:"subjectDigest,omitempty"`
+	ObservedKind             string             `json:"observedKind"`
+	ArtifactRelationship     string             `json:"artifactRelationship"`
+	ClassificationSource     string             `json:"classificationSource"`
+	ClassificationConfidence string             `json:"classificationConfidence"`
+	ManifestSize             int64              `json:"manifestSize"`
+	Platforms                []ManifestPlatform `json:"platforms"`
+	Tags                     []string           `json:"tags"`
+	State                    string             `json:"state"`
+	FirstSeenAt              time.Time          `json:"firstSeenAt"`
+	LastPushedAt             *time.Time         `json:"lastPushedAt,omitempty"`
+	LastSeenAt               time.Time          `json:"lastSeenAt"`
+	UntaggedAt               *time.Time         `json:"untaggedAt,omitempty"`
+	DeletedAt                *time.Time         `json:"deletedAt,omitempty"`
+}
+
+type ManifestPlatform struct {
+	OS             string `json:"os"`
+	Architecture   string `json:"architecture"`
+	Variant        string `json:"variant,omitempty"`
+	Digest         string `json:"digest,omitempty"`
+	CompressedSize int64  `json:"compressedSize"`
 }
 
 type ManifestObservation struct {
@@ -107,6 +117,7 @@ type ManifestObservation struct {
 	ClassificationSource     string
 	ClassificationConfidence string
 	ManifestSize             int64
+	Platforms                []ManifestPlatform
 	Tag                      string
 	PushedAt                 *time.Time
 }

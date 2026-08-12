@@ -213,13 +213,16 @@ from normal lists after the operation completes.
 - The secret uses the recognizable `grm_<public-id>_<secret>` shape.
 - The complete secret is returned only at creation and cannot be retrieved
   again.
-- Multiple active keys support credential rotation.
+- A service account can have at most three active keys; revoked or expired keys
+  do not count toward this limit, so credential rotation remains possible.
 - Revocation blocks the next registry authentication immediately.
 - Registry authentication updates the key's last-used time.
 - A key cannot be listed or revoked through a different service account.
 
 The API and current UI support an optional key expiration timestamp; key lists
-show the configured expiry and distinguish expired keys from revoked keys.
+are cursor-paginated, show the configured expiry, and distinguish expired keys
+from revoked keys. The API calculates the active-key count across the complete
+history so the UI never infers the three-key limit from only the visible page.
 
 ## 7. Projects and memberships
 
@@ -393,7 +396,10 @@ globally enforced, or linked to the repository after creation.
   archival/removal, and recent deletion-history controls.
 
 Selecting an inventory entry opens a manifest-detail dialog with its digest,
-media type, size, timestamps, tags, classification, and OCI relationship.
+media type, manifest-metadata size, timestamps, tags, state, classification, and
+OCI relationship. The page separates live `active`/`untagged` entries from
+historical `missing`/`deleted` records and refreshes current tags and inventory
+while the repository is open.
 Config, layer, and pull-history detail are not implemented.
 
 ## 12. Manifest inventory and passive classification
@@ -409,11 +415,16 @@ Grom stores metadata, not content, for observed manifests:
 - first-seen, last-seen, last-pushed, untagged, and deleted timestamps;
 - active, untagged, missing, or deleted state;
 - classification kind, relationship, evidence source, and confidence.
+- platform child digests and logical compressed sizes calculated from each image
+  config plus its compressed layers. These values describe pull content and are
+  intentionally distinct from deduplicated physical bytes reclaimed by GC.
 
 Successful tagged manifest pushes are observed automatically. A reconciliation
-reads live tags, resolves their manifests, discovers OCI referrers, updates
-inventory, and marks disappeared aliases or manifests without discarding
-history.
+reads live tags, recursively inventories image-index children, revalidates known
+untagged digests, discovers OCI referrers, updates inventory, and marks
+disappeared aliases or manifests without discarding history. Dangling
+Distribution tag links are omitted from paginated tag results without creating
+short pages when later live tags still exist.
 
 Project members can inspect stored inventory from the selected repository in
 the project page. Project Admins can request reconciliation. Manual deletion
@@ -449,22 +460,26 @@ Manual deletion is a two-step, digest-safe flow:
 4. Repository deletion policies are evaluated.
 5. OCI subject/referrer relationships are checked.
 6. The operator supplies a reason when policy requires it.
-7. Execution repeats the preview and requires the expected digest and tag set
-   to match.
-8. Grom deletes the manifest by digest through its internal Distribution
-   credential.
+7. Execution repeats the preview and requires the expected digest, tag set, and
+   orphaned image-index child set to match.
+8. Grom deletes the manifest by digest and then each previewed child manifest
+   through its internal Distribution credential. A child is included only when
+   it is untagged and has no live reference from another index or OCI referrer.
 9. The result is persisted, inventory is updated, and the operation is audited.
 
 Deletion is blocked when a protected tag points to the digest, when the artifact
-is an OCI referrer, or when it has OCI referrers. Cascade deletion is not
-implemented.
+is an OCI referrer, or when it has OCI referrers. OCI subject/referrer cascade
+deletion is not implemented; the narrowly scoped cleanup of unreferenced
+image-index children does not cross a subject/referrer relationship.
 
 Deleting a manifest does not immediately reclaim blob storage. Installation
 administrators can run the separate Distribution garbage-collection action in
 Settings. Grom drains and blocks every public Registry write path before the
-network-isolated maintenance sidecar runs the collector, and the result records
-the reclaimed file bytes. The action is unavailable when the isolated local
-maintenance socket is unavailable.
+local maintenance supervisor stops its unmodified Distribution child process,
+runs the collector with exclusive access to local storage, measures the physical
+file bytes, and starts a fresh Distribution process. Restarting avoids stale
+blob-existence caches when an identical digest is republished after GC. The
+action is unavailable when the private maintenance socket is unavailable.
 
 ## 14. Retention lifecycle
 
@@ -483,7 +498,9 @@ Lifecycle is always manual and starts with a persisted dry-run:
 7. The operator must provide an execution reason.
 8. Each eligible digest is reconciled and re-evaluated immediately before its
    deletion.
-9. Changed, missing, or no-longer-eligible artifacts are skipped.
+9. Changed, missing, or no-longer-eligible artifacts are skipped. Unreferenced
+   image-index child manifests use the same tag, sharing, and referrer checks as
+   manual deletion.
 10. Per-item results and the completed, partially completed, or failed run are
     persisted and audited.
 
@@ -491,8 +508,8 @@ A preview can create at most one run. Repository-level execution locking
 prevents concurrent lifecycle runs. A stale interrupted run is failed before a
 later run proceeds.
 
-There is no scheduler, automatic purge, background lifecycle worker, or cascade
-deletion. Blob garbage collection remains separate.
+There is no scheduler, automatic purge, background lifecycle worker, or OCI
+subject/referrer cascade deletion. Blob garbage collection remains separate.
 
 ## 15. Audit trail
 

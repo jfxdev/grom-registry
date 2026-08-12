@@ -91,7 +91,7 @@ export const deleteArtifact = (slug: string, input: ArtifactDeletionRequest) =>
   apiRequest<ArtifactDeletion>(`/api/v1/projects/${encodeURIComponent(slug)}/artifact-deletions`, {
     method: 'POST',
     body: JSON.stringify(input),
-  })
+  }, [500])
 export const listArtifactDeletions = (slug: string, repository: string, cursor = '') =>
   apiRequest<ArtifactDeletionPage>(
     `/api/v1/projects/${encodeURIComponent(slug)}/artifact-deletions?repository=${encodeURIComponent(repository)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,

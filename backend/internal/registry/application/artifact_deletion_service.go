@@ -57,7 +57,8 @@ func (s *ArtifactDeletionService) Preview(
 	}
 
 	fullRepository := projectSlug + "/" + repository
-	if _, err := s.inventory.Reconcile(ctx, projectID, projectSlug, repository); err != nil {
+	inventory, err := s.inventory.Reconcile(ctx, projectID, projectSlug, repository)
+	if err != nil {
 		return nil, fmt.Errorf("inventory reconciliation failed: %w", err)
 	}
 	digest, exists, err := s.distribution.ResolveManifest(ctx, fullRepository, reference)
@@ -110,10 +111,12 @@ func (s *ArtifactDeletionService) Preview(
 		}
 	}
 	sort.Strings(related)
+	children := deletionChildDigests(digest, inventory)
 	return &registrydomain.ArtifactDeletionPreview{
 		Repository: repository, Digest: digest, AffectedTags: affectedTags,
 		RequiresReason: requiresReason, BlockedReasons: blockedReasons,
 		RelatedArtifacts: related,
+		ChildDigests:     children,
 	}, nil
 }
 
@@ -122,6 +125,7 @@ func (s *ArtifactDeletionService) Execute(
 	projectID foundation.ID,
 	projectSlug, repository, reference, reason, expectedDigest string,
 	expectedTags []string,
+	expectedChildDigests []string,
 	actor foundation.PrincipalRef,
 ) (*registrydomain.ArtifactDeletion, error) {
 	reason = strings.TrimSpace(reason)
@@ -137,8 +141,15 @@ func (s *ArtifactDeletionService) Execute(
 	if !equalStrings(expectedTags, preview.AffectedTags) {
 		return nil, fmt.Errorf("artifact tag aliases changed; review the deletion again")
 	}
+	if !equalStrings(expectedChildDigests, preview.ChildDigests) {
+		return nil, fmt.Errorf("artifact child manifests changed; review the deletion again")
+	}
 	if len(preview.BlockedReasons) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(preview.BlockedReasons, "; "))
+	}
+	currentInventory, err := s.inventory.List(ctx, projectID, repository)
+	if err != nil {
+		return nil, err
 	}
 	target, err := s.store.FindRepository(ctx, projectID, repository)
 	if err != nil {
@@ -169,31 +180,39 @@ func (s *ArtifactDeletionService) Execute(
 	}
 
 	fullRepository := projectSlug + "/" + repository
-	if err := s.distribution.DeleteManifest(ctx, fullRepository, deletion.Digest); err != nil {
+	deletedDigests, deleteErr := deleteManifestTree(
+		ctx, s.distribution, fullRepository, deletion.Digest, preview.ChildDigests, currentInventory,
+	)
+	if deleteErr != nil {
 		completedAt := s.now()
 		deletion.Status = constants.ArtifactDeletionFailed
-		deletion.Message = err.Error()
+		deletion.Message = deleteErr.Error()
 		deletion.CompletedAt = &completedAt
+		for _, deletedDigest := range deletedDigests {
+			_ = s.store.MarkManifestDeleted(ctx, target.ID, deletedDigest, completedAt)
+		}
 		if completeErr := s.store.CompleteArtifactDeletion(
 			ctx, deletion.ID, deletion.Status, deletion.Message, completedAt,
 		); completeErr != nil {
 			return nil, completeErr
 		}
-		s.auditDeletionFailure(ctx, actor, deletion, err, false)
-		return deletion, err
+		s.auditDeletionFailure(ctx, actor, deletion, deleteErr, len(deletedDigests) > 0)
+		return deletion, deleteErr
 	}
 
 	completedAt := s.now()
-	if err := s.store.MarkManifestDeleted(ctx, target.ID, deletion.Digest, completedAt); err != nil {
-		deletion.Status = constants.ArtifactDeletionFailed
-		deletion.Message = "manifest deleted but inventory update failed"
-		deletion.CompletedAt = &completedAt
-		_ = s.store.CompleteArtifactDeletion(ctx, deletion.ID, deletion.Status, deletion.Message, completedAt)
-		s.auditDeletionFailure(ctx, actor, deletion, err, true)
-		return deletion, err
+	for _, deletedDigest := range deletedDigests {
+		if err := s.store.MarkManifestDeleted(ctx, target.ID, deletedDigest, completedAt); err != nil {
+			deletion.Status = constants.ArtifactDeletionFailed
+			deletion.Message = "manifest deleted but inventory update failed"
+			deletion.CompletedAt = &completedAt
+			_ = s.store.CompleteArtifactDeletion(ctx, deletion.ID, deletion.Status, deletion.Message, completedAt)
+			s.auditDeletionFailure(ctx, actor, deletion, err, true)
+			return deletion, err
+		}
 	}
 	deletion.Status = constants.ArtifactDeletionCompleted
-	deletion.Message = "manifest deleted; storage is reclaimed by a later garbage collection"
+	deletion.Message = fmt.Sprintf("manifest and %d unreferenced child manifests deleted; storage is reclaimed by a later garbage collection", len(deletedDigests)-1)
 	deletion.CompletedAt = &completedAt
 	if err := s.store.CompleteArtifactDeletion(
 		ctx, deletion.ID, deletion.Status, deletion.Message, completedAt,
@@ -206,6 +225,7 @@ func (s *ArtifactDeletionService) Execute(
 			constants.AuditResourceArtifactDeletion, deletion.ID, map[string]any{
 				"repository": repository, "digest": deletion.Digest,
 				"affectedTags": deletion.AffectedTags, "reason": reason,
+				"childDigests": preview.ChildDigests,
 			})
 	}
 	return deletion, nil

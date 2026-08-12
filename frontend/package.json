@@ -16,11 +16,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@internationalized/date": "^3.12.3",
     "@lucide/vue": "^1.27.0",
     "@tanstack/vue-query": "^5.90.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "pinia": "^3.0.0",
+    "reka-ui": "^2.10.3",
     "tailwind-merge": "^3.0.0",
     "vue": "^3.5.0",
     "vue-router": "^4.6.0",

@@ -333,6 +333,7 @@ func (s *Service) CreateServiceAccountAPIToken(ctx context.Context, serviceAccou
 	if _, err := s.repository.FindServiceAccountByID(ctx, serviceAccountID); err != nil {
 		return nil, err
 	}
+	now := time.Now().UTC()
 	publicID, err := randomString(10)
 	if err != nil {
 		return nil, err
@@ -349,12 +350,14 @@ func (s *Service) CreateServiceAccountAPIToken(ctx context.Context, serviceAccou
 		ID: foundation.NewID(), PublicID: publicID, ServiceAccountID: serviceAccountID,
 		Principal: foundation.PrincipalRef{Kind: constants.PrincipalServiceAccount, ID: serviceAccountID},
 		Name:      strings.TrimSpace(name), SecretHash: hash,
-		CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt,
+		CreatedAt: now, ExpiresAt: expiresAt,
 	}
 	if token.Name == "" {
 		return nil, fmt.Errorf("token name is required")
 	}
-	if err := s.repository.CreateServiceAccountAPIToken(ctx, &token); err != nil {
+	if err := s.repository.CreateServiceAccountAPIToken(
+		ctx, &token, now, constants.MaxActiveServiceAccountAccessKeys,
+	); err != nil {
 		return nil, err
 	}
 	return &CreatedToken{Token: token, Secret: "grm_" + publicID + "_" + secret}, nil
@@ -428,6 +431,10 @@ func (s *Service) ListServiceAccountAPITokensPage(ctx context.Context, serviceAc
 		return foundation.PageResult[identity.APIToken]{}, errors.New("identity pagination is not configured")
 	}
 	return paged.ListServiceAccountAPITokensPage(ctx, serviceAccountID, request)
+}
+
+func (s *Service) CountActiveServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID) (int, error) {
+	return s.repository.CountActiveServiceAccountAPITokens(ctx, serviceAccountID, time.Now().UTC())
 }
 
 func (s *Service) RevokeServiceAccountAPIToken(ctx context.Context, serviceAccountID, tokenID foundation.ID) error {

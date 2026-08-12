@@ -4,19 +4,170 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jfxdev/grom/backend/internal/constants"
 	"github.com/jfxdev/grom/backend/internal/foundation"
+	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
 	identity "github.com/jfxdev/grom/backend/internal/identity/domain"
 	"github.com/jfxdev/grom/backend/internal/platform/database"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
 )
+
+func TestCountActiveServiceAccountAPITokens(t *testing.T) {
+	forEachIdentityRepositoryDatabase(t, func(t *testing.T, ctx context.Context, db *bun.DB) {
+		repository := New(db)
+		now := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
+		account := &identity.ServiceAccount{ID: foundation.NewID(), Name: "Count", Username: "count-" + foundation.NewID().String(), CreatedAt: now}
+		other := &identity.ServiceAccount{ID: foundation.NewID(), Name: "Other", Username: "other-" + foundation.NewID().String(), CreatedAt: now}
+		for _, candidate := range []*identity.ServiceAccount{account, other} {
+			if err := repository.CreateServiceAccount(ctx, candidate); err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.Cleanup(func() {
+			_, _ = db.NewDelete().Model((*apiTokenModel)(nil)).Where("principal_id IN (?)", bun.List([]string{account.ID.String(), other.ID.String()})).Exec(context.Background())
+			_, _ = db.NewDelete().Model((*serviceAccountModel)(nil)).Where("id IN (?)", bun.List([]string{account.ID.String(), other.ID.String()})).Exec(context.Background())
+		})
+		insert := func(principalID foundation.ID, revokedAt, expiresAt *time.Time) {
+			t.Helper()
+			_, err := db.NewInsert().Model(&apiTokenModel{
+				ID: foundation.NewID().String(), PublicID: foundation.NewID().String(),
+				PrincipalKind: constants.PrincipalServiceAccount, PrincipalID: principalID.String(),
+				Name: "key", SecretHash: "hash", CreatedAt: now, RevokedAt: revokedAt, ExpiresAt: expiresAt,
+			}).Exec(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		assertCount := func(want int) {
+			t.Helper()
+			got, err := repository.CountActiveServiceAccountAPITokens(ctx, account.ID, now)
+			if err != nil || got != want {
+				t.Fatalf("active token count = %d, %v; want %d", got, err, want)
+			}
+		}
+
+		assertCount(0)
+		insert(account.ID, nil, nil)
+		assertCount(1)
+		revoked := now.Add(-time.Minute)
+		insert(account.ID, &revoked, nil)
+		assertCount(1)
+		expired := now.Add(-time.Nanosecond)
+		insert(account.ID, nil, &expired)
+		assertCount(1)
+		insert(account.ID, nil, &now)
+		assertCount(1)
+		insert(other.ID, nil, nil)
+		assertCount(1)
+	})
+}
+
+func TestCreateServiceAccountAPITokenLimitIsAtomicAcrossServices(t *testing.T) {
+	forEachIdentityRepositoryDatabase(t, func(t *testing.T, ctx context.Context, db *bun.DB) {
+		repository := New(db)
+		now := time.Now().UTC()
+		account := &identity.ServiceAccount{ID: foundation.NewID(), Name: "Concurrent", Username: "concurrent-" + foundation.NewID().String(), CreatedAt: now}
+		if err := repository.CreateServiceAccount(ctx, account); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_, _ = db.NewDelete().Model((*apiTokenModel)(nil)).Where("principal_id = ?", account.ID.String()).Exec(context.Background())
+			_, _ = db.NewDelete().Model((*serviceAccountModel)(nil)).Where("id = ?", account.ID.String()).Exec(context.Background())
+		})
+		for index := 0; index < constants.MaxActiveServiceAccountAccessKeys-1; index++ {
+			token := &identity.APIToken{ID: foundation.NewID(), PublicID: foundation.NewID().String(), ServiceAccountID: account.ID, Name: "existing", SecretHash: "hash", CreatedAt: now}
+			if err := repository.CreateServiceAccountAPIToken(ctx, token, now, constants.MaxActiveServiceAccountAccessKeys); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		barrier := &tokenCreateBarrierRepository{Repository: repository, ready: new(sync.WaitGroup), release: make(chan struct{})}
+		barrier.ready.Add(2)
+		services := []*identityapp.Service{identityapp.New(barrier, time.Hour), identityapp.New(barrier, time.Hour)}
+		results := make(chan error, len(services))
+		for index, service := range services {
+			go func(index int, service *identityapp.Service) {
+				_, err := service.CreateServiceAccountAPIToken(ctx, account.ID, fmt.Sprintf("candidate-%d", index), nil)
+				results <- err
+			}(index, service)
+		}
+		barrier.ready.Wait()
+		close(barrier.release)
+
+		var created, limited int
+		for range services {
+			err := <-results
+			switch {
+			case err == nil:
+				created++
+			case errors.Is(err, identity.ErrServiceAccountAccessKeyLimit):
+				limited++
+			default:
+				t.Fatalf("unexpected concurrent token creation error: %v", err)
+			}
+		}
+		if created != 1 || limited != 1 {
+			t.Fatalf("concurrent token results created=%d limited=%d, want 1/1", created, limited)
+		}
+		count, err := repository.CountActiveServiceAccountAPITokens(ctx, account.ID, time.Now().UTC())
+		if err != nil || count != constants.MaxActiveServiceAccountAccessKeys {
+			t.Fatalf("active token count = %d, %v", count, err)
+		}
+	})
+}
+
+type tokenCreateBarrierRepository struct {
+	identity.Repository
+	ready   *sync.WaitGroup
+	release chan struct{}
+}
+
+func (r *tokenCreateBarrierRepository) CreateServiceAccountAPIToken(ctx context.Context, token *identity.APIToken, now time.Time, maxActive int) error {
+	r.ready.Done()
+	<-r.release
+	return r.Repository.CreateServiceAccountAPIToken(ctx, token, now, maxActive)
+}
+
+func forEachIdentityRepositoryDatabase(t *testing.T, run func(*testing.T, context.Context, *bun.DB)) {
+	t.Helper()
+	ctx := context.Background()
+	t.Run("sqlite", func(t *testing.T) {
+		db, kind, err := database.Open(ctx, "sqlite://"+filepath.Join(t.TempDir(), "identity.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if err := database.Migrate(ctx, db, kind, 5*time.Second, slog.Default()); err != nil {
+			t.Fatal(err)
+		}
+		run(t, ctx, db)
+	})
+	t.Run("postgres", func(t *testing.T) {
+		databaseURL := os.Getenv("GROM_TEST_POSTGRES_URL")
+		if databaseURL == "" {
+			t.Skip("GROM_TEST_POSTGRES_URL is not configured")
+		}
+		db, kind, err := database.Open(ctx, databaseURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if err := database.Migrate(ctx, db, kind, 5*time.Second, slog.Default()); err != nil {
+			t.Fatal(err)
+		}
+		run(t, ctx, db)
+	})
+}
 
 func TestListServiceAccountsCanIncludeDisabledAccounts(t *testing.T) {
 	ctx := context.Background()

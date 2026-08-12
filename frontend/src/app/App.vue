@@ -37,17 +37,33 @@ const currentSection = computed(() => {
     return 'Project'
   }
 
-  return visibleNavigation.value.find((item) => item.to === route.path)?.label ?? 'Overview'
+  return visibleNavigationSections.value.flatMap((section) => section.items).find((item) => item.to === route.path)?.label ?? 'Overview'
 })
 
-const navigation = [
-  { label: 'Projects', to: ROUTES.projects, icon: Boxes, adminOnly: false },
-  { label: 'Users', to: ROUTES.users, icon: Users, adminOnly: true },
-  { label: 'Service accounts', to: ROUTES.serviceAccounts, icon: ShieldCheck, adminOnly: false },
-  { label: 'Backup & recovery', to: ROUTES.backups, icon: DatabaseBackup, adminOnly: true },
-  { label: 'Settings', to: ROUTES.settings, icon: Settings, adminOnly: true },
+const navigationSections = [
+  {
+    label: 'Access',
+    items: [
+      { label: 'Users', to: ROUTES.users, icon: Users, adminOnly: true },
+      { label: 'Service accounts', to: ROUTES.serviceAccounts, icon: ShieldCheck, adminOnly: false },
+    ],
+  },
+  {
+    label: 'Management',
+    items: [
+      { label: 'Backup & recovery', to: ROUTES.backups, icon: DatabaseBackup, adminOnly: true },
+      { label: 'Settings', to: ROUTES.settings, icon: Settings, adminOnly: true },
+    ],
+  },
 ]
-const visibleNavigation = computed(() => navigation.filter((item) => !item.adminOnly || session.user?.systemAdmin))
+const visibleNavigationSections = computed(() =>
+  navigationSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !item.adminOnly || session.user?.systemAdmin),
+    }))
+    .filter((section) => section.items.length > 0),
+)
 
 async function signOut() {
 	closeAccountMenu()
@@ -180,19 +196,21 @@ onBeforeUnmount(() => {
         </div>
 
         <nav class="sidebar-navigation">
-          <p class="nav-section-label">Platform</p>
-          <RouterLink
-            v-for="item in visibleNavigation"
-            :key="item.to"
-            :to="item.to"
-            class="nav-link"
-            :class="{ active: route.path === item.to || (item.to === ROUTES.projects && route.path.startsWith(`${ROUTES.projects}/`)) }"
-            @click="closeMenu"
-          >
-            <component :is="item.icon" :size="16" />
-            <span>{{ item.label }}</span>
-            <ChevronRight class="ml-auto nav-chevron" :size="14" />
-          </RouterLink>
+          <section v-for="section in visibleNavigationSections" :key="section.label" class="nav-section">
+            <p class="nav-section-label">{{ section.label }}</p>
+            <RouterLink
+              v-for="item in section.items"
+              :key="item.to"
+              :to="item.to"
+              class="nav-link"
+              :class="{ active: route.path === item.to }"
+              @click="closeMenu"
+            >
+              <component :is="item.icon" :size="16" />
+              <span>{{ item.label }}</span>
+              <ChevronRight class="ml-auto nav-chevron" :size="14" />
+            </RouterLink>
+          </section>
         </nav>
       </div>
     </aside>

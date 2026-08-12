@@ -182,14 +182,16 @@ function confirmDisable() {
           <ServiceAccountKeysPanel v-if="!account.disabledAt && selectedAccountId === account.id" :account="account" />
         </div>
       </template>
-      <PaginationControls
-        :page="pagination.page.value"
-        :has-previous="pagination.hasPrevious.value"
-        :has-next="Boolean(accounts.data.value?.nextCursor)"
-        :disabled="accounts.isFetching.value"
-        @previous="pagination.previous()"
-        @next="pagination.next(accounts.data.value?.nextCursor)"
-      />
+      <div class="list-pagination">
+        <PaginationControls
+          :page="pagination.page.value"
+          :has-previous="pagination.hasPrevious.value"
+          :has-next="Boolean(accounts.data.value?.nextCursor)"
+          :disabled="accounts.isFetching.value"
+          @previous="pagination.previous()"
+          @next="pagination.next(accounts.data.value?.nextCursor)"
+        />
+      </div>
     </div>
 
     <div v-if="modalOpen" class="modal-backdrop" @click.self="modalOpen = false">
@@ -318,6 +320,10 @@ function confirmDisable() {
   min-height: 16rem;
   border: 0;
   border-radius: 0;
+}
+
+.list-pagination {
+  border-top: 1px solid var(--border);
 }
 
 .account-item {

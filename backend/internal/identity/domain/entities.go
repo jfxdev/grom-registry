@@ -9,6 +9,7 @@ import (
 
 var (
 	ErrViewerRegistryTokenAlreadyExists = errors.New("an active viewer registry token already exists")
+	ErrServiceAccountAccessKeyLimit     = errors.New("a service account can have at most three active access keys")
 	ErrUsernameAlreadyExists            = errors.New("username is already in use")
 	ErrEmailAlreadyExists               = errors.New("email is already in use")
 )

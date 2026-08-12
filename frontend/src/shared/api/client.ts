@@ -9,7 +9,7 @@ export class APIError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiRequest<T>(path: string, init: RequestInit = {}, acceptedStatuses: readonly number[] = []): Promise<T> {
   const headers = new Headers(init.headers)
   if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
@@ -19,7 +19,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     headers,
     credentials: 'same-origin',
   })
-  if (!response.ok) {
+  if (!response.ok && !acceptedStatuses.includes(response.status)) {
     const body = await response.json().catch(() => ({
       code: 'request_failed',
       message: `Request failed with status ${response.status}`,
