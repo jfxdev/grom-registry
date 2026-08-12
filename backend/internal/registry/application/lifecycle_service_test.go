@@ -342,8 +342,8 @@ func TestLifecycleExecutionReconcilesOnceAndRevalidatesEachCandidate(t *testing.
 	if distribution.listTagsCalls != 1 {
 		t.Fatalf("expected one repository reconciliation, got %d", distribution.listTagsCalls)
 	}
-	if distribution.resolveCalls != 4 {
-		t.Fatalf("expected digest and tag revalidation per item, got %d calls", distribution.resolveCalls)
+	if distribution.resolveCalls != 6 {
+		t.Fatalf("expected reconciliation, candidate revalidation, and immediate pre-delete checks, got %d calls", distribution.resolveCalls)
 	}
 	if distribution.referrerCalls != 4 {
 		t.Fatalf("expected reconciliation and immediate referrer checks, got %d calls", distribution.referrerCalls)

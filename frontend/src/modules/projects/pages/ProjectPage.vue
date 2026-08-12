@@ -15,6 +15,7 @@ import type {
   LifecyclePreview,
   LifecycleRun,
   ManifestInventory,
+  ManifestPlatform,
   PrincipalKind,
   ProjectRole,
   Repository,
@@ -111,6 +112,13 @@ const accounts = useQuery({ queryKey: serviceAccountKeys.list(), queryFn: () => 
 const canManage = computed(() =>
   session.user?.systemViewer !== true && project.data.value?.canManage === true,
 )
+
+async function handleRepositoryCreated() {
+  repositoryModal.value = false
+  repositoryPagination.reset()
+  await repositories.refetch()
+}
+
 const users = useQuery({ queryKey: userKeys.all, queryFn: () => listUsers(), enabled: computed(() => canManage.value) })
 const routedRepository = useQuery({
   queryKey: computed(() => [...projectKeys.repositories(slug.value), repositoryId.value]),
@@ -121,6 +129,8 @@ const tags = useQuery({
   queryKey: computed(() => [...projectKeys.tags(slug.value, selectedRepository.value?.name ?? ''), tagPagination.cursor.value]),
   queryFn: () => listTags(slug.value, selectedRepository.value!.name, tagPagination.cursor.value),
   enabled: computed(() => selectedRepository.value !== null),
+  refetchInterval: 5_000,
+  refetchOnWindowFocus: true,
 })
 const artifactDeletionHistory = useQuery({
   queryKey: computed(() => [...projectKeys.artifactDeletions(slug.value, selectedRepository.value?.name ?? ''), deletionPagination.cursor.value]),
@@ -136,7 +146,16 @@ const inventory = useQuery({
   queryKey: computed(() => [...registryKeys.inventory(slug.value, selectedRepository.value?.name ?? ''), inventoryPagination.cursor.value]),
   queryFn: () => listInventory(slug.value, selectedRepository.value!.name, inventoryPagination.cursor.value),
   enabled: computed(() => selectedRepository.value !== null),
+  refetchInterval: 5_000,
+  refetchOnWindowFocus: true,
 })
+
+const currentInventoryItems = computed(() =>
+  pageItems(inventory.data.value).filter((manifest) => manifest.state === 'active' || manifest.state === 'untagged'),
+)
+const historicalInventoryItems = computed(() =>
+  pageItems(inventory.data.value).filter((manifest) => manifest.state === 'missing' || manifest.state === 'deleted'),
+)
 
 watch([repositoryId, () => repositories.data.value, () => routedRepository.data.value], ([id, page, routed]) => {
   if (!id) {
@@ -243,11 +262,13 @@ const confirmDeletion = useMutation({
     reason: deletionReason.value,
     expectedDigest: deletionPreview.value!.digest,
     expectedTags: deletionPreview.value!.affectedTags,
+    expectedChildDigests: deletionPreview.value!.childDigests,
   }),
   onSuccess: async (deletion) => {
     const repository = deletion.repository
     await queryClient.invalidateQueries({ queryKey: projectKeys.tags(slug.value, repository) })
     await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
+    await queryClient.invalidateQueries({ queryKey: registryKeys.inventory(slug.value, repository) })
     await queryClient.invalidateQueries({
       queryKey: projectKeys.artifactDeletions(slug.value, repository),
     })
@@ -319,6 +340,44 @@ async function copyCommand(command: string, key: string) {
 
 function pullCommand(repository: string, tag = 'latest') {
   return `docker pull ${window.location.host}/${slug.value}/${repository}:${tag}`
+}
+
+function manifestTags(manifest: ManifestInventory) {
+  return manifest.tags ?? []
+}
+
+function manifestStateLabel(state: ManifestInventory['state']) {
+  if (state === 'active') return 'Active'
+  if (state === 'untagged') return 'Live, untagged'
+  if (state === 'missing') return 'Missing from Distribution'
+  return 'Deleted'
+}
+
+function manifestStateTone(state: ManifestInventory['state']): 'neutral' | 'success' | 'warning' | 'danger' {
+  if (state === 'active') return 'success'
+  if (state === 'untagged') return 'warning'
+  if (state === 'missing') return 'danger'
+  return 'neutral'
+}
+
+function manifestPresence(manifest: ManifestInventory) {
+  return manifestTags(manifest).length ? manifestTags(manifest).join(', ') : manifestStateLabel(manifest.state)
+}
+
+function manifestForTag(tag: string) {
+  return pageItems(inventory.data.value).find((manifest) => manifestTags(manifest).includes(tag))
+}
+
+function platformsForTag(tag: string): ManifestPlatform[] {
+  return manifestForTag(tag)?.platforms ?? []
+}
+
+function formatCompressedSize(bytes: number | undefined) {
+  if (bytes === undefined || bytes <= 0) return '—'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / (1024 ** index)
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: index === 0 ? 0 : 2 })} ${units[index]}`
 }
 
 function editMember(kind: PrincipalKind, id: string, role: ProjectRole) {
@@ -568,23 +627,51 @@ function profileLabel(profile: Repository['profile']) {
         </div>
       </div>
       <div v-if="!pageItems(tags.data.value).length" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No tags available.</div>
-      <div v-else class="space-y-2">
-        <Card v-for="tag in pageItems(tags.data.value)" :key="tag" class="flex items-center justify-between p-3">
-          <code class="text-sm text-accent">{{ tag }}</code>
-          <div class="flex gap-1">
-            <Button variant="ghost" size="sm" @click="copyCommand(pullCommand(selectedRepository!.name, tag), `pull:${tag}`)">
-              <Check v-if="copied === `pull:${tag}`" :size="14" /><Clipboard v-else :size="14" /> Copy pull
-            </Button>
-            <Button
-              v-if="canManage"
-              variant="ghost"
-              size="icon"
-              :aria-label="`Delete ${tag}`"
-              :disabled="previewDeletion.isPending.value"
-              @click="requestArtifactDeletionPreview($event, tag)"
-            >
-              <Trash2 :size="15" />
-            </Button>
+      <div v-else class="space-y-3">
+        <Card v-for="tag in pageItems(tags.data.value)" :key="tag" class="overflow-hidden">
+          <div class="flex items-start justify-between gap-3 border-b px-4 py-3">
+            <div>
+              <p class="eyebrow">Tag</p>
+              <code class="mt-1 block text-base font-semibold text-accent">{{ tag }}</code>
+            </div>
+            <div class="flex shrink-0 gap-1">
+              <Button variant="ghost" size="sm" @click="copyCommand(pullCommand(selectedRepository!.name, tag), `pull:${tag}`)">
+                <Check v-if="copied === `pull:${tag}`" :size="14" /><Clipboard v-else :size="14" /> Copy pull
+              </Button>
+              <Button
+                v-if="canManage"
+                variant="ghost"
+                size="icon"
+                :aria-label="`Delete ${tag}`"
+                :disabled="previewDeletion.isPending.value"
+                @click="requestArtifactDeletionPreview($event, tag)"
+              >
+                <Trash2 :size="15" />
+              </Button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[580px] text-sm">
+              <thead class="border-b text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th class="px-4 py-3">Digest</th>
+                  <th class="px-4 py-3">OS/ARCH</th>
+                  <th class="px-4 py-3 text-right">Compressed size</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="platform in platformsForTag(tag)" :key="`${platform.os}/${platform.architecture}/${platform.variant}`" class="border-b last:border-0">
+                  <td class="px-4 py-3"><code class="text-xs text-accent">{{ platform.digest || manifestForTag(tag)?.digest || '—' }}</code></td>
+                  <td class="px-4 py-3 text-muted-foreground">{{ platform.os }}/{{ platform.architecture }}{{ platform.variant ? `/${platform.variant}` : '' }}</td>
+                  <td class="px-4 py-3 text-right tabular-nums">{{ formatCompressedSize(platform.compressedSize) }}</td>
+                </tr>
+                <tr v-if="!platformsForTag(tag).length">
+                  <td class="px-4 py-3"><code class="text-xs text-accent">{{ manifestForTag(tag)?.digest ?? '—' }}</code></td>
+                  <td class="px-4 py-3 text-muted-foreground">—</td>
+                  <td class="px-4 py-3 text-right tabular-nums">—</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </Card>
       </div>
@@ -601,10 +688,20 @@ function profileLabel(profile: Repository['profile']) {
         <h3 class="text-sm font-semibold">Manifest inventory</h3>
         <p v-if="inventory.isLoading.value" class="text-xs text-muted-foreground">Loading manifest inventory…</p>
         <p v-else-if="!pageItems(inventory.data.value).length" class="text-xs text-muted-foreground">No observed manifests yet.</p>
-        <Card v-for="manifest in pageItems(inventory.data.value)" :key="manifest.id" class="cursor-pointer p-3" role="button" tabindex="0" @click="selectedManifest = manifest" @keydown.enter="selectedManifest = manifest">
-          <div class="flex items-center justify-between gap-3"><code class="truncate text-xs">{{ manifest.digest }}</code><Badge>{{ manifest.observedKind.replaceAll('_', ' ') }}</Badge></div>
-          <p class="mt-1 text-xs text-muted-foreground">{{ manifest.tags.length ? manifest.tags.join(', ') : 'Untagged' }} · {{ manifest.manifestSize.toLocaleString() }} bytes</p>
-        </Card>
+        <template v-if="currentInventoryItems.length">
+          <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current in Distribution</p>
+          <Card v-for="manifest in currentInventoryItems" :key="manifest.id" class="cursor-pointer p-3" role="button" tabindex="0" @click="selectedManifest = manifest" @keydown.enter="selectedManifest = manifest">
+            <div class="flex items-center justify-between gap-3"><code class="truncate text-xs">{{ manifest.digest }}</code><div class="flex gap-1"><Badge>{{ manifest.observedKind.replaceAll('_', ' ') }}</Badge><Badge :tone="manifestStateTone(manifest.state)">{{ manifestStateLabel(manifest.state) }}</Badge></div></div>
+            <p class="mt-1 text-xs text-muted-foreground">{{ manifestPresence(manifest) }} · {{ formatCompressedSize(manifest.manifestSize) }} manifest metadata</p>
+          </Card>
+        </template>
+        <template v-if="historicalInventoryItems.length">
+          <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">History</p>
+          <Card v-for="manifest in historicalInventoryItems" :key="manifest.id" class="cursor-pointer border-dashed p-3" role="button" tabindex="0" @click="selectedManifest = manifest" @keydown.enter="selectedManifest = manifest">
+            <div class="flex items-center justify-between gap-3"><code class="truncate text-xs">{{ manifest.digest }}</code><Badge :tone="manifestStateTone(manifest.state)">{{ manifestStateLabel(manifest.state) }}</Badge></div>
+            <p class="mt-1 text-xs text-muted-foreground">Historical record · {{ formatCompressedSize(manifest.manifestSize) }} manifest metadata</p>
+          </Card>
+        </template>
         <PaginationControls
           :page="inventoryPagination.page.value"
           :has-previous="inventoryPagination.hasPrevious.value"
@@ -673,8 +770,8 @@ function profileLabel(profile: Repository['profile']) {
       <section class="modal form-stack" aria-labelledby="manifest-details-title">
         <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Manifest</p><h2 id="manifest-details-title" class="text-lg font-semibold">Manifest details</h2></div><Button variant="ghost" size="icon" aria-label="Close manifest details" @click="selectedManifest = null"><X :size="18" /></Button></div>
         <div><p class="text-xs text-muted-foreground">Digest</p><code class="mt-1 block break-all text-xs">{{ selectedManifest.digest }}</code></div>
-        <div class="grid grid-cols-2 gap-3 text-sm"><div><p class="text-xs text-muted-foreground">Media type</p><p class="break-all">{{ selectedManifest.mediaType || 'Unknown' }}</p></div><div><p class="text-xs text-muted-foreground">Size</p><p>{{ selectedManifest.manifestSize.toLocaleString() }} bytes</p></div><div><p class="text-xs text-muted-foreground">Observed</p><p>{{ new Date(selectedManifest.firstSeenAt).toLocaleString() }}</p></div><div><p class="text-xs text-muted-foreground">Last seen</p><p>{{ new Date(selectedManifest.lastSeenAt).toLocaleString() }}</p></div></div>
-        <div><p class="text-xs text-muted-foreground">Tags</p><div class="mt-1 flex flex-wrap gap-1"><Badge v-for="tag in selectedManifest.tags" :key="tag">{{ tag }}</Badge><span v-if="!selectedManifest.tags.length" class="text-sm">Untagged</span></div></div>
+        <div class="grid grid-cols-2 gap-3 text-sm"><div><p class="text-xs text-muted-foreground">Media type</p><p class="break-all">{{ selectedManifest.mediaType || 'Unknown' }}</p></div><div><p class="text-xs text-muted-foreground">Manifest metadata</p><p>{{ formatCompressedSize(selectedManifest.manifestSize) }}</p></div><div><p class="text-xs text-muted-foreground">State</p><Badge :tone="manifestStateTone(selectedManifest.state)">{{ manifestStateLabel(selectedManifest.state) }}</Badge></div><div><p class="text-xs text-muted-foreground">Observed</p><p>{{ new Date(selectedManifest.firstSeenAt).toLocaleString() }}</p></div><div><p class="text-xs text-muted-foreground">Last seen</p><p>{{ new Date(selectedManifest.lastSeenAt).toLocaleString() }}</p></div></div>
+        <div><p class="text-xs text-muted-foreground">Tags</p><div class="mt-1 flex flex-wrap gap-1"><Badge v-for="tag in manifestTags(selectedManifest)" :key="tag">{{ tag }}</Badge><span v-if="!manifestTags(selectedManifest).length" class="text-sm">{{ manifestStateLabel(selectedManifest.state) }}</span></div></div>
         <div class="grid grid-cols-2 gap-3 text-sm"><div><p class="text-xs text-muted-foreground">Classification</p><p>{{ selectedManifest.observedKind.replaceAll('_', ' ') }} · {{ selectedManifest.classificationConfidence }}</p></div><div><p class="text-xs text-muted-foreground">OCI relationship</p><p>{{ selectedManifest.artifactRelationship }}</p></div></div>
         <div v-if="selectedManifest.subjectDigest"><p class="text-xs text-muted-foreground">Subject digest</p><code class="mt-1 block break-all text-xs">{{ selectedManifest.subjectDigest }}</code></div>
       </section>
@@ -693,7 +790,7 @@ function profileLabel(profile: Repository['profile']) {
       v-if="repositoryModal"
       :project="slug"
       @close="repositoryModal = false"
-      @created="repositoryModal = false"
+      @created="handleRepositoryCreated"
     />
 
     <Dialog v-if="deletionPreview" labelled-by="delete-artifact-title" :restore-focus="deletionTrigger" @close="deletionPreview = null">
@@ -728,6 +825,11 @@ function profileLabel(profile: Repository['profile']) {
             <Badge v-for="tag in deletionPreview.affectedTags" :key="tag">{{ tag }}</Badge>
             <span v-if="!deletionPreview.affectedTags.length" class="text-xs text-muted-foreground">Untagged manifest</span>
           </div>
+        </div>
+        <div v-if="deletionPreview.childDigests.length">
+          <p class="text-xs text-muted-foreground">Unreferenced platform manifests</p>
+          <p class="mt-1 text-xs text-muted-foreground">These child manifests belong only to this image index and will be removed with it.</p>
+          <code v-for="digest in deletionPreview.childDigests" :key="digest" class="mt-1 block break-all text-xs">{{ digest }}</code>
         </div>
         <label class="field-label">
           Reason <span v-if="deletionPreview.requiresReason">(required by policy)</span>

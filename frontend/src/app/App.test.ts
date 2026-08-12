@@ -98,4 +98,33 @@ describe('App deployment warning', () => {
     expect(mocks.session.signOut).toHaveBeenCalledOnce()
     expect(mocks.router.push).toHaveBeenCalledWith('/signin')
   })
+
+  it('groups navigation links by access and management without a projects link', async () => {
+    mocks.getDeployment.mockResolvedValue({ profile: 'strict', insecureHttp: false })
+    mocks.route.meta.public = false
+    mocks.route.path = '/backups'
+    mocks.session.user = { username: 'Avery', email: 'avery@example.test', systemAdmin: true }
+
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          RouterView: { template: '<main>Backup</main>' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+    await flushPromises()
+
+    const sections = wrapper.findAll('.nav-section')
+    expect(sections).toHaveLength(2)
+    const accessSection = sections[0]!
+    const managementSection = sections[1]!
+    expect(accessSection.text()).toContain('Access')
+    expect(accessSection.text()).toContain('Users')
+    expect(accessSection.text()).toContain('Service accounts')
+    expect(managementSection.text()).toContain('Management')
+    expect(managementSection.text()).toContain('Backup & recovery')
+    expect(managementSection.text()).toContain('Settings')
+    expect(wrapper.find('.sidebar-navigation').text()).not.toContain('Projects')
+  })
 })

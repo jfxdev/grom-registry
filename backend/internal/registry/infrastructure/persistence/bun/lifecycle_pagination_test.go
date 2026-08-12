@@ -66,6 +66,40 @@ func TestRegistryHistoryKeysetPages(t *testing.T) {
 	}, "runs:"+repositoryID.String())
 }
 
+func TestListManifestInventoryPageUsesEmptyTagsArrayForUntaggedManifest(t *testing.T) {
+	ctx := context.Background()
+	db, kind, err := database.Open(ctx, "sqlite://file:untagged-inventory-test?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := database.Migrate(ctx, db, kind, time.Second, slog.Default()); err != nil {
+		t.Fatal(err)
+	}
+	store := New(db)
+	repositoryID, projectID := foundation.NewID(), foundation.NewID()
+	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
+	if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", projectID.String(), "untagged", "Untagged", "test", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual, Profile: constants.RepositoryProfileUnknown, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:untagged", Tag: "latest"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkManifestDeleted(ctx, repositoryID, "sha256:untagged", now); err != nil {
+		t.Fatal(err)
+	}
+	page, err := store.ListManifestInventoryPage(ctx, repositoryID, foundation.PageRequest{Limit: 20, Scope: "inventory:untagged"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Tags == nil || len(page.Items[0].Tags) != 0 {
+		t.Fatalf("untagged manifest must expose an empty tags array: %#v", page.Items)
+	}
+}
+
 func assertKeysetPage(t *testing.T, list func(foundation.PageRequest) ([]string, string, error), scope string) {
 	t.Helper()
 	expected, _, err := list(foundation.PageRequest{Limit: 10, Scope: scope})

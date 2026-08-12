@@ -3,10 +3,14 @@ import { APIError } from '@/shared/api/client'
 import type { ServiceAccount } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import { Calendar } from '@/shared/components/ui/calendar'
+import { Dialog } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
-import { PaginationControls } from '@/shared/components/ui/pagination'
+import { MAX_ACTIVE_SERVICE_ACCOUNT_ACCESS_KEYS } from '@/shared/constants'
 import { writeClipboardText } from '@/shared/lib/clipboard'
-import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
+import { pageItems } from '@/shared/lib/pagination'
+import type { DateValue } from '@internationalized/date'
+import { getLocalTimeZone, today } from '@internationalized/date'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Check, Copy, KeyRound, Plus, ShieldAlert, Trash2, X } from '@lucide/vue'
 import { computed, onUnmounted, ref } from 'vue'
@@ -19,40 +23,54 @@ import {
 
 const props = defineProps<{ account: ServiceAccount }>()
 const queryClient = useQueryClient()
-const pagination = useCursorPagination()
 const keys = useQuery({
-	queryKey: computed(() => [...serviceAccountKeys.tokens(props.account.id), pagination.cursor.value]),
-  queryFn: () => listServiceAccountTokens(props.account.id, pagination.cursor.value),
+  queryKey: computed(() => serviceAccountKeys.tokens(props.account.id)),
+  queryFn: () => listServiceAccountTokens(props.account.id),
 })
-const formOpen = ref(false)
+const keyDialogOpen = ref(false)
+const keyDialogTrigger = ref<globalThis.HTMLElement | null>(null)
 const name = ref('')
-const expiresAt = ref('')
+const expiresAt = ref<DateValue>()
 const error = ref('')
 const revealedSecret = ref('')
 const copied = ref(false)
 const copyError = ref('')
 const currentTime = ref(Date.now())
 const currentTimeTimer = window.setInterval(() => { currentTime.value = Date.now() }, 60_000)
+const activeKeyCount = computed(() => pageItems(keys.data.value).filter((token) =>
+  !token.revokedAt && (!token.expiresAt || new Date(token.expiresAt).getTime() > currentTime.value),
+).length)
+const canCreateKey = computed(() => activeKeyCount.value < MAX_ACTIVE_SERVICE_ACCOUNT_ACCESS_KEYS)
+const calendarPlaceholder = today(getLocalTimeZone())
 
 onUnmounted(() => window.clearInterval(currentTimeTimer))
 
 const create = useMutation({
   mutationFn: () => createServiceAccountToken(props.account.id, {
     name: name.value,
-    expiresAt: expiresAt.value ? new Date(expiresAt.value).toISOString() : null,
+    expiresAt: expiresAt.value ? new Date(expiresAt.value.year, expiresAt.value.month - 1, expiresAt.value.day, 23, 59, 59, 999).toISOString() : null,
   }),
   onSuccess: async (created) => {
     revealedSecret.value = created.secret
-    name.value = ''
-    expiresAt.value = ''
-    formOpen.value = false
-    error.value = ''
+    closeKeyDialog()
     await queryClient.invalidateQueries({ queryKey: serviceAccountKeys.tokens(props.account.id) })
   },
   onError: (caught) => {
     error.value = caught instanceof APIError ? caught.message : 'Could not create the access key'
   },
 })
+
+function openKeyDialog(event: globalThis.MouseEvent) {
+  keyDialogTrigger.value = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
+  keyDialogOpen.value = true
+}
+
+function closeKeyDialog() {
+  keyDialogOpen.value = false
+  name.value = ''
+  expiresAt.value = undefined
+  error.value = ''
+}
 
 const revoke = useMutation({
   mutationFn: (tokenId: string) => revokeServiceAccountToken(props.account.id, tokenId),
@@ -91,24 +109,8 @@ function closeSecret() {
         <h3 class="text-sm font-semibold">Access keys</h3>
         <p class="mt-1 text-xs text-muted-foreground">Use <strong>{{ account.username }}</strong> as the Docker username and a key as the password.</p>
       </div>
-      <Button v-if="!formOpen" size="sm" @click="formOpen = true"><Plus :size="15" /> New key</Button>
+      <Button size="sm" :disabled="!canCreateKey" @click="openKeyDialog($event)"><Plus :size="15" /> New key</Button>
     </div>
-
-    <form v-if="formOpen" class="key-form" @submit.prevent="create.mutate()">
-      <label class="field-label">
-        Key name
-        <Input v-model="name" required autofocus placeholder="Production pipeline" />
-      </label>
-      <label class="field-label">
-        Expiration <span class="text-muted-foreground">(optional)</span>
-        <Input v-model="expiresAt" type="datetime-local" />
-      </label>
-      <p v-if="error" class="error-text">{{ error }}</p>
-      <div class="flex justify-end gap-2">
-        <Button type="button" variant="ghost" size="sm" @click="formOpen = false">Cancel</Button>
-        <Button type="submit" size="sm" :disabled="create.isPending.value">Create key</Button>
-      </div>
-    </form>
 
     <div v-if="revealedSecret" class="secret-reveal">
       <div class="reveal-copy">
@@ -159,14 +161,38 @@ function closeSecret() {
         </div>
       </div>
     </div>
-    <PaginationControls
-      :page="pagination.page.value"
-      :has-previous="pagination.hasPrevious.value"
-      :has-next="Boolean(keys.data.value?.nextCursor)"
-      :disabled="keys.isFetching.value"
-      @previous="pagination.previous()"
-      @next="pagination.next(keys.data.value?.nextCursor)"
-    />
+
+    <Dialog
+      v-if="keyDialogOpen"
+      labelled-by="create-access-key-title"
+      :restore-focus="keyDialogTrigger"
+      @close="closeKeyDialog"
+    >
+      <form class="modal form-stack" aria-labelledby="create-access-key-title" @submit.prevent="create.mutate()">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="eyebrow">Service account</p>
+            <h2 id="create-access-key-title" class="text-lg font-semibold">Create access key</h2>
+            <p class="mt-1 text-sm text-muted-foreground">The complete key is shown only once after creation.</p>
+          </div>
+          <Button variant="ghost" size="icon" type="button" aria-label="Close create access key" @click="closeKeyDialog"><X :size="18" /></Button>
+        </div>
+        <label class="field-label">
+          Key name
+          <Input v-model="name" required autofocus placeholder="Production pipeline" />
+        </label>
+        <div class="field-label key-expiration-field">
+          <span>Expiration <span class="text-muted-foreground">(optional)</span></span>
+          <Calendar v-model="expiresAt" :default-placeholder="calendarPlaceholder" :min-value="calendarPlaceholder" />
+          <Button v-if="expiresAt" type="button" variant="ghost" size="sm" class="justify-self-start" @click="expiresAt = undefined">Clear expiration</Button>
+        </div>
+        <p v-if="error" class="error-text" role="alert">{{ error }}</p>
+        <div class="flex justify-end gap-2">
+          <Button type="button" variant="ghost" @click="closeKeyDialog">Cancel</Button>
+          <Button type="submit" :disabled="create.isPending.value">Create key</Button>
+        </div>
+      </form>
+    </Dialog>
   </section>
 </template>
 
@@ -193,7 +219,6 @@ function closeSecret() {
   gap: 1rem;
 }
 
-.key-form,
 .secret-reveal {
   margin-top: 1rem;
   border: 1px solid var(--border);
@@ -201,10 +226,7 @@ function closeSecret() {
   padding: 1rem;
 }
 
-.key-form {
-  display: grid;
-  gap: 0.8rem;
-}
+.key-expiration-field { display: grid; gap: .55rem; }
 
 .secret-reveal {
   border-color: color-mix(in srgb, var(--warning) 38%, transparent);

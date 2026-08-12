@@ -39,7 +39,8 @@ web interface for access, images, and recovery.
 - Reader, Writer, and Admin roles.
 - Service accounts with reveal-once, revocable access keys.
 - Web management for users, projects, repositories, and policies.
-- Repository inventory, deletion previews, and manual retention runs.
+- Live-versus-historical repository inventory, safe image-index deletion
+  previews, and manual retention runs.
 - Built-in backup and loopback-only recovery.
 
 ### How access works
@@ -134,13 +135,19 @@ make dev-postgres
 # Build and run the regular quality gate
 make build
 make test
+
+# Build and push the image configured by GROM_IMAGE in .env
+make image-publish-local
 ```
+
+For a local registry, set `GROM_IMAGE` in `.env` to its full image name, for
+example `localhost:5000/grom-registry:local`.
 
 ### Acceptance commands
 
 | Command | Coverage |
 |---|---|
-| `make test-registry-e2e` | Public Docker authorization, push/pull, policies, and inventory. |
+| `make test-registry-e2e` | Public Docker authorization, push/pull, policies, inventory, GC, and tag republishing. |
 | `make test-admin-e2e` | Browser-based administrator and first-push flows. |
 | `make test-boot-acceptance` | Boot, migrations, readiness, and API docs. |
 | `make test-backup-restore-e2e` | SQLite backup and recovery. |

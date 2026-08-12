@@ -20,6 +20,8 @@ type ManifestMetadata struct {
 	ConfigMediaType      string
 	LayerMediaTypes      []string
 	DescriptorMediaTypes []string
+	Platforms            []registrydomain.ManifestPlatform
+	Children             []ManifestMetadata
 }
 
 type ManifestDescriptor struct {
@@ -85,6 +87,7 @@ func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, refe
 	observation := registrydomain.ManifestObservation{
 		Digest: metadata.Digest, MediaType: metadata.MediaType, ArtifactType: metadata.ArtifactType,
 		SubjectDigest: metadata.SubjectDigest, ManifestSize: metadata.ManifestSize,
+		Platforms:    metadata.Platforms,
 		ObservedKind: classification.Kind, ArtifactRelationship: classification.Relationship,
 		ClassificationSource: classification.Source, ClassificationConfidence: classification.Confidence,
 	}
@@ -92,7 +95,7 @@ func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, refe
 		observation.Tag = reference
 		observation.PushedAt = &now
 	}
-	if err := s.store.UpsertManifestObservation(ctx, target.ID, observation, now); err != nil {
+	if _, err := s.upsertMetadataTree(ctx, target.ID, metadata, observation.Tag, observation.PushedAt, now); err != nil {
 		return err
 	}
 	if observation.Tag != "" && classification.Relationship == constants.ArtifactRelationshipPrimary &&
@@ -128,16 +131,9 @@ func (s *InventoryService) Reconcile(
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
-		observation := registrydomain.ManifestObservation{
-			Digest: metadata.Digest, MediaType: metadata.MediaType, ArtifactType: metadata.ArtifactType,
-			SubjectDigest: metadata.SubjectDigest, ManifestSize: metadata.ManifestSize, Tag: tag,
-		}
 		classification := ClassifyManifest(*metadata)
-		observation.ObservedKind = classification.Kind
-		observation.ArtifactRelationship = classification.Relationship
-		observation.ClassificationSource = classification.Source
-		observation.ClassificationConfidence = classification.Confidence
-		if err := s.store.UpsertManifestObservation(ctx, target.ID, observation, now); err != nil {
+		observedDigests, err := s.upsertMetadataTree(ctx, target.ID, metadata, tag, nil, now)
+		if err != nil {
 			return nil, err
 		}
 		if classification.Relationship == constants.ArtifactRelationshipPrimary &&
@@ -147,9 +143,44 @@ func (s *InventoryService) Reconcile(
 			}
 		}
 		seenTags = append(seenTags, tag)
-		if _, exists := digests[metadata.Digest]; !exists {
-			digests[metadata.Digest] = struct{}{}
-			seenDigests = append(seenDigests, metadata.Digest)
+		for _, observedDigest := range observedDigests {
+			if _, exists := digests[observedDigest]; !exists {
+				digests[observedDigest] = struct{}{}
+				seenDigests = append(seenDigests, observedDigest)
+			}
+		}
+	}
+	known, err := s.store.ListManifestInventory(ctx, target.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, manifest := range known {
+		if manifest.State == constants.InventoryStateDeleted {
+			continue
+		}
+		if _, exists := digests[manifest.Digest]; exists {
+			continue
+		}
+		resolved, exists, resolveErr := s.distribution.ResolveManifest(ctx, fullRepository, manifest.Digest)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if !exists || resolved != manifest.Digest {
+			continue
+		}
+		metadata, fetchErr := s.distribution.FetchManifest(ctx, fullRepository, manifest.Digest)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		observedDigests, err := s.upsertMetadataTree(ctx, target.ID, metadata, "", nil, now)
+		if err != nil {
+			return nil, err
+		}
+		for _, observedDigest := range observedDigests {
+			if _, exists := digests[observedDigest]; !exists {
+				digests[observedDigest] = struct{}{}
+				seenDigests = append(seenDigests, observedDigest)
+			}
 		}
 	}
 	for _, subjectDigest := range append([]string(nil), seenDigests...) {
@@ -162,21 +193,15 @@ func (s *InventoryService) Reconcile(
 			if fetchErr != nil {
 				return nil, fetchErr
 			}
-			observation := registrydomain.ManifestObservation{
-				Digest: metadata.Digest, MediaType: metadata.MediaType, ArtifactType: metadata.ArtifactType,
-				SubjectDigest: metadata.SubjectDigest, ManifestSize: metadata.ManifestSize,
-			}
-			classification := ClassifyManifest(*metadata)
-			observation.ObservedKind = classification.Kind
-			observation.ArtifactRelationship = classification.Relationship
-			observation.ClassificationSource = classification.Source
-			observation.ClassificationConfidence = classification.Confidence
-			if err := s.store.UpsertManifestObservation(ctx, target.ID, observation, now); err != nil {
+			observedDigests, err := s.upsertMetadataTree(ctx, target.ID, metadata, "", nil, now)
+			if err != nil {
 				return nil, err
 			}
-			if _, exists := digests[metadata.Digest]; !exists {
-				digests[metadata.Digest] = struct{}{}
-				seenDigests = append(seenDigests, metadata.Digest)
+			for _, observedDigest := range observedDigests {
+				if _, exists := digests[observedDigest]; !exists {
+					digests[observedDigest] = struct{}{}
+					seenDigests = append(seenDigests, observedDigest)
+				}
 			}
 		}
 	}
@@ -184,6 +209,41 @@ func (s *InventoryService) Reconcile(
 		return nil, err
 	}
 	return s.store.ListManifestInventory(ctx, target.ID)
+}
+
+func (s *InventoryService) upsertMetadataTree(
+	ctx context.Context,
+	repositoryID foundation.ID,
+	metadata *ManifestMetadata,
+	tag string,
+	pushedAt *time.Time,
+	observedAt time.Time,
+) ([]string, error) {
+	digests := make([]string, 0, 1+len(metadata.Children))
+	observation := observationFromMetadata(metadata, tag, pushedAt)
+	if err := s.store.UpsertManifestObservation(ctx, repositoryID, observation, observedAt); err != nil {
+		return nil, err
+	}
+	digests = append(digests, metadata.Digest)
+	for i := range metadata.Children {
+		childDigests, err := s.upsertMetadataTree(ctx, repositoryID, &metadata.Children[i], "", nil, observedAt)
+		if err != nil {
+			return nil, err
+		}
+		digests = append(digests, childDigests...)
+	}
+	return digests, nil
+}
+
+func observationFromMetadata(metadata *ManifestMetadata, tag string, pushedAt *time.Time) registrydomain.ManifestObservation {
+	classification := ClassifyManifest(*metadata)
+	return registrydomain.ManifestObservation{
+		Digest: metadata.Digest, MediaType: metadata.MediaType, ArtifactType: metadata.ArtifactType,
+		SubjectDigest: metadata.SubjectDigest, ManifestSize: metadata.ManifestSize,
+		Platforms: metadata.Platforms, Tag: tag, PushedAt: pushedAt,
+		ObservedKind: classification.Kind, ArtifactRelationship: classification.Relationship,
+		ClassificationSource: classification.Source, ClassificationConfidence: classification.Confidence,
+	}
 }
 
 func (s *InventoryService) List(ctx context.Context, projectID foundation.ID, repository string) ([]registrydomain.ManifestInventory, error) {

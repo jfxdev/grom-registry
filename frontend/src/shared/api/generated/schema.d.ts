@@ -1037,6 +1037,7 @@ export interface components {
             reason: string;
             expectedDigest?: string | null;
             expectedTags?: string[];
+            expectedChildDigests?: string[];
         };
         ArtifactDeletionPreview: {
             repository: string;
@@ -1045,6 +1046,8 @@ export interface components {
             requiresReason: boolean;
             blockedReasons: string[];
             relatedArtifacts: string[];
+            /** @description Untagged child manifests that will also be deleted because no live tag, index, or OCI referrer outside this deletion references them. */
+            childDigests: string[];
         };
         ArtifactDeletion: {
             /** Format: uuid */
@@ -1089,8 +1092,12 @@ export interface components {
             artifactRelationship: components["schemas"]["ArtifactRelationship"];
             classificationSource: string;
             classificationConfidence: components["schemas"]["ClassificationConfidence"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Serialized manifest or image-index JSON size in bytes; this is metadata size, not image content size or reclaimable storage.
+             */
             manifestSize: number;
+            platforms: components["schemas"]["ManifestPlatform"][];
             tags: string[];
             state: components["schemas"]["InventoryState"];
             /** Format: date-time */
@@ -1103,6 +1110,17 @@ export interface components {
             untaggedAt?: string | null;
             /** Format: date-time */
             deletedAt?: string | null;
+        };
+        ManifestPlatform: {
+            os: string;
+            architecture: string;
+            variant?: string;
+            digest?: string;
+            /**
+             * Format: int64
+             * @description Logical compressed content size for this platform, calculated from its config and layer descriptors; shared blobs mean this is not reclaimable storage.
+             */
+            compressedSize: number;
         };
         /** @enum {string} */
         LifecycleDecision: "eligible" | "retained" | "blocked";
@@ -1820,6 +1838,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreatedToken"];
+                };
+            };
+            /** @description Service account already has the maximum number of active access keys */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

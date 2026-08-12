@@ -256,7 +256,7 @@ async function copyRegistrationLink() {
       </div>
       <template v-else>
         <div class="users-table-head" aria-hidden="true">
-          <span>User</span><span>Created</span><span>Status</span><span>Role</span><span>Access</span><span>Actions</span>
+          <span>User</span><span>Created</span><span>Status</span><span>Actions</span>
         </div>
         <div v-for="user in filteredUsers" :key="user.id" class="data-row user-row">
           <div class="user-identity flex items-center gap-3">
@@ -271,7 +271,7 @@ async function copyRegistrationLink() {
             <CircleOff v-if="user.disabledAt" :size="17" aria-hidden="true" />
             <CircleCheck v-else :size="17" aria-hidden="true" />
           </span>
-          <div class="user-role-cell">
+          <div class="user-actions">
             <DropdownMenu v-if="!user.disabledAt && !user.systemAdmin" label="Set role" v-bind="{ ariaLabel: `Change role for ${user.username}` }">
               <template #icon><ShieldAlert :size="15" /></template>
               <template #default="{ close }">
@@ -279,23 +279,21 @@ async function copyRegistrationLink() {
                 <button type="button" class="dropdown-menu-item" role="menuitem" @click="close(); chooseRole(user, 'administrator')"><ShieldAlert :size="15" /> Administrator</button>
               </template>
             </DropdownMenu>
-          </div>
-          <div class="user-access-cell">
             <Button v-if="!user.disabledAt" size="sm" variant="outline" @click="openReset(user)"><KeyRound :size="15" /> Reset password</Button>
-          </div>
-          <div class="user-actions">
             <DeleteButton v-if="!user.disabledAt" size="sm" :disabled="user.id === session.user?.id" :aria-label="`Disable user ${user.username}`" @click="openDisable(user)" />
           </div>
         </div>
       </template>
-      <PaginationControls
-        :page="pagination.page.value"
-        :has-previous="pagination.hasPrevious.value"
-        :has-next="Boolean(users.data.value?.nextCursor)"
-        :disabled="users.isFetching.value"
-        @previous="pagination.previous()"
-        @next="pagination.next(users.data.value?.nextCursor)"
-      />
+      <div class="list-pagination">
+        <PaginationControls
+          :page="pagination.page.value"
+          :has-previous="pagination.hasPrevious.value"
+          :has-next="Boolean(users.data.value?.nextCursor)"
+          :disabled="users.isFetching.value"
+          @previous="pagination.previous()"
+          @next="pagination.next(users.data.value?.nextCursor)"
+        />
+      </div>
     </div>
 
     <div v-if="disableTarget" class="modal-backdrop" @click.self="closeDisable">
@@ -453,6 +451,10 @@ async function copyRegistrationLink() {
   border-radius: 0;
 }
 
+.list-pagination {
+  border-top: 1px solid var(--border);
+}
+
 .list-toolbar + .data-row {
   border-top: 0;
 }
@@ -463,7 +465,7 @@ async function copyRegistrationLink() {
 
 .users-table-head,
 .user-row {
-  grid-template-columns: minmax(17rem, 1fr) 8.5rem 3rem 9rem 12.5rem 9rem;
+  grid-template-columns: minmax(17rem, 1fr) 8.5rem 3rem minmax(19rem, auto);
 }
 
 .users-table-head {
@@ -487,11 +489,11 @@ async function copyRegistrationLink() {
   white-space: nowrap;
 }
 
-.user-role-cell,
-.user-access-cell,
 .user-actions {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .user-actions {
@@ -512,18 +514,14 @@ async function copyRegistrationLink() {
 @media (max-width: 980px) {
   .users-table-head { display: none; }
   .user-row { grid-template-columns: minmax(15rem, 1fr) 8rem auto; }
-  .user-role-cell { grid-column: 2; }
-  .user-access-cell { grid-column: 1 / span 2; }
-  .user-actions { grid-column: 3; grid-row: 1 / span 2; }
+  .user-actions { grid-column: 1 / span 3; justify-content: flex-start; }
 }
 
 @media (max-width: 640px) {
   .user-row { grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; }
   .user-created { grid-column: 1; }
   .user-status { grid-column: 2; grid-row: 1; }
-  .user-role-cell { grid-column: 1; }
-  .user-access-cell { grid-column: 1; }
-  .user-actions { grid-column: 2; grid-row: 2 / span 2; align-self: center; }
+  .user-actions { grid-column: 1 / span 2; grid-row: auto; }
 }
 
 .reveal-modal {

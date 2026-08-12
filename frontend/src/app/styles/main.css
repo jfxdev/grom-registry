@@ -150,6 +150,10 @@ select {
   padding: 0.4rem 0.75rem;
 }
 
+.nav-section + .nav-section {
+  margin-top: 1rem;
+}
+
 .nav-section-label {
   margin: 0 0 0.45rem;
   padding: 0 0.55rem;

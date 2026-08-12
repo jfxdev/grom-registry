@@ -234,6 +234,7 @@ func (c *managementClient) deleteArtifact(t *testing.T, project, repository, ref
 	c.doJSON(t, http.MethodPost, "/api/v1/projects/"+url.PathEscape(project)+"/artifact-deletion-previews", request, &preview, http.StatusOK)
 	request.ExpectedDigest = &preview.Digest
 	request.ExpectedTags = &preview.AffectedTags
+	request.ExpectedChildDigests = &preview.ChildDigests
 	c.doJSON(t, http.MethodPost, "/api/v1/projects/"+url.PathEscape(project)+"/artifact-deletions", request, nil, http.StatusOK)
 }
 

@@ -441,6 +441,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreatedToken"
+        "409":
+          description: Service account already has the maximum number of active access keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/service-accounts/{id}/tokens/{tokenId}:
     delete:
       tags: [Identity]
@@ -1998,11 +2004,16 @@ components:
           maxItems: 1000
           items:
             type: string
+        expectedChildDigests:
+          type: array
+          maxItems: 1000
+          items:
+            type: string
     ArtifactDeletionPreview:
       type: object
       required:
         [repository, digest, affectedTags, requiresReason, blockedReasons,
-         relatedArtifacts]
+         relatedArtifacts, childDigests]
       properties:
         repository:
           type: string
@@ -2019,6 +2030,11 @@ components:
           items:
             type: string
         relatedArtifacts:
+          type: array
+          items:
+            type: string
+        childDigests:
+          description: Untagged child manifests that will also be deleted because no live tag, index, or OCI referrer outside this deletion references them.
           type: array
           items:
             type: string
@@ -2088,7 +2104,7 @@ components:
       type: object
       required:
         [id, repositoryId, digest, observedKind, artifactRelationship,
-         classificationSource, classificationConfidence, manifestSize, tags,
+         classificationSource, classificationConfidence, manifestSize, platforms, tags,
          state, firstSeenAt, lastSeenAt]
       properties:
         id:
@@ -2112,8 +2128,13 @@ components:
         classificationConfidence:
           $ref: "#/components/schemas/ClassificationConfidence"
         manifestSize:
+          description: Serialized manifest or image-index JSON size in bytes; this is metadata size, not image content size or reclaimable storage.
           type: integer
           format: int64
+        platforms:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManifestPlatform"
         tags:
           type: array
           items:
@@ -2138,6 +2159,22 @@ components:
           type: string
           format: date-time
           nullable: true
+    ManifestPlatform:
+      type: object
+      required: [os, architecture, compressedSize]
+      properties:
+        os:
+          type: string
+        architecture:
+          type: string
+        variant:
+          type: string
+        digest:
+          type: string
+        compressedSize:
+          description: Logical compressed content size for this platform, calculated from its config and layer descriptors; shared blobs mean this is not reclaimable storage.
+          type: integer
+          format: int64
     LifecycleDecision:
       type: string
       enum: [eligible, retained, blocked]

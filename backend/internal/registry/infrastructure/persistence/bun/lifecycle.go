@@ -63,6 +63,14 @@ func (s *Store) UpsertManifestObservation(
 		if err := manifestInsert.Returning("id").Scan(ctx, &model.ID); err != nil {
 			return err
 		}
+		if _, err := tx.NewDelete().Model((*manifestPlatformModel)(nil)).Where("manifest_id = ?", model.ID).Exec(ctx); err != nil {
+			return err
+		}
+		for _, platform := range observation.Platforms {
+			if _, err := tx.NewInsert().Model(&manifestPlatformModel{ManifestID: model.ID, OS: platform.OS, Architecture: platform.Architecture, Variant: platform.Variant, Digest: platform.Digest, CompressedSize: platform.CompressedSize}).Exec(ctx); err != nil {
+				return err
+			}
+		}
 
 		if observation.Tag != "" {
 			var oldManifestID string
@@ -172,9 +180,6 @@ func (s *Store) CompleteInventoryReconciliation(
 			if _, ok := seenDigestSet[manifests[i].Digest]; ok {
 				continue
 			}
-			if manifests[i].State == constants.InventoryStateUntagged {
-				continue
-			}
 			manifests[i].State = constants.InventoryStateMissing
 			if _, err := tx.NewUpdate().Model(&manifests[i]).WherePK().Exec(ctx); err != nil {
 				return err
@@ -199,33 +204,7 @@ func (s *Store) ListManifestInventory(ctx context.Context, repositoryID foundati
 		OrderExpr("last_seen_at DESC").Scan(ctx); err != nil {
 		return nil, err
 	}
-	result := make([]registrydomain.ManifestInventory, 0, len(manifests))
-	for i := range manifests {
-		var tags []tagModel
-		if err := s.db.NewSelect().Model(&tags).
-			Where("manifest_id = ?", manifests[i].ID).
-			Where("detached_at IS NULL").OrderExpr("name ASC").Scan(ctx); err != nil {
-			return nil, err
-		}
-		names := make([]string, len(tags))
-		for j := range tags {
-			names[j] = tags[j].Name
-		}
-		result = append(result, registrydomain.ManifestInventory{
-			ID: foundation.ID(manifests[i].ID), RepositoryID: repositoryID,
-			Digest: manifests[i].Digest, MediaType: manifests[i].MediaType,
-			ArtifactType: manifests[i].ArtifactType, SubjectDigest: manifests[i].SubjectDigest,
-			ObservedKind:             manifests[i].ObservedKind,
-			ArtifactRelationship:     manifests[i].ArtifactRelationship,
-			ClassificationSource:     manifests[i].ClassificationSource,
-			ClassificationConfidence: manifests[i].ClassificationConfidence,
-			ManifestSize:             manifests[i].ManifestSize, Tags: names, State: manifests[i].State,
-			FirstSeenAt: manifests[i].FirstSeenAt, LastPushedAt: manifests[i].LastPushedAt,
-			LastSeenAt: manifests[i].LastSeenAt, UntaggedAt: manifests[i].UntaggedAt,
-			DeletedAt: manifests[i].DeletedAt,
-		})
-	}
-	return result, nil
+	return s.manifestInventoryFromModels(ctx, repositoryID, manifests)
 }
 
 func (s *Store) ListManifestInventoryPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
@@ -265,6 +244,7 @@ func (s *Store) manifestInventoryFromModels(ctx context.Context, repositoryID fo
 		ids[i] = manifests[i].ID
 	}
 	tagsByManifest := make(map[string][]string, len(ids))
+	platformsByManifest := make(map[string][]registrydomain.ManifestPlatform, len(ids))
 	if len(ids) > 0 {
 		var tags []tagModel
 		if err := s.db.NewSelect().Model(&tags).Where("manifest_id IN (?)", bun.List(ids)).Where("detached_at IS NULL").OrderExpr("name ASC").Scan(ctx); err != nil {
@@ -273,11 +253,26 @@ func (s *Store) manifestInventoryFromModels(ctx context.Context, repositoryID fo
 		for _, tag := range tags {
 			tagsByManifest[tag.ManifestID] = append(tagsByManifest[tag.ManifestID], tag.Name)
 		}
+		var platforms []manifestPlatformModel
+		if err := s.db.NewSelect().Model(&platforms).Where("manifest_id IN (?)", bun.List(ids)).OrderExpr("os ASC, architecture ASC, variant ASC").Scan(ctx); err != nil {
+			return nil, err
+		}
+		for _, platform := range platforms {
+			platformsByManifest[platform.ManifestID] = append(platformsByManifest[platform.ManifestID], registrydomain.ManifestPlatform{OS: platform.OS, Architecture: platform.Architecture, Variant: platform.Variant, Digest: platform.Digest, CompressedSize: platform.CompressedSize})
+		}
 	}
 	result := make([]registrydomain.ManifestInventory, 0, len(manifests))
 	for i := range manifests {
 		m := manifests[i]
-		result = append(result, registrydomain.ManifestInventory{ID: foundation.ID(m.ID), RepositoryID: repositoryID, Digest: m.Digest, MediaType: m.MediaType, ArtifactType: m.ArtifactType, SubjectDigest: m.SubjectDigest, ObservedKind: m.ObservedKind, ArtifactRelationship: m.ArtifactRelationship, ClassificationSource: m.ClassificationSource, ClassificationConfidence: m.ClassificationConfidence, ManifestSize: m.ManifestSize, Tags: tagsByManifest[m.ID], State: m.State, FirstSeenAt: m.FirstSeenAt, LastPushedAt: m.LastPushedAt, LastSeenAt: m.LastSeenAt, UntaggedAt: m.UntaggedAt, DeletedAt: m.DeletedAt})
+		tags := tagsByManifest[m.ID]
+		if tags == nil {
+			tags = []string{}
+		}
+		platforms := platformsByManifest[m.ID]
+		if platforms == nil {
+			platforms = []registrydomain.ManifestPlatform{}
+		}
+		result = append(result, registrydomain.ManifestInventory{ID: foundation.ID(m.ID), RepositoryID: repositoryID, Digest: m.Digest, MediaType: m.MediaType, ArtifactType: m.ArtifactType, SubjectDigest: m.SubjectDigest, ObservedKind: m.ObservedKind, ArtifactRelationship: m.ArtifactRelationship, ClassificationSource: m.ClassificationSource, ClassificationConfidence: m.ClassificationConfidence, ManifestSize: m.ManifestSize, Platforms: platforms, Tags: tags, State: m.State, FirstSeenAt: m.FirstSeenAt, LastPushedAt: m.LastPushedAt, LastSeenAt: m.LastSeenAt, UntaggedAt: m.UntaggedAt, DeletedAt: m.DeletedAt})
 	}
 	return result, nil
 }

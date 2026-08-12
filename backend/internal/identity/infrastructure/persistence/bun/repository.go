@@ -345,6 +345,15 @@ func (r *Repository) CreateServiceAccountAPIToken(ctx context.Context, token *id
 	return err
 }
 
+func (r *Repository) CountActiveServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID, now time.Time) (int, error) {
+	return r.db.NewSelect().Model((*apiTokenModel)(nil)).
+		Where("principal_kind = ?", constants.PrincipalServiceAccount).
+		Where("principal_id = ?", serviceAccountID.String()).
+		Where("revoked_at IS NULL").
+		Where("(expires_at IS NULL OR expires_at > ?)", now).
+		Count(ctx)
+}
+
 func (r *Repository) CreateViewerAPIToken(ctx context.Context, token *identity.APIToken) error {
 	result, err := r.db.NewInsert().Model(&apiTokenModel{
 		ID: token.ID.String(), PublicID: token.PublicID, PrincipalKind: constants.PrincipalUser,

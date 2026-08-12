@@ -117,6 +117,13 @@ describe('ServiceAccountsPage', () => {
     expect(wrapper.text()).toContain('0 on this page')
   })
 
+  it('separates the pagination footer from the account list', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('.list-pagination [aria-label="Pagination"]').exists()).toBe(true)
+  })
+
   it('requires the exact service account name before disabling it', async () => {
     const wrapper = mountPage()
     await flushPromises()

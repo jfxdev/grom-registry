@@ -68,6 +68,16 @@ type tagModel struct {
 	DetachedAt    *time.Time `bun:"detached_at"`
 }
 
+type manifestPlatformModel struct {
+	bun.BaseModel  `bun:"table:registry_manifest_platforms,alias:rmp"`
+	ManifestID     string `bun:"manifest_id,pk"`
+	Digest         string `bun:"digest,pk"`
+	OS             string `bun:"os,notnull"`
+	Architecture   string `bun:"architecture,notnull"`
+	Variant        string `bun:"variant,notnull"`
+	CompressedSize int64  `bun:"compressed_size,notnull"`
+}
+
 type artifactDeletionModel struct {
 	bun.BaseModel `bun:"table:artifact_deletions,alias:ad"`
 	ID            string     `bun:"id,pk"`

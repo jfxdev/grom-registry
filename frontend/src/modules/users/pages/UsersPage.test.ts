@@ -118,12 +118,31 @@ describe('UsersPage', () => {
     expect(wrapper.text()).toContain('0 on this page')
   })
 
+  it('separates the pagination footer from the users list', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('.list-pagination [aria-label="Pagination"]').exists()).toBe(true)
+  })
+
   it('labels the loaded users as the current page rather than a global total', async () => {
     const wrapper = mountPage()
     await flushPromises()
 
     expect(wrapper.text()).toContain('2 on this page')
     expect(wrapper.text()).not.toContain('2 total')
+  })
+
+  it('keeps password reset with the row actions without role or access columns', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const header = wrapper.get('.users-table-head')
+    expect(header.text()).toContain('Actions')
+    expect(header.text()).not.toContain('Role')
+    expect(header.text()).not.toContain('Access')
+    expect(wrapper.get('button').text()).toContain('New user')
+    expect(wrapper.get('.user-actions').text()).toContain('Reset password')
   })
 
   it('navigates pages and resets the cursor when the search changes', async () => {

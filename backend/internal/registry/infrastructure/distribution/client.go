@@ -3,6 +3,7 @@ package distribution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	registryapp "github.com/jfxdev/grom/backend/internal/registry/application"
+	registrydomain "github.com/jfxdev/grom/backend/internal/registry/domain"
 )
 
 type Client struct {
@@ -34,6 +36,15 @@ type TagPage struct {
 	NextMarker string
 }
 
+type responseStatusError struct {
+	statusCode int
+	status     string
+}
+
+func (e *responseStatusError) Error() string {
+	return "distribution returned " + e.status
+}
+
 type ProjectRepositoryPage struct {
 	Repositories []string
 	NextMarker   string
@@ -44,16 +55,33 @@ type manifestDocument struct {
 	ArtifactType string `json:"artifactType"`
 	Config       struct {
 		MediaType string `json:"mediaType"`
+		Digest    string `json:"digest"`
+		Size      int64  `json:"size"`
 	} `json:"config"`
 	Layers []struct {
 		MediaType string `json:"mediaType"`
+		Digest    string `json:"digest"`
+		Size      int64  `json:"size"`
 	} `json:"layers"`
 	Manifests []struct {
 		MediaType string `json:"mediaType"`
+		Digest    string `json:"digest"`
+		Size      int64  `json:"size"`
+		Platform  struct {
+			OS           string `json:"os"`
+			Architecture string `json:"architecture"`
+			Variant      string `json:"variant"`
+		} `json:"platform"`
 	} `json:"manifests"`
 	Subject *struct {
 		Digest string `json:"digest"`
 	} `json:"subject"`
+}
+
+type imageConfigDocument struct {
+	OS           string `json:"os"`
+	Architecture string `json:"architecture"`
+	Variant      string `json:"variant"`
 }
 
 type referrersResponse struct {
@@ -169,7 +197,16 @@ func (c *Client) ListTags(ctx context.Context, repository string) (*TagList, err
 		return nil, err
 	}
 	if err := c.get(ctx, "/v2/"+repository+"/tags/list", token, &response); err != nil {
+		var statusError *responseStatusError
+		if errors.As(err, &statusError) && statusError.statusCode == http.StatusNotFound {
+			// Distribution removes its tag index once the last manifest is deleted.
+			// Reconciliation must treat that as an empty repository inventory.
+			return &TagList{Name: repository, Tags: []string{}}, nil
+		}
 		return nil, err
+	}
+	if response.Tags == nil {
+		response.Tags = []string{}
 	}
 	return &response, nil
 }
@@ -188,9 +225,20 @@ func (c *Client) ListTagsPage(ctx context.Context, repository string, limit int,
 	}
 	nextPath, err := c.getWithLink(ctx, "/v2/"+repository+"/tags/list?"+query.Encode(), token, &response)
 	if err != nil {
+		var statusError *responseStatusError
+		if errors.As(err, &statusError) && statusError.statusCode == http.StatusNotFound {
+			// Distribution removes its tag index once the last manifest is deleted.
+			// The logical repository still exists in Grom, so expose that state as an
+			// empty tag page instead of treating it as a registry outage.
+			return &TagPage{Name: repository, Tags: []string{}}, nil
+		}
 		return nil, err
 	}
-	page := &TagPage{Name: response.Name, Tags: response.Tags}
+	tags := response.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	page := &TagPage{Name: response.Name, Tags: tags}
 	if nextPath != "" {
 		nextURL, parseErr := url.Parse(nextPath)
 		if parseErr != nil {
@@ -209,7 +257,50 @@ func (c *Client) ListRepositoryTags(ctx context.Context, repository string) ([]s
 	if err != nil {
 		return nil, err
 	}
-	return tags.Tags, nil
+	return c.filterLiveTags(ctx, repository, tags.Tags)
+}
+
+// ListLiveTagsPage omits dangling tag links. Distribution can retain a tag in
+// its tag index after the referenced manifest has been deleted by digest.
+func (c *Client) ListLiveTagsPage(ctx context.Context, repository string, limit int, marker string) (*TagPage, error) {
+	result := &TagPage{Name: repository, Tags: []string{}}
+	currentMarker := marker
+	for len(result.Tags) < limit {
+		page, err := c.ListTagsPage(ctx, repository, limit-len(result.Tags), currentMarker)
+		if err != nil {
+			return nil, err
+		}
+		live, err := c.filterLiveTags(ctx, repository, page.Tags)
+		if err != nil {
+			return nil, err
+		}
+		result.Name = page.Name
+		result.Tags = append(result.Tags, live...)
+		if page.NextMarker == "" {
+			result.NextMarker = ""
+			return result, nil
+		}
+		if page.NextMarker == currentMarker {
+			return nil, fmt.Errorf("distribution tag pagination did not advance")
+		}
+		currentMarker = page.NextMarker
+		result.NextMarker = currentMarker
+	}
+	return result, nil
+}
+
+func (c *Client) filterLiveTags(ctx context.Context, repository string, tags []string) ([]string, error) {
+	result := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		_, exists, err := c.ResolveManifest(ctx, repository, tag)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			result = append(result, tag)
+		}
+	}
+	return result, nil
 }
 
 func (c *Client) FetchManifest(ctx context.Context, repository, reference string) (*registryapp.ManifestMetadata, error) {
@@ -219,6 +310,10 @@ func (c *Client) FetchManifest(ctx context.Context, repository, reference string
 	if err != nil {
 		return nil, err
 	}
+	return c.fetchManifest(ctx, repository, reference, token)
+}
+
+func (c *Client) fetchManifest(ctx context.Context, repository, reference, token string) (*registryapp.ManifestMetadata, error) {
 	targetURL := c.baseURL.ResolveReference(&url.URL{Path: "/v2/" + repository + "/manifests/" + reference})
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL.String(), nil)
 	if err != nil {
@@ -258,8 +353,35 @@ func (c *Client) FetchManifest(ctx context.Context, repository, reference string
 		layerMediaTypes = append(layerMediaTypes, layer.MediaType)
 	}
 	descriptorMediaTypes := make([]string, 0, len(document.Manifests))
+	platforms := make([]registrydomain.ManifestPlatform, 0, len(document.Manifests))
+	children := make([]registryapp.ManifestMetadata, 0, len(document.Manifests))
 	for _, descriptor := range document.Manifests {
 		descriptorMediaTypes = append(descriptorMediaTypes, descriptor.MediaType)
+		child, fetchErr := c.fetchManifest(ctx, repository, descriptor.Digest, token)
+		if fetchErr != nil {
+			return nil, fmt.Errorf("fetch child manifest %s: %w", descriptor.Digest, fetchErr)
+		}
+		platform := registrydomain.ManifestPlatform{
+			OS: descriptor.Platform.OS, Architecture: descriptor.Platform.Architecture,
+			Variant: descriptor.Platform.Variant, Digest: descriptor.Digest,
+			CompressedSize: logicalCompressedSize(child),
+		}
+		if platform.OS == "" && platform.Architecture == "" && len(child.Platforms) == 1 {
+			platform.OS = child.Platforms[0].OS
+			platform.Architecture = child.Platforms[0].Architecture
+			platform.Variant = child.Platforms[0].Variant
+		}
+		platforms = append(platforms, platform)
+		children = append(children, *child)
+	}
+	if len(document.Manifests) == 0 && isImageConfigMediaType(document.Config.MediaType) && document.Config.Digest != "" {
+		platform, platformErr := c.fetchImagePlatform(ctx, repository, document.Config.Digest, token)
+		if platformErr != nil {
+			return nil, platformErr
+		}
+		platform.Digest = digest
+		platform.CompressedSize = compressedContentSize(document)
+		platforms = append(platforms, platform)
 	}
 	mediaType := document.MediaType
 	if mediaType == "" {
@@ -270,7 +392,54 @@ func (c *Client) FetchManifest(ctx context.Context, repository, reference string
 		SubjectDigest: subject, ManifestSize: int64(len(raw)),
 		ConfigMediaType: document.Config.MediaType, LayerMediaTypes: layerMediaTypes,
 		DescriptorMediaTypes: descriptorMediaTypes,
+		Platforms:            platforms,
+		Children:             children,
 	}, nil
+}
+
+func (c *Client) fetchImagePlatform(ctx context.Context, repository, digest, token string) (registrydomain.ManifestPlatform, error) {
+	targetURL := c.baseURL.ResolveReference(&url.URL{Path: "/v2/" + repository + "/blobs/" + digest})
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL.String(), nil)
+	if err != nil {
+		return registrydomain.ManifestPlatform{}, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := c.http.Do(request)
+	if err != nil {
+		return registrydomain.ManifestPlatform{}, err
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		return registrydomain.ManifestPlatform{}, fmt.Errorf("fetch image config: distribution returned %s", response.Status)
+	}
+	var config imageConfigDocument
+	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&config); err != nil {
+		return registrydomain.ManifestPlatform{}, fmt.Errorf("decode image config: %w", err)
+	}
+	return registrydomain.ManifestPlatform{OS: config.OS, Architecture: config.Architecture, Variant: config.Variant}, nil
+}
+
+func compressedContentSize(document manifestDocument) int64 {
+	total := document.Config.Size
+	for _, layer := range document.Layers {
+		if layer.Size > 0 {
+			total += layer.Size
+		}
+	}
+	return total
+}
+
+func logicalCompressedSize(metadata *registryapp.ManifestMetadata) int64 {
+	var total int64
+	for _, platform := range metadata.Platforms {
+		total += platform.CompressedSize
+	}
+	return total
+}
+
+func isImageConfigMediaType(mediaType string) bool {
+	return mediaType == "application/vnd.oci.image.config.v1+json" ||
+		mediaType == "application/vnd.docker.container.image.v1+json"
 }
 
 func (c *Client) ListReferrers(ctx context.Context, repository, digest string) ([]registryapp.ManifestDescriptor, error) {
@@ -435,7 +604,7 @@ func (c *Client) getWithLink(ctx context.Context, path, token string, target any
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("distribution returned %s", response.Status)
+		return "", &responseStatusError{statusCode: response.StatusCode, status: response.Status}
 	}
 	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
 		return "", err

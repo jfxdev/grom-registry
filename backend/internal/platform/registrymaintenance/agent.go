@@ -9,13 +9,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -25,6 +28,7 @@ type AgentOptions struct {
 	SocketPath string
 	ConfigPath string
 	DataPath   string
+	ReadyURL   string
 }
 
 type Storage struct {
@@ -42,6 +46,24 @@ type GarbageCollection struct {
 type controller struct {
 	options AgentOptions
 	mu      sync.Mutex
+	runtime distributionRuntime
+}
+
+type distributionRuntime interface {
+	Start(context.Context) error
+	Stop(context.Context) error
+	Fatal() <-chan error
+}
+
+type commandRuntime struct {
+	configPath string
+	readyURL   string
+
+	mu       sync.Mutex
+	command  *exec.Cmd
+	done     chan error
+	stopping bool
+	fatal    chan error
 }
 
 var runGarbageCollect = func(ctx context.Context, configPath string) error {
@@ -50,9 +72,26 @@ var runGarbageCollect = func(ctx context.Context, configPath string) error {
 	return command.Run()
 }
 
+var newRegistryCommand = func(configPath string) *exec.Cmd {
+	command := exec.Command("registry", "serve", configPath)
+	command.Stdout, command.Stderr = os.Stdout, os.Stderr
+	return command
+}
+
+var newDistributionRuntime = func(options AgentOptions) distributionRuntime {
+	return &commandRuntime{
+		configPath: options.ConfigPath,
+		readyURL:   options.ReadyURL,
+		fatal:      make(chan error, 1),
+	}
+}
+
 func Serve(ctx context.Context, options AgentOptions) error {
 	if !filepath.IsAbs(options.SocketPath) || !filepath.IsAbs(options.ConfigPath) || !filepath.IsAbs(options.DataPath) {
 		return fmt.Errorf("registry maintenance paths must be absolute")
+	}
+	if options.ReadyURL == "" {
+		options.ReadyURL = "http://127.0.0.1:5000/v2/"
 	}
 	if err := os.MkdirAll(filepath.Dir(options.SocketPath), 0o755); err != nil {
 		return err
@@ -60,7 +99,19 @@ func Serve(ctx context.Context, options AgentOptions) error {
 	if err := os.Remove(options.SocketPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	c := &controller{options: options}
+	runtime := newDistributionRuntime(options)
+	startCtx, cancelStart := context.WithTimeout(ctx, 30*time.Second)
+	err := runtime.Start(startCtx)
+	cancelStart()
+	if err != nil {
+		return fmt.Errorf("start Distribution: %w", err)
+	}
+	defer func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = runtime.Stop(stopCtx)
+	}()
+	c := &controller{options: options, runtime: runtime}
 	listener, err := net.Listen("unix", options.SocketPath)
 	if err != nil {
 		return err
@@ -84,11 +135,20 @@ func Serve(ctx context.Context, options AgentOptions) error {
 		writeJSON(w, 200, Storage{UsedBytes: used})
 	})
 	mux.HandleFunc("POST /v1/garbage-collections", func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("registry garbage collection requested", "data_path", options.DataPath)
 		result, err := c.collect(r.Context())
 		if err != nil {
+			slog.Error("registry garbage collection failed", "error", err, "data_path", options.DataPath)
 			http.Error(w, "garbage collection failed", 500)
 			return
 		}
+		slog.Info("registry garbage collection completed",
+			"started_at", result.StartedAt,
+			"completed_at", result.CompletedAt,
+			"bytes_before", result.BytesBefore,
+			"bytes_after", result.BytesAfter,
+			"reclaimed_bytes", result.ReclaimedBytes,
+		)
 		writeJSON(w, 200, result)
 	})
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
@@ -99,6 +159,8 @@ func Serve(ctx context.Context, options AgentOptions) error {
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return server.Shutdown(shutdown)
+	case err := <-runtime.Fatal():
+		return err
 	case err := <-errs:
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
@@ -112,21 +174,153 @@ func (c *controller) collect(ctx context.Context) (GarbageCollection, error) {
 	defer c.mu.Unlock()
 	before, err := directoryBytes(c.options.DataPath)
 	if err != nil {
+		slog.Error("could not measure registry storage before garbage collection", "error", err, "data_path", c.options.DataPath)
 		return GarbageCollection{}, err
 	}
 	started := time.Now().UTC()
+	if c.runtime == nil {
+		return GarbageCollection{}, fmt.Errorf("Distribution supervisor is unavailable")
+	}
+	stopCtx, cancelStop := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelStop()
+	if err := c.runtime.Stop(stopCtx); err != nil {
+		return GarbageCollection{}, fmt.Errorf("stop Distribution before garbage collection: %w", err)
+	}
+	restart := func() error {
+		startCtx, cancelStart := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelStart()
+		return c.runtime.Start(startCtx)
+	}
+	slog.Info("starting Distribution garbage collection", "config_path", c.options.ConfigPath, "bytes_before", before)
 	if err := runGarbageCollect(ctx, c.options.ConfigPath); err != nil {
-		return GarbageCollection{}, fmt.Errorf("run distribution garbage collection: %w", err)
+		restartErr := restart()
+		if restartErr != nil {
+			return GarbageCollection{}, fmt.Errorf("run Distribution garbage collection: %v; restart Distribution: %w", err, restartErr)
+		}
+		return GarbageCollection{}, fmt.Errorf("run Distribution garbage collection: %w", err)
 	}
 	after, err := directoryBytes(c.options.DataPath)
 	if err != nil {
+		restartErr := restart()
+		if restartErr != nil {
+			return GarbageCollection{}, fmt.Errorf("measure registry storage after garbage collection: %v; restart Distribution: %w", err, restartErr)
+		}
+		slog.Error("could not measure registry storage after garbage collection", "error", err, "data_path", c.options.DataPath)
 		return GarbageCollection{}, err
+	}
+	if err := restart(); err != nil {
+		return GarbageCollection{}, fmt.Errorf("restart Distribution after garbage collection: %w", err)
 	}
 	result := GarbageCollection{StartedAt: started, CompletedAt: time.Now().UTC(), BytesBefore: before, BytesAfter: after}
 	if before > after {
 		result.ReclaimedBytes = before - after
 	}
 	return result, nil
+}
+
+func (r *commandRuntime) Start(ctx context.Context) error {
+	r.mu.Lock()
+	if r.command != nil {
+		r.mu.Unlock()
+		return nil
+	}
+	command := newRegistryCommand(r.configPath)
+	done := make(chan error, 1)
+	r.command = command
+	r.done = done
+	r.stopping = false
+	r.mu.Unlock()
+	if err := command.Start(); err != nil {
+		r.mu.Lock()
+		if r.command == command {
+			r.command = nil
+			r.done = nil
+		}
+		r.mu.Unlock()
+		return err
+	}
+	go r.wait(command, done)
+	if err := r.waitReady(ctx); err != nil {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = r.Stop(stopCtx)
+		return err
+	}
+	return nil
+}
+
+func (r *commandRuntime) Stop(ctx context.Context) error {
+	r.mu.Lock()
+	command, done := r.command, r.done
+	if command == nil {
+		r.mu.Unlock()
+		return nil
+	}
+	r.stopping = true
+	r.mu.Unlock()
+	if err := command.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return err
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *commandRuntime) Fatal() <-chan error { return r.fatal }
+
+func (r *commandRuntime) wait(command *exec.Cmd, done chan error) {
+	err := command.Wait()
+	r.mu.Lock()
+	expected := r.command == command && r.stopping
+	if r.command == command {
+		r.command = nil
+		r.done = nil
+		r.stopping = false
+	}
+	r.mu.Unlock()
+	// Publish completion only after clearing the process slot. Stop followed by
+	// Start (the GC path) must never mistake the exited child for a live one.
+	done <- err
+	close(done)
+	if !expected {
+		if err == nil {
+			err = errors.New("process exited without an error")
+		}
+		select {
+		case r.fatal <- fmt.Errorf("Distribution exited unexpectedly: %w", err):
+		default:
+		}
+	}
+}
+
+func (r *commandRuntime) waitReady(ctx context.Context) error {
+	client := &http.Client{Timeout: 2 * time.Second}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, r.readyURL, nil)
+		if err != nil {
+			return err
+		}
+		response, err := client.Do(request)
+		if err == nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+			_ = response.Body.Close()
+			if response.StatusCode == http.StatusOK || response.StatusCode == http.StatusUnauthorized {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for Distribution readiness: %w", ctx.Err())
+		case err := <-r.fatal:
+			return err
+		case <-ticker.C:
+		}
+	}
 }
 
 func directoryBytes(root string) (int64, error) {

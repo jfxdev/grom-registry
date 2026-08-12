@@ -132,14 +132,16 @@ function submitCreate() {
           <ArrowUpRight class="project-open" :size="17" />
         </RouterLink>
       </div>
-      <PaginationControls
-        :page="pagination.page.value"
-        :has-previous="pagination.hasPrevious.value"
-        :has-next="Boolean(projects.data.value?.nextCursor)"
-        :disabled="projects.isFetching.value"
-        @previous="pagination.previous()"
-        @next="pagination.next(projects.data.value?.nextCursor)"
-      />
+      <div class="panel-pagination">
+        <PaginationControls
+          :page="pagination.page.value"
+          :has-previous="pagination.hasPrevious.value"
+          :has-next="Boolean(projects.data.value?.nextCursor)"
+          :disabled="projects.isFetching.value"
+          @previous="pagination.previous()"
+          @next="pagination.next(projects.data.value?.nextCursor)"
+        />
+      </div>
     </section>
 
     <div v-if="modalOpen && session.user?.systemAdmin" class="modal-backdrop" @click.self="modalOpen = false">
@@ -336,6 +338,10 @@ function submitCreate() {
   min-height: 18rem;
   border: 0;
   border-radius: 0;
+}
+
+.panel-pagination {
+  border-top: 1px solid var(--border);
 }
 
 @keyframes loading {

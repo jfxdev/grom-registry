@@ -79,9 +79,10 @@ deletion cascades only the now-empty project's memberships.
 | `Repository` | Entity | Project-owned logical OCI repository with creation provenance, a passive inferred content profile, an optimistic policy-set version, and an `archived` state that blocks new pushes while preserving pull access |
 | `Policy` | Child entity | Typed, replaceable repository behavior for protection, immutability, retention, tag naming, or manual deletion |
 | `PolicyPreset` | Read model | Global read-only recommendation used only to populate the repository creation form |
-| `ArtifactDeletionPreview` | Read model | Digest, aliases, OCI relationships, and deletion requirements resolved immediately before deletion |
+| `ArtifactDeletionPreview` | Read model | Digest, aliases, OCI relationships, and any unreferenced image-index child manifests resolved immediately before deletion |
 | `ArtifactDeletion` | Entity | Persisted, audited result of one manually confirmed manifest deletion |
-| `ManifestInventory` | Entity | Historical metadata for a Distribution manifest, including aliases, observation times, OCI type, and subject relationship |
+| `ManifestInventory` | Entity | Historical metadata for a Distribution manifest, including aliases, observation times, OCI type, subject relationship, and observed platform descriptors |
+| `ManifestPlatform` | Value object | OS, architecture, optional variant, child digest, and logical compressed config-plus-layer size for one platform represented by a manifest or image index |
 | `ManifestObservation` | Value object | Metadata captured from a successful manifest push or reconciliation |
 | `ManifestClassification` | Value object | Observed OCI kind, primary/referrer relationship, inferred repository profile, evidence source, and confidence |
 | `LifecyclePreview` | Entity | Persisted, expiring dry-run calculated from a reconciled inventory, policy-set version, and evaluator version |
@@ -106,9 +107,13 @@ never create repositories.
 
 Distribution remains the content source of truth. The Registry inventory is the
 historical decision index used for lifecycle behavior; it never stores manifest
-or blob payloads. Manifests participating in an OCI subject/referrer relationship
-are blocked from lifecycle and manual deletion until an explicit cascade policy
-exists.
+or blob payloads. Reconciliation revalidates tagged and known untagged digests,
+keeps live content in `active` or `untagged`, and retains disappeared or deleted
+records as explicit `missing` or `deleted` history. Manifests participating in an
+OCI subject/referrer relationship are blocked from lifecycle and manual deletion
+until an explicit subject/referrer cascade policy exists. Deleting an image index
+may additionally remove its untagged child manifests only when no live tag, other
+index, or OCI referrer outside the deletion still references them.
 Only tagged primary manifests influence a repository profile. Auxiliary referrers
 remain visible in the inventory without changing the profile. Conflicting
 specific primary classifications produce a reviewable `mixed` profile; inference
@@ -141,8 +146,10 @@ than domain entities.
 
 Distribution garbage collection is likewise a platform operation rather than a
 Registry domain entity. It is serialized by the platform maintenance controller
-and records start, completion or failure audit events with only timestamps and
-reclaimed bytes.
+which supervises the unmodified Distribution process, stops it before the
+collector touches local storage, and starts a fresh process only after collection
+finishes. The operation records start, completion or failure audit events with
+only timestamps and measured file bytes.
 
 ## Constants ownership
 

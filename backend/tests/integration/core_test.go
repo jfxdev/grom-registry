@@ -269,9 +269,9 @@ func runRepositoryPersistenceFlow(
 		t.Fatal(err)
 	}
 	inventory, err = registryStore.ListManifestInventory(ctx, repository.ID)
-	if err != nil || len(inventory) != 1 || inventory[0].State != constants.InventoryStateUntagged ||
+	if err != nil || len(inventory) != 1 || inventory[0].State != constants.InventoryStateMissing ||
 		inventory[0].UntaggedAt == nil {
-		t.Fatalf("expected detached known manifest to remain in untagged inventory: %#v, %v", inventory, err)
+		t.Fatalf("expected an unseen detached manifest to become missing while retaining its history: %#v, %v", inventory, err)
 	}
 	if err := repositoryService.EvaluateTagMutation(ctx, project.ID, "api", "prod", true); err == nil {
 		t.Fatal("expected protected production tag overwrite to be rejected")

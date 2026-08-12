@@ -37,6 +37,7 @@ type Repository interface {
 
 	CreateServiceAccountAPIToken(ctx context.Context, token *APIToken) error
 	ListServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID) ([]APIToken, error)
+	CountActiveServiceAccountAPITokens(ctx context.Context, serviceAccountID foundation.ID, now time.Time) (int, error)
 	FindAPITokenByPublicID(ctx context.Context, publicID string) (*APIToken, error)
 	RevokeServiceAccountAPIToken(ctx context.Context, serviceAccountID, tokenID foundation.ID) error
 	CreateViewerAPIToken(ctx context.Context, token *APIToken) error

@@ -762,11 +762,16 @@ External registry deletion is disabled. Project and installation administrators
 can delete manifests through Grom after a digest-and-alias preview, repository
 policy evaluation, OCI relationship check, and immediate revalidation. Manual
 deletions are persisted and audited. Subjects with referrers and referrer
-artifacts remain protected; cascade deletion is not implemented. Registry
+artifacts remain protected; OCI subject/referrer cascade deletion is not
+implemented. An image-index deletion may include only untagged child manifests
+with no tag, external index, or OCI referrer reference. Registry
 garbage collection remains an explicit, audited installation-administrator
-action. The management plane reaches a network-isolated Unix-socket sidecar
-rather than Docker; it drains and blocks the only public Registry write path
-before the collector accesses the storage volume.
+action. The management plane reaches the private Distribution supervisor over a
+Unix socket rather than Docker. It drains and blocks the public Registry path;
+the supervisor then stops its unmodified Distribution child, runs the collector
+with exclusive local-storage access, and starts a fresh child only after
+readiness succeeds. This also clears stale blob-existence caches before a digest
+can be republished.
 
 An installation administrator can manage users and service accounts. Bootstrap
 creates the first user as an installation administrator. Every later user is
@@ -842,7 +847,10 @@ without a preparatory request. Readers and pull-only token requests never create
 repositories, and no registry operation creates a project.
 
 Successful manifest pushes are observed by the gateway and recorded as a
-metadata-only inventory. Repository administrators can reconcile that inventory,
+metadata-only inventory. Image indexes recursively record their platform child
+manifests, and each platform's logical compressed size is its config plus layer
+descriptors rather than the index or manifest JSON size. Repository
+administrators can reconcile that inventory,
 create an expiring retention dry-run, and execute it manually. Every candidate is
 reconciled with Distribution and evaluated against the current policy set
 immediately before its individual deletion. Every outcome is persisted and
@@ -1319,6 +1327,9 @@ registry_manifests
 registry_tags
   repository_id, name, manifest_id, first_seen_at, last_moved_at,
   last_seen_at, detached_at
+
+registry_manifest_platforms
+  manifest_id, digest, os, architecture, variant, compressed_size
 
 lifecycle_previews / lifecycle_preview_items
   reconciled, expiring retention decisions and expected digest aliases

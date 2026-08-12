@@ -1,4 +1,4 @@
-.PHONY: generate test test-postgres test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-backup-restore-postgres-e2e test-production-image-smoke build dev dev-postgres compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
+.PHONY: generate test test-postgres test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-backup-restore-postgres-e2e test-production-image-smoke build image-publish-local dev dev-postgres compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
 
 DEV_ENV_FILE ?= .env
 
@@ -46,6 +46,19 @@ build:
 	cd backend && go build ./cmd/grom
 	cd backend && go build ./cmd/grom-backup
 
+image-publish-local:
+	@if [ ! -f "$(DEV_ENV_FILE)" ]; then \
+		echo "Missing $(DEV_ENV_FILE). Run: cp .env.example .env"; \
+		exit 1; \
+	fi
+	@dev_env_file="$(DEV_ENV_FILE)"; \
+	case "$$dev_env_file" in /*) ;; *) dev_env_file="./$$dev_env_file";; esac; \
+	set -a; . "$$dev_env_file"; set +a; \
+	: "$${GROM_IMAGE:?GROM_IMAGE must be set in $$dev_env_file}"; \
+	: "$${GROM_VERSION:=dev}"; \
+	docker build --build-arg GROM_VERSION="$$GROM_VERSION" --tag "$$GROM_IMAGE" . && \
+	docker push "$$GROM_IMAGE"
+
 dev:
 	@if [ ! -f "$(DEV_ENV_FILE)" ]; then \
 		echo "Missing $(DEV_ENV_FILE). Run: cp .env.example .env"; \
@@ -86,7 +99,7 @@ dev-postgres:
 	case "$$dev_env_file" in /*) ;; *) dev_env_file="./$$dev_env_file";; esac; \
 	set -a; . "$$dev_env_file"; set +a; \
 	: "$${GROM_POSTGRES_PASSWORD:=grom-local-password}"; \
-	: "$${GROM_POSTGRES_PORT:=5432}"; \
+	: "$${GROM_POSTGRES_PORT:=5433}"; \
 	GROM_POSTGRES_PASSWORD="$$GROM_POSTGRES_PASSWORD" GROM_POSTGRES_PORT="$$GROM_POSTGRES_PORT" \
 		docker compose --env-file "$$dev_env_file" -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.postgres.yml up --detach --wait postgres; \
 	if ! docker compose --env-file "$$dev_env_file" -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.postgres.yml exec --no-TTY -e PGPASSWORD="$$GROM_POSTGRES_PASSWORD" postgres \

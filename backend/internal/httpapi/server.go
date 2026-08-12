@@ -820,6 +820,10 @@ func (s *Server) createServiceAccountToken(w http.ResponseWriter, r *http.Reques
 		r.Context(), foundation.ID(chi.URLParam(r, "id")), input.Name, input.ExpiresAt,
 	)
 	if err != nil {
+		if errors.Is(err, identitydomain.ErrServiceAccountAccessKeyLimit) {
+			writeError(w, r, http.StatusConflict, "access_key_limit_reached", err.Error())
+			return
+		}
 		writeError(w, r, http.StatusBadRequest, "invalid_token", err.Error())
 		return
 	}
@@ -1266,11 +1270,12 @@ func (s *Server) replaceRepositoryPolicies(w http.ResponseWriter, r *http.Reques
 }
 
 type artifactDeletionInput struct {
-	Repository     string   `json:"repository"`
-	Reference      string   `json:"reference"`
-	Reason         string   `json:"reason"`
-	ExpectedDigest *string  `json:"expectedDigest"`
-	ExpectedTags   []string `json:"expectedTags"`
+	Repository           string   `json:"repository"`
+	Reference            string   `json:"reference"`
+	Reason               string   `json:"reason"`
+	ExpectedDigest       *string  `json:"expectedDigest"`
+	ExpectedTags         []string `json:"expectedTags"`
+	ExpectedChildDigests []string `json:"expectedChildDigests"`
 }
 
 func (s *Server) previewArtifactDeletion(w http.ResponseWriter, r *http.Request) {
@@ -1296,6 +1301,7 @@ func (s *Server) deleteArtifact(w http.ResponseWriter, r *http.Request) {
 	deletion, err := s.artifactDeletions.Execute(
 		r.Context(), project.ID, project.Slug, input.Repository, input.Reference,
 		input.Reason, stringValue(input.ExpectedDigest), input.ExpectedTags,
+		input.ExpectedChildDigests,
 		principalForUser(userFromContext(r.Context())),
 	)
 	if err != nil {
@@ -1574,7 +1580,7 @@ func (s *Server) listTags(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	tags, err := s.distributionClient.ListTagsPage(r.Context(), project.Slug+"/"+repository, request.Limit, marker)
+	tags, err := s.distributionClient.ListLiveTagsPage(r.Context(), project.Slug+"/"+repository, request.Limit, marker)
 	if err != nil {
 		writeError(w, r, http.StatusBadGateway, "registry_unavailable", "Registry metadata is unavailable")
 		return

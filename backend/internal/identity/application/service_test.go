@@ -113,6 +113,46 @@ type viewerTokenRepository struct {
 	touched foundation.ID
 }
 
+type serviceAccountTokenRepository struct {
+	identity.Repository
+	account     *identity.ServiceAccount
+	activeCount int
+	created     *identity.APIToken
+}
+
+func (r *serviceAccountTokenRepository) FindServiceAccountByID(_ context.Context, id foundation.ID) (*identity.ServiceAccount, error) {
+	if r.account == nil || r.account.ID != id {
+		return nil, sql.ErrNoRows
+	}
+	return r.account, nil
+}
+
+func (r *serviceAccountTokenRepository) CountActiveServiceAccountAPITokens(_ context.Context, serviceAccountID foundation.ID, _ time.Time) (int, error) {
+	if r.account == nil || r.account.ID != serviceAccountID {
+		return 0, sql.ErrNoRows
+	}
+	return r.activeCount, nil
+}
+
+func (r *serviceAccountTokenRepository) CreateServiceAccountAPIToken(_ context.Context, token *identity.APIToken) error {
+	r.created = token
+	return nil
+}
+
+func TestCreateServiceAccountAPITokenRejectsFourthActiveKey(t *testing.T) {
+	account := &identity.ServiceAccount{ID: foundation.NewID()}
+	repository := &serviceAccountTokenRepository{account: account, activeCount: constants.MaxActiveServiceAccountAccessKeys}
+
+	created, err := New(repository, time.Hour).CreateServiceAccountAPIToken(context.Background(), account.ID, "pipeline", nil)
+
+	if !errors.Is(err, identity.ErrServiceAccountAccessKeyLimit) {
+		t.Fatalf("expected access-key limit error, got %v", err)
+	}
+	if created != nil || repository.created != nil {
+		t.Fatalf("expected no key to be created, got %#v", created)
+	}
+}
+
 func (r *viewerTokenRepository) FindUserByID(_ context.Context, id foundation.ID) (*identity.User, error) {
 	if r.user == nil || r.user.ID != id {
 		return nil, sql.ErrNoRows
