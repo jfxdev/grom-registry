@@ -180,4 +180,15 @@ func TestStorageRebuildsRestoreReadySnapshotsFromFacts(t *testing.T) {
 	if err := store.RebuildAllStorage(ctx, now.Add(3*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
+	emptyProjectID := foundation.NewID()
+	if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", emptyProjectID.String(), emptyProjectID.String(), "empty", "test", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RebuildAllStorage(ctx, now.Add(4*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	empty, err := store.StorageUsageForProject(ctx, emptyProjectID)
+	if err != nil || empty.Status != storageReady || empty.AccountedBytes == nil || *empty.AccountedBytes != 0 {
+		t.Fatalf("global rebuild must account empty projects as zero: usage=%+v err=%v", empty, err)
+	}
 }

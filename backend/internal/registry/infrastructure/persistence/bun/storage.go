@@ -170,12 +170,14 @@ func (s *Store) RebuildProjectStorage(ctx context.Context, projectID foundation.
 
 func (s *Store) RebuildAllStorage(ctx context.Context, at time.Time) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		var projects []repositoryModel
-		if err := tx.NewSelect().Model(&projects).Column("project_id").Distinct().OrderExpr("project_id ASC").Scan(ctx); err != nil {
+		var projects []struct {
+			ID string `bun:"id"`
+		}
+		if err := tx.NewSelect().Table("projects").Column("id").OrderExpr("id ASC").Scan(ctx, &projects); err != nil {
 			return err
 		}
 		for _, project := range projects {
-			if err := s.refreshProjectStorageSnapshot(ctx, tx, foundation.ID(project.ProjectID), at); err != nil {
+			if err := s.refreshProjectStorageSnapshot(ctx, tx, foundation.ID(project.ID), at); err != nil {
 				return err
 			}
 		}
