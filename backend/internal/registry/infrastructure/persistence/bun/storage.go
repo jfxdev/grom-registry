@@ -187,12 +187,16 @@ func (s *Store) refreshRepositoryStorageSnapshot(ctx context.Context, tx bun.Tx,
 	if err != nil {
 		return err
 	}
+	current := s.storageSnapshotColumn("repository_storage_snapshots", "inventory_version")
+	accountedBytes := s.storageSnapshotColumn("repository_storage_snapshots", "accounted_bytes")
+	reconciledAt := s.storageSnapshotColumn("repository_storage_snapshots", "reconciled_at")
+	status := s.storageSnapshotColumn("repository_storage_snapshots", "status")
 	if _, err := tx.NewInsert().Model(&repositoryStorageSnapshotModel{RepositoryID: repositoryID.String(), AccountedBytes: bytes, InventoryVersion: version, ReconciledAt: at, Status: storageReady}).
 		On("CONFLICT (repository_id) DO UPDATE").
-		Set("accounted_bytes = CASE WHEN EXCLUDED.inventory_version > inventory_version THEN EXCLUDED.accounted_bytes ELSE accounted_bytes END").
-		Set("inventory_version = CASE WHEN EXCLUDED.inventory_version > inventory_version THEN EXCLUDED.inventory_version ELSE inventory_version END").
-		Set("reconciled_at = CASE WHEN EXCLUDED.inventory_version > inventory_version THEN EXCLUDED.reconciled_at ELSE reconciled_at END").
-		Set("status = CASE WHEN EXCLUDED.inventory_version > inventory_version THEN EXCLUDED.status ELSE status END").Exec(ctx); err != nil {
+		Set("accounted_bytes = CASE WHEN EXCLUDED.inventory_version > ? THEN EXCLUDED.accounted_bytes ELSE ? END", bun.Safe(current), bun.Safe(accountedBytes)).
+		Set("inventory_version = CASE WHEN EXCLUDED.inventory_version > ? THEN EXCLUDED.inventory_version ELSE ? END", bun.Safe(current), bun.Safe(current)).
+		Set("reconciled_at = CASE WHEN EXCLUDED.inventory_version > ? THEN EXCLUDED.reconciled_at ELSE ? END", bun.Safe(current), bun.Safe(reconciledAt)).
+		Set("status = CASE WHEN EXCLUDED.inventory_version > ? THEN EXCLUDED.status ELSE ? END", bun.Safe(current), bun.Safe(status)).Exec(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -214,13 +218,24 @@ func (s *Store) refreshProjectStorageSnapshot(ctx context.Context, tx bun.Tx, pr
 	if err != nil {
 		return err
 	}
+	current := s.storageSnapshotColumn("project_storage_snapshots", "accounting_version")
+	accountedBytes := s.storageSnapshotColumn("project_storage_snapshots", "accounted_bytes")
+	reconciledAt := s.storageSnapshotColumn("project_storage_snapshots", "reconciled_at")
+	currentStatus := s.storageSnapshotColumn("project_storage_snapshots", "status")
 	_, err = tx.NewInsert().Model(&projectStorageSnapshotModel{ProjectID: projectID.String(), AccountedBytes: projectBytes, AccountingVersion: version, ReconciledAt: at, Status: status}).
 		On("CONFLICT (project_id) DO UPDATE").
-		Set("accounted_bytes = CASE WHEN EXCLUDED.accounting_version > accounting_version THEN EXCLUDED.accounted_bytes ELSE accounted_bytes END").
-		Set("accounting_version = CASE WHEN EXCLUDED.accounting_version > accounting_version THEN EXCLUDED.accounting_version ELSE accounting_version END").
-		Set("reconciled_at = CASE WHEN EXCLUDED.accounting_version > accounting_version THEN EXCLUDED.reconciled_at ELSE reconciled_at END").
-		Set("status = CASE WHEN EXCLUDED.accounting_version > accounting_version THEN EXCLUDED.status ELSE status END").Exec(ctx)
+		Set("accounted_bytes = CASE WHEN EXCLUDED.accounting_version > ? THEN EXCLUDED.accounted_bytes ELSE ? END", bun.Safe(current), bun.Safe(accountedBytes)).
+		Set("accounting_version = CASE WHEN EXCLUDED.accounting_version > ? THEN EXCLUDED.accounting_version ELSE ? END", bun.Safe(current), bun.Safe(current)).
+		Set("reconciled_at = CASE WHEN EXCLUDED.accounting_version > ? THEN EXCLUDED.reconciled_at ELSE ? END", bun.Safe(current), bun.Safe(reconciledAt)).
+		Set("status = CASE WHEN EXCLUDED.accounting_version > ? THEN EXCLUDED.status ELSE ? END", bun.Safe(current), bun.Safe(currentStatus)).Exec(ctx)
 	return err
+}
+
+func (s *Store) storageSnapshotColumn(table, column string) string {
+	if s.db.Dialect().Name() == dialect.PG {
+		return table + "." + column
+	}
+	return column
 }
 
 func (s *Store) lockProjectStorageSnapshot(ctx context.Context, tx bun.Tx, projectID foundation.ID) error {
@@ -378,7 +393,9 @@ func (s *Store) MarkRepositoryStorageStale(ctx context.Context, repositoryID fou
 		if err := tx.NewSelect().Model((*repositoryModel)(nil)).Column("project_id").Where("id = ?", repositoryID.String()).Scan(ctx, &projectID); err != nil {
 			return err
 		}
-		if _, err := tx.NewUpdate().Model((*repositoryStorageSnapshotModel)(nil)).Set("status = ?", storageStale).Where("repository_id = ?", repositoryID.String()).Exec(ctx); err != nil {
+		now := time.Now().UTC()
+		if _, err := tx.NewInsert().Model(&repositoryStorageSnapshotModel{RepositoryID: repositoryID.String(), InventoryVersion: now.UnixNano(), ReconciledAt: now, Status: storageStale}).
+			On("CONFLICT (repository_id) DO UPDATE").Set("status = EXCLUDED.status").Exec(ctx); err != nil {
 			return err
 		}
 		_, err := tx.NewUpdate().Model((*projectStorageSnapshotModel)(nil)).Set("status = ?", storageStale).Where("project_id = ?", projectID).Exec(ctx)

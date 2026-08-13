@@ -148,6 +148,29 @@ func TestProjectStorageAccountsEmptyRepositoryAsZero(t *testing.T) {
 	})
 }
 
+func TestMarkRepositoryStorageStalePersistsEmptyRepositorySnapshot(t *testing.T) {
+	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
+		ctx := context.Background()
+		store := New(db)
+		now := time.Now().UTC()
+		projectID, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
+		if err := store.MarkRepositoryStorageStale(ctx, repositoryID); err != nil {
+			t.Fatal(err)
+		}
+		repositoryUsage, err := store.storageUsageForRepository(ctx, repositoryID)
+		if err != nil || repositoryUsage.Status != storageStale || repositoryUsage.AccountedBytes == nil || *repositoryUsage.AccountedBytes != 0 {
+			t.Fatalf("empty repository stale snapshot: usage=%+v err=%v", repositoryUsage, err)
+		}
+		if err := store.RebuildProjectStorage(ctx, projectID, now.Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		projectUsage, err := store.StorageUsageForProject(ctx, projectID)
+		if err != nil || projectUsage.Status != storageStale {
+			t.Fatalf("project refresh must preserve empty repository stale snapshot: usage=%+v err=%v", projectUsage, err)
+		}
+	})
+}
+
 func TestAtomicReconciliationRollsBackFactsAndSnapshots(t *testing.T) {
 	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
 		ctx := context.Background()

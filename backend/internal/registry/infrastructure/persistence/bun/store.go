@@ -78,7 +78,9 @@ func (s *Store) ListRepositories(ctx context.Context, projectID foundation.ID) (
 		result = append(result, *repository)
 	}
 	s.attachStorageUsages(ctx, withUsage)
-	for i := range result { result[i].AccountedUsage = withUsage[i].AccountedUsage }
+	for i := range result {
+		result[i].AccountedUsage = withUsage[i].AccountedUsage
+	}
 	return result, nil
 }
 
@@ -112,7 +114,9 @@ func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.I
 		result.Items = append(result.Items, *repository)
 	}
 	s.attachStorageUsages(ctx, withUsage)
-	for i := range result.Items { result.Items[i].AccountedUsage = withUsage[i].AccountedUsage }
+	for i := range result.Items {
+		result.Items[i].AccountedUsage = withUsage[i].AccountedUsage
+	}
 	if len(models) > request.Limit {
 		last := models[request.Limit-1]
 		cursor, _ := foundation.EncodePageCursor(foundation.PageCursor{Scope: request.Scope, Name: last.Name})
