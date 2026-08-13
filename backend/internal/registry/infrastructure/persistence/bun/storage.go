@@ -14,6 +14,7 @@ import (
 	"github.com/jfxdev/grom/backend/internal/foundation"
 	registrydomain "github.com/jfxdev/grom/backend/internal/registry/domain"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect"
 )
 
 const storageReady = "ready"
@@ -68,7 +69,7 @@ func (s *Store) attachStorageUsages(ctx context.Context, repositories []*registr
 		ids[i] = repository.ID.String()
 	}
 	var snapshots []repositoryStorageSnapshotModel
-	if err := s.db.NewSelect().Model(&snapshots).Where("repository_id IN (?)", bun.In(ids)).Scan(ctx); err != nil {
+	if err := s.db.NewSelect().Model(&snapshots).Where("repository_id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
 		for _, repository := range repositories {
 			repository.AccountedUsage = foundation.AccountedStorageUsage{Status: "unavailable"}
 		}
@@ -99,7 +100,7 @@ func (s *Store) StorageUsageForProjects(ctx context.Context, projectIDs []founda
 		result[projectID] = foundation.PendingStorageUsage()
 	}
 	var snapshots []projectStorageSnapshotModel
-	if err := s.db.NewSelect().Model(&snapshots).Where("project_id IN (?)", bun.In(ids)).Scan(ctx); err != nil {
+	if err := s.db.NewSelect().Model(&snapshots).Where("project_id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
 		return nil, err
 	}
 	for _, snapshot := range snapshots {
@@ -171,6 +172,13 @@ func (s *Store) refreshStorageSnapshots(ctx context.Context, tx bun.Tx, reposito
 	if err := tx.NewSelect().Model((*repositoryModel)(nil)).Column("project_id").Where("id = ?", repositoryID.String()).Scan(ctx, &projectID); err != nil {
 		return err
 	}
+	if err := s.refreshRepositoryStorageSnapshot(ctx, tx, repositoryID, at); err != nil {
+		return err
+	}
+	return s.refreshProjectStorageSnapshot(ctx, tx, foundation.ID(projectID), at)
+}
+
+func (s *Store) refreshRepositoryStorageSnapshot(ctx context.Context, tx bun.Tx, repositoryID foundation.ID, at time.Time) error {
 	bytes, err := accountedBytes(ctx, tx, "rr.id = ?", repositoryID.String())
 	if err != nil {
 		return err
@@ -187,10 +195,13 @@ func (s *Store) refreshStorageSnapshots(ctx context.Context, tx bun.Tx, reposito
 		Set("status = CASE WHEN EXCLUDED.inventory_version > inventory_version THEN EXCLUDED.status ELSE status END").Exec(ctx); err != nil {
 		return err
 	}
-	return s.refreshProjectStorageSnapshot(ctx, tx, foundation.ID(projectID), at)
+	return nil
 }
 
 func (s *Store) refreshProjectStorageSnapshot(ctx context.Context, tx bun.Tx, projectID foundation.ID, at time.Time) error {
+	if err := s.lockProjectStorageSnapshot(ctx, tx, projectID); err != nil {
+		return err
+	}
 	projectBytes, err := accountedBytes(ctx, tx, "rr.project_id = ?", projectID.String())
 	if err != nil {
 		return err
@@ -210,6 +221,25 @@ func (s *Store) refreshProjectStorageSnapshot(ctx context.Context, tx bun.Tx, pr
 		Set("reconciled_at = CASE WHEN EXCLUDED.accounting_version > accounting_version THEN EXCLUDED.reconciled_at ELSE reconciled_at END").
 		Set("status = CASE WHEN EXCLUDED.accounting_version > accounting_version THEN EXCLUDED.status ELSE status END").Exec(ctx)
 	return err
+}
+
+func (s *Store) lockProjectStorageSnapshot(ctx context.Context, tx bun.Tx, projectID foundation.ID) error {
+	if s.db.Dialect().Name() == dialect.PG {
+		var id string
+		return tx.NewSelect().Table("projects").Column("id").Where("id = ?", projectID.String()).For("UPDATE").Scan(ctx, &id)
+	}
+	result, err := tx.NewUpdate().Table("projects").Set("slug = slug").Where("id = ?", projectID.String()).Exec(ctx)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func nextRepositoryStorageVersion(ctx context.Context, tx bun.Tx, repositoryID foundation.ID, requested int64) (int64, error) {
@@ -237,10 +267,7 @@ func nextProjectStorageVersion(ctx context.Context, tx bun.Tx, projectID foundat
 }
 
 func nextStorageVersion(requested, current int64) (int64, error) {
-	if requested > current {
-		return requested, nil
-	}
-	if requested < current {
+	if requested != current {
 		return requested, nil
 	}
 	if current == math.MaxInt64 {
@@ -261,16 +288,25 @@ func projectStorageStatus(ctx context.Context, tx bun.Tx, projectID foundation.I
 	for i, repository := range repositories {
 		ids[i] = repository.ID
 	}
-	var snapshots []repositoryStorageSnapshotModel
-	if err := tx.NewSelect().Model(&snapshots).Where("repository_id IN (?)", bun.In(ids)).Scan(ctx); err != nil {
+	var inventoryRepositoryIDs []string
+	if err := tx.NewSelect().Table("registry_manifests").ColumnExpr("DISTINCT repository_id").Where("repository_id IN (?)", bun.List(ids)).Scan(ctx, &inventoryRepositoryIDs); err != nil {
 		return "", err
 	}
-	if len(snapshots) != len(repositories) {
-		return storagePending, nil
+	var snapshots []repositoryStorageSnapshotModel
+	if err := tx.NewSelect().Model(&snapshots).Where("repository_id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
+		return "", err
 	}
+	byRepositoryID := make(map[string]repositoryStorageSnapshotModel, len(snapshots))
 	for _, snapshot := range snapshots {
+		byRepositoryID[snapshot.RepositoryID] = snapshot
 		if snapshot.Status == storageStale {
 			return storageStale, nil
+		}
+	}
+	for _, repositoryID := range inventoryRepositoryIDs {
+		_, found := byRepositoryID[repositoryID]
+		if !found {
+			return storagePending, nil
 		}
 	}
 	return storageReady, nil
@@ -305,7 +341,7 @@ func (s *Store) RebuildAllStorage(ctx context.Context, at time.Time) error {
 			}
 			for repositoryIndex, repository := range repositories {
 				reconciledAt := at.Add(time.Duration(projectIndex+repositoryIndex+1) * time.Nanosecond)
-				if err := s.refreshStorageSnapshots(ctx, tx, foundation.ID(repository.ID), reconciledAt); err != nil {
+				if err := s.refreshRepositoryStorageSnapshot(ctx, tx, foundation.ID(repository.ID), reconciledAt); err != nil {
 					return err
 				}
 			}

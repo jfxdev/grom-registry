@@ -42,6 +42,18 @@ func forStorageDatabases(t *testing.T, test func(*testing.T, *bun.DB)) {
 	}
 }
 
+func seedProjectWithRepository(t *testing.T, ctx context.Context, db *bun.DB, store *Store, now time.Time) (foundation.ID, foundation.ID) {
+	t.Helper()
+	projectID, repositoryID := foundation.NewID(), foundation.NewID()
+	if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", projectID.String(), projectID.String(), "test", "test", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	return projectID, repositoryID
+}
+
 func TestStorageAccountingDeduplicatesByDigestAndRefreshesOnDeletion(t *testing.T) {
 	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
 		ctx := context.Background()
@@ -103,13 +115,7 @@ func TestStorageAccountingRejectsInconsistentDescriptorSize(t *testing.T) {
 		ctx := context.Background()
 		store := New(db)
 		now := time.Now().UTC()
-		projectID, repositoryID := foundation.NewID(), foundation.NewID()
-		if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", projectID.String(), projectID.String(), "test", "test", now); err != nil {
-			t.Fatal(err)
-		}
-		if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
-			t.Fatal(err)
-		}
+		projectID, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
 		if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:one", ManifestSize: 1, Tag: "one", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared", SizeBytes: 10, Role: "layer"}}}, now); err != nil {
 			t.Fatal(err)
 		}
@@ -123,18 +129,31 @@ func TestStorageAccountingRejectsInconsistentDescriptorSize(t *testing.T) {
 	})
 }
 
+func TestProjectStorageAccountsEmptyRepositoryAsZero(t *testing.T) {
+	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
+		ctx := context.Background()
+		store := New(db)
+		now := time.Now().UTC()
+		projectID, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
+		if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: foundation.NewID(), ProjectID: projectID, Name: "empty", Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:one", ManifestSize: 1, Tag: "latest", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:layer", SizeBytes: 10, Role: "layer"}}}, now); err != nil {
+			t.Fatal(err)
+		}
+		usage, err := store.StorageUsageForProject(ctx, projectID)
+		if err != nil || usage.Status != storageReady || usage.AccountedBytes == nil || *usage.AccountedBytes != 11 {
+			t.Fatalf("empty repository must not make project storage pending: usage=%+v err=%v", usage, err)
+		}
+	})
+}
+
 func TestAtomicReconciliationRollsBackFactsAndSnapshots(t *testing.T) {
 	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
 		ctx := context.Background()
 		store := New(db)
 		now := time.Now().UTC()
-		projectID, repositoryID := foundation.NewID(), foundation.NewID()
-		if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", projectID.String(), projectID.String(), "test", "test", now); err != nil {
-			t.Fatal(err)
-		}
-		if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
-			t.Fatal(err)
-		}
+		projectID, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
 		initial := registrydomain.ManifestObservation{Digest: "sha256:initial", ManifestSize: 1, Tag: "latest", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared", SizeBytes: 10, Role: "layer"}}}
 		if err := store.UpsertManifestObservation(ctx, repositoryID, initial, now); err != nil {
 			t.Fatal(err)
@@ -162,13 +181,7 @@ func TestStorageRebuildsRestoreReadySnapshotsFromFacts(t *testing.T) {
 		ctx := context.Background()
 		store := New(db)
 		now := time.Now().UTC()
-		projectID, repositoryID := foundation.NewID(), foundation.NewID()
-		if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", projectID.String(), projectID.String(), "test", "test", now); err != nil {
-			t.Fatal(err)
-		}
-		if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
-			t.Fatal(err)
-		}
+		projectID, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
 		if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:one", ManifestSize: 1, Tag: "latest", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:layer", SizeBytes: 10, Role: "layer"}}}, now); err != nil {
 			t.Fatal(err)
 		}
@@ -225,13 +238,7 @@ func TestStorageSnapshotsRejectOlderRefreshes(t *testing.T) {
 		ctx := context.Background()
 		store := New(db)
 		now := time.Now().UTC()
-		projectID, repositoryID := foundation.NewID(), foundation.NewID()
-		if _, err := db.ExecContext(ctx, "INSERT INTO projects (id, slug, name, created_by, created_at) VALUES (?, ?, ?, ?, ?)", projectID.String(), projectID.String(), "test", "test", now); err != nil {
-			t.Fatal(err)
-		}
-		if err := store.CreateRepository(ctx, &registrydomain.Repository{ID: repositoryID, ProjectID: projectID, Name: "api", Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual, Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now}); err != nil {
-			t.Fatal(err)
-		}
+		_, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
 		if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:one", ManifestSize: 1, Tag: "latest", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:layer", SizeBytes: 10, Role: "layer"}}}, now); err != nil {
 			t.Fatal(err)
 		}
