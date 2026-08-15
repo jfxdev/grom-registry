@@ -1,7 +1,9 @@
 # Release operations
 
-This guide covers the supported first-release installation: one active Grom
-instance, SQLite, local blob storage, and private CNCF Distribution.
+This guide covers the supported installation profile: one active Grom instance,
+SQLite (the default) or PostgreSQL, local blob storage, and private CNCF
+Distribution. PostgreSQL support does not permit multiple active Grom
+instances.
 
 ## Install a published release
 
@@ -29,7 +31,10 @@ which could replace the selected published digest with a local build.
 4. Verify `/readyz`, administrator sign-in, project browsing, and a pull plus
    push through the public registry endpoint.
 
-Forward upgrades are accepted for the supported SQLite/local-storage matrix.
+Forward upgrades from `v0.0.1` are accepted for its SQLite/local-storage
+matrix. PostgreSQL support begins with the first stable release that advertises
+it; a release must not imply a PostgreSQL upgrade path from the SQLite-only
+`v0.0.1` baseline.
 The [release-upgrade acceptance journey](https://github.com/jfxdev/grom-registry/pull/23)
 upgrades the published `v0.0.1` baseline to a locally built candidate while
 preserving SQLite and local-registry volumes; it verifies administrator access,
@@ -57,7 +62,13 @@ in backups; a supported operator-facing replacement workflow is post-MVP.
 
 ## Supported matrix
 
-The first release supports SQLite, local blob storage, one active Grom
-instance, and Docker image push/pull. PostgreSQL, S3-compatible storage, ORAS,
-and generic OCI compatibility remain unadvertised until their dedicated gates
-pass.
+The supported matrix is SQLite (default) or PostgreSQL with local blob storage,
+one active Grom instance, and Docker image push/pull. The PostgreSQL test and
+backup/recovery gates passed in [PR #33](https://github.com/jfxdev/grom-registry/pull/33).
+S3-compatible storage, ORAS, and generic OCI compatibility remain unadvertised
+until their dedicated gates pass.
+
+Repository and project pages report logical accounted registry usage. It
+deduplicates live OCI descriptors within each scope and is not filesystem
+capacity or reclaimable GC space; Settings and garbage collection remain the
+source for physical Distribution-storage measurements.

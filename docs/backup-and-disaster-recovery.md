@@ -153,5 +153,7 @@ trusted proxies, and registry HTTP secret in encrypted storage.
   corruption rejection in an isolated Compose project.
 - `make test-backup-restore-postgres-e2e` performs the same journey through
   the PostgreSQL Compose overlay. Both journeys are configured in the
-  `Backup Restore E2E` GitHub Actions workflow; PostgreSQL support is promoted
-  to the release matrix only after its first required CI run passes.
+  `Backup Restore E2E` GitHub Actions workflow. The first required PostgreSQL
+  journey passed in [PR #33](https://github.com/jfxdev/grom-registry/pull/33),
+  so PostgreSQL with local Distribution storage is in the supported matrix for
+  one active Grom instance.
