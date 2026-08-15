@@ -282,9 +282,8 @@ Acceptance:
 
 ### Completion step 3: enforce contract-first delivery
 
-**Status: implemented for validation, freshness, and bidirectional route
-coverage; breaking-change detection remains open until compatibility-guaranteed
-API releases begin.**
+**Status: implemented for validation, freshness, bidirectional route coverage,
+and compatibility detection.**
 
 Primary areas:
 
@@ -308,17 +307,20 @@ Work:
 4. Run a contract-to-route test proving required operations are registered.
 5. Keep implementation/response contract tests for representative success and
    error variants.
-6. Make validation, freshness, route coverage, and frontend type checks
-   mandatory in CI; the remaining breaking-change check is deferred.
-7. Add breaking-change detection against the main branch when Grom begins
-   publishing a compatibility-guaranteed API.
-8. Document the versioning and release-note process before the first
+6. Make validation, freshness, route coverage, frontend type checks, and
+   breaking-change detection mandatory in CI.
+7. Compare each pull request and merge queue revision with `main`, failing on
+   potential or definite management/auth OpenAPI breaks.
+8. Let `v1.0.0` establish the initial stable baseline; compare every later
+   stable release with its immediately preceding stable tag before publication.
+9. Document the versioning and release-note process before the first
    compatibility-guaranteed API release.
 
 Acceptance:
 
 - MVP CI fails for invalid OpenAPI, stale generated output, an undocumented
-  route, or an unregistered required operation.
+  route, an unregistered required operation, or a potential/definite breaking
+  management/auth contract change.
 - Domain entities remain independent from generated transport models.
 - Frontend server-owned enums continue to come from generated OpenAPI types.
 - `/api/openapi.yaml` and `/api/docs` represent the contract used to build the
@@ -405,10 +407,17 @@ Current evidence:
   `PostgreSQL Tests`, `Frontend Tests`, `Go Lint`, `Go Vulnerability Check`,
   `Registry E2E (Docker)`,
   `Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and
-  `Backup Restore E2E`; branch-protection state is not stored in workflow YAML.
+  `Backup Restore E2E`; `OpenAPI Compatibility` must be added after its first
+  successful run. Branch-protection state is not stored in workflow YAML.
 - Backend tests validate the OpenAPI document and compare all registered
   management routes with the contract in both directions. The frontend job
   regenerates TypeScript API types and fails on tracked drift.
+- `.github/workflows/openapi-compatibility.yml` compares the management/auth
+  contract with the `main` baseline for pull requests, merge queues, and
+  `main`; it uses pinned `oasdiff`, fails on `WARN` or `ERR`, and does not
+  upload the contract. The release workflow repeats the comparison with the
+  immediately preceding stable tag, except for `v1.0.0`, which establishes the
+  initial baseline.
 - The `Admin Journey E2E (Docker)` check, including the expanded destructive
   administrative flows, passed in [PR #27](https://github.com/jfxdev/grom-registry/pull/27)
   alongside every other mandatory default-path check.
@@ -1305,9 +1314,9 @@ Neither endpoint includes secrets or environment-specific server URLs.
 Documentation endpoints may be disabled by configuration in hardened deployments without disabling the API itself.
 
 CI validates the OpenAPI document with kin-openapi, regenerates the Go transport
-output, checks frontend generated-code freshness, and exercises bidirectional
-route coverage. Breaking-change detection remains open until the API has a
-compatibility-guaranteed release policy.
+output, checks frontend generated-code freshness, exercises bidirectional route
+coverage, and rejects potential or definite compatibility breaks against the
+applicable `main` or stable-tag baseline without uploading the contract.
 
 An intentional breaking change requires an API versioning decision and release note.
 
@@ -1594,7 +1603,9 @@ Grom instances are supported.
   PostgreSQL, and first-admin bootstrap.
 - **Implemented:** OpenAPI contract validation, Go/TypeScript generation,
   frontend generated-code freshness, bidirectional route coverage, and
-  interactive docs exist. Breaking-change detection remains deferred.
+  interactive docs exist. Pinned `oasdiff` compatibility checks compare pull
+  requests and merge queues with `main`; releases after `v1.0.0` also compare
+  with the preceding stable tag.
 - **Implemented:** CI enforces Go formatting and tests, SQLite integration,
   frontend lint/tests/typechecking/build, golangci-lint, govulncheck, and the
   isolated real-Docker registry, administrative-browser, boot-acceptance, and

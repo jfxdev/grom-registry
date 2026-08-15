@@ -20,6 +20,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `deploy/distribution/` | CNCF Distribution configuration |
 | `.github/workflows/ci.yml` | Mandatory SQLite backend checks, separate mandatory PostgreSQL migration/repository suite, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and backend/frontend Codecov coverage and JUnit test-result uploads |
 | `.github/workflows/codeql.yml` | Advisory CodeQL code scanning for Go and JavaScript/TypeScript across pull requests, `main`, merge queues, and a weekly schedule |
+| `.github/workflows/openapi-compatibility.yml` | Mandatory compatibility gate; compares the management/auth OpenAPI document with `main` for pull requests and merge queues, without uploading the contract |
 | `codecov.yml` | Explicit 70% patch-coverage gate and narrow generated-code/static-asset exclusions |
 | `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry authorization, restart-preservation, and session-revocation acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/release-upgrade-e2e.yml` | Tagged-GHCR-release to checkout-candidate SQLite/local-storage upgrade acceptance check; it is intentionally separate from the required, network-independent registry journey |
@@ -27,7 +28,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `.github/workflows/boot-acceptance-e2e.yml` | Mandatory real-Docker default-installation boot, migration, readiness, and API-documentation acceptance check |
 | `.github/workflows/backup-restore-e2e.yml` | Real-Docker SQLite and PostgreSQL volume-loss and recovery acceptance checks |
 | `.github/workflows/production-image-smoke.yml` | Mandatory clean-checkout production-image build, non-root assertion, and public-surface smoke check |
-| `.github/workflows/release.yml` | Tag-triggered GHCR image publication, SBOM and vulnerability-report generation, release checksums, and GitHub Release assets |
+| `.github/workflows/release.yml` | Tag-triggered GHCR image publication, stable-tag OpenAPI compatibility validation after the `v1.0.0` baseline, SBOM and vulnerability-report generation, release checksums, and GitHub Release assets |
 | `docs/` | Architecture, domain inventory, operations, decisions, and visual identity |
 | `AGENTS.md` | Current operational instructions for coding agents |
 
