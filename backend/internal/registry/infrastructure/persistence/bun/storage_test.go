@@ -74,7 +74,7 @@ func TestStorageAccountingDeduplicatesByDigestAndRefreshesOnDeletion(t *testing.
 				t.Fatal(err)
 			}
 		}
-		shared := registrydomain.Descriptor{Digest: "sha256:shared", SizeBytes: 100, Role: "layer"}
+		shared := registrydomain.Descriptor{Digest: "sha256:shared-dedup", SizeBytes: 100, Role: "layer"}
 		for _, repositoryID := range []foundation.ID{first, second, third} {
 			observation := registrydomain.ManifestObservation{Digest: "sha256:manifest-" + repositoryID.String(), ManifestSize: 10, Tag: "latest", Descriptors: []registrydomain.Descriptor{shared}}
 			if err := store.UpsertManifestObservation(ctx, repositoryID, observation, now); err != nil {
@@ -116,10 +116,10 @@ func TestStorageAccountingRejectsInconsistentDescriptorSize(t *testing.T) {
 		store := New(db)
 		now := time.Now().UTC()
 		projectID, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
-		if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:one", ManifestSize: 1, Tag: "one", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared", SizeBytes: 10, Role: "layer"}}}, now); err != nil {
+		if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:one", ManifestSize: 1, Tag: "one", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared-reject", SizeBytes: 10, Role: "layer"}}}, now); err != nil {
 			t.Fatal(err)
 		}
-		if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:two", ManifestSize: 2, Tag: "two", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared", SizeBytes: 20, Role: "layer"}}}, now); err == nil {
+		if err := store.UpsertManifestObservation(ctx, repositoryID, registrydomain.ManifestObservation{Digest: "sha256:two", ManifestSize: 2, Tag: "two", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared-reject", SizeBytes: 20, Role: "layer"}}}, now); err == nil {
 			t.Fatal("expected immutable descriptor size failure")
 		}
 		usage, err := store.StorageUsageForProject(ctx, projectID)
@@ -177,13 +177,13 @@ func TestAtomicReconciliationRollsBackFactsAndSnapshots(t *testing.T) {
 		store := New(db)
 		now := time.Now().UTC()
 		projectID, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
-		initial := registrydomain.ManifestObservation{Digest: "sha256:initial", ManifestSize: 1, Tag: "latest", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared", SizeBytes: 10, Role: "layer"}}}
+		initial := registrydomain.ManifestObservation{Digest: "sha256:initial", ManifestSize: 1, Tag: "latest", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared-atomic", SizeBytes: 10, Role: "layer"}}}
 		if err := store.UpsertManifestObservation(ctx, repositoryID, initial, now); err != nil {
 			t.Fatal(err)
 		}
 		err := store.ReconcileManifestObservationsAtomically(ctx, repositoryID, []registrydomain.ManifestObservation{
 			{Digest: "sha256:new", ManifestSize: 2, Tag: "new", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:new-layer", SizeBytes: 20, Role: "layer"}}},
-			{Digest: "sha256:broken", ManifestSize: 3, Tag: "broken", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared", SizeBytes: 99, Role: "layer"}}},
+			{Digest: "sha256:broken", ManifestSize: 3, Tag: "broken", Descriptors: []registrydomain.Descriptor{{Digest: "sha256:shared-atomic", SizeBytes: 99, Role: "layer"}}},
 		}, []string{"new", "broken"}, []string{"sha256:new", "sha256:broken"}, now.Add(time.Minute))
 		if err == nil {
 			t.Fatal("expected inconsistent descriptor failure")

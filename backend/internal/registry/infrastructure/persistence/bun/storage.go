@@ -187,10 +187,10 @@ func (s *Store) refreshRepositoryStorageSnapshot(ctx context.Context, tx bun.Tx,
 	if err != nil {
 		return err
 	}
-	current := s.storageSnapshotColumn("repository_storage_snapshots", "inventory_version")
-	accountedBytes := s.storageSnapshotColumn("repository_storage_snapshots", "accounted_bytes")
-	reconciledAt := s.storageSnapshotColumn("repository_storage_snapshots", "reconciled_at")
-	status := s.storageSnapshotColumn("repository_storage_snapshots", "status")
+	current := s.storageSnapshotColumn("rss", "inventory_version")
+	accountedBytes := s.storageSnapshotColumn("rss", "accounted_bytes")
+	reconciledAt := s.storageSnapshotColumn("rss", "reconciled_at")
+	status := s.storageSnapshotColumn("rss", "status")
 	if _, err := tx.NewInsert().Model(&repositoryStorageSnapshotModel{RepositoryID: repositoryID.String(), AccountedBytes: bytes, InventoryVersion: version, ReconciledAt: at, Status: storageReady}).
 		On("CONFLICT (repository_id) DO UPDATE").
 		Set("accounted_bytes = CASE WHEN EXCLUDED.inventory_version > ? THEN EXCLUDED.accounted_bytes ELSE ? END", bun.Safe(current), bun.Safe(accountedBytes)).
@@ -218,10 +218,10 @@ func (s *Store) refreshProjectStorageSnapshot(ctx context.Context, tx bun.Tx, pr
 	if err != nil {
 		return err
 	}
-	current := s.storageSnapshotColumn("project_storage_snapshots", "accounting_version")
-	accountedBytes := s.storageSnapshotColumn("project_storage_snapshots", "accounted_bytes")
-	reconciledAt := s.storageSnapshotColumn("project_storage_snapshots", "reconciled_at")
-	currentStatus := s.storageSnapshotColumn("project_storage_snapshots", "status")
+	current := s.storageSnapshotColumn("pss", "accounting_version")
+	accountedBytes := s.storageSnapshotColumn("pss", "accounted_bytes")
+	reconciledAt := s.storageSnapshotColumn("pss", "reconciled_at")
+	currentStatus := s.storageSnapshotColumn("pss", "status")
 	_, err = tx.NewInsert().Model(&projectStorageSnapshotModel{ProjectID: projectID.String(), AccountedBytes: projectBytes, AccountingVersion: version, ReconciledAt: at, Status: status}).
 		On("CONFLICT (project_id) DO UPDATE").
 		Set("accounted_bytes = CASE WHEN EXCLUDED.accounting_version > ? THEN EXCLUDED.accounted_bytes ELSE ? END", bun.Safe(current), bun.Safe(accountedBytes)).
