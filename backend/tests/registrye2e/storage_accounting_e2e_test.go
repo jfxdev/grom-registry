@@ -64,8 +64,12 @@ func TestStorageAccountingThroughPublicAPI(t *testing.T) {
 		t.Fatalf("project accounting after distinct image = %d, want greater than %d", alphaUsage.project, baseUsage)
 	}
 
+	beforeReconciliation := admin.project(t, "storage-alpha").AccountedUsage.ReconciledAt
+	if beforeReconciliation == nil {
+		t.Fatal("storage-alpha project accounting has no reconciliation time before reconciliation")
+	}
 	admin.reconcileInventory(t, "storage-alpha", "app")
-	alphaUsage = waitForReadyStorageUsage(t, admin, "storage-alpha", "app", "worker")
+	alphaUsage = waitForStorageUsageAfterReconciliation(t, admin, "storage-alpha", *beforeReconciliation, "app", "worker")
 	if alphaUsage.project <= baseUsage {
 		t.Fatalf("project accounting after reconciliation = %d, want greater than %d", alphaUsage.project, baseUsage)
 	}
@@ -97,6 +101,29 @@ func waitForReadyStorageUsage(
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("storage accounting did not become ready for project %q: project=%#v repositories=%#v", projectSlug, project.AccountedUsage, repositories)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+func waitForStorageUsageAfterReconciliation(
+	t *testing.T,
+	api *managementClient,
+	projectSlug string,
+	previousReconciliation time.Time,
+	repositoryNames ...string,
+) storageUsageSnapshot {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		project := api.project(t, projectSlug)
+		repositories := api.repositories(t, projectSlug)
+		usage, ready := readyStorageUsage(project, repositories, repositoryNames)
+		if ready && project.AccountedUsage.ReconciledAt != nil && project.AccountedUsage.ReconciledAt.After(previousReconciliation) {
+			return usage
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("storage accounting did not reconcile for project %q after %s: project=%#v repositories=%#v", projectSlug, previousReconciliation, project.AccountedUsage, repositories)
 		}
 		time.Sleep(250 * time.Millisecond)
 	}

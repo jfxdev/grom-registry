@@ -126,7 +126,10 @@ downgrade a database by changing only the image; restore a compatible backup.
 
 Starting with a `v1.0.0` release, `/api/v1` and `/auth/token` are public
 contracts. Clients compatible with `/api/v1` must continue to work throughout
-the `1.x` release line.
+the `1.x` release line. The unversioned `/auth/token` follows the same
+compatibility and successor-versioning mechanism as `/api/v1`; an incompatible
+change must move to a new documented versioned auth endpoint alongside the new
+API version, never silently alter `/auth/token`.
 
 - Patch releases contain fixes and documentation changes only; they do not make
   incompatible contract changes.
@@ -142,12 +145,13 @@ replacement in release notes, and remain available for at least two minor
 releases or 180 days, whichever is longer. Security fixes may shorten that
 window and will describe the impact and migration path in the release notes.
 
-A `v1.0.0` release requires CI to compare its OpenAPI contract with the
-previous stable contract; later stable releases keep that comparison. An
-incompatible change requires an approved exception, a documented migration
-path, and release notes. This policy covers the published management API and
-token endpoint; Docker is the supported registry-client compatibility surface.
-It does not claim generic OCI/ORAS, S3, or multi-instance support.
+A `v1.0.0` release establishes the initial OpenAPI contract baseline and does
+not require a comparison. Each later stable release requires CI to compare its
+OpenAPI contract with the previous stable contract. An incompatible change
+requires an approved exception, a documented migration path, and release
+notes. This policy covers the published management API and token endpoint;
+Docker is the supported registry-client compatibility surface. It does not
+claim generic OCI/ORAS, S3, or multi-instance support.
 
 ## Development
 
