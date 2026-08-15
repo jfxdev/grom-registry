@@ -24,6 +24,7 @@ web interface for access, images, and recovery.
 - [Operations](#operations)
   - [Backup and recovery](#backup-and-recovery)
   - [Releases and upgrades](#releases-and-upgrades)
+- [Compatibility policy](#compatibility-policy)
 - [Development](#development)
   - [Common commands](#common-commands)
   - [Acceptance commands](#acceptance-commands)
@@ -120,6 +121,33 @@ Before upgrading, create and download a verified recovery point. Set
 `GROM_IMAGE` to the new digest, start with `docker compose pull` and
 `docker compose up -d --no-build`, then check `/readyz` and `/api/docs`. Do not
 downgrade a database by changing only the image; restore a compatible backup.
+
+## Compatibility policy
+
+Starting with a `v1.0.0` release, `/api/v1` and `/auth/token` are public
+contracts. Clients compatible with `/api/v1` must continue to work throughout
+the `1.x` release line.
+
+- Patch releases contain fixes and documentation changes only; they do not make
+  incompatible contract changes.
+- Minor releases may add opt-in capabilities, endpoints, and optional fields.
+- Removing or renaming fields or endpoints, changing field types or semantics,
+  tightening authorization or validation for an accepted request, or adding a
+  value to an existing closed enum is incompatible.
+- Incompatible changes require a new API version such as `/api/v2`; they must
+  not silently alter `/api/v1`.
+
+Deprecated operations and fields are marked in OpenAPI, identify their
+replacement in release notes, and remain available for at least two minor
+releases or 180 days, whichever is longer. Security fixes may shorten that
+window and will describe the impact and migration path in the release notes.
+
+A `v1.0.0` release requires CI to compare its OpenAPI contract with the
+previous stable contract; later stable releases keep that comparison. An
+incompatible change requires an approved exception, a documented migration
+path, and release notes. This policy covers the published management API and
+token endpoint; Docker is the supported registry-client compatibility surface.
+It does not claim generic OCI/ORAS, S3, or multi-instance support.
 
 ## Development
 

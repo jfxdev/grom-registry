@@ -91,14 +91,17 @@ and pushed blobs across the upgrade and a subsequent restart. Keep it outside
 the network-independent registry journey and do not mark supported upgrades as
 accepted until the tagged-release evidence has passed in CI.
 `PostgreSQL Backup Restore E2E` runs the same destructive recovery journey
-through the PostgreSQL Compose overlay. Do not advertise PostgreSQL as
-supported until its first CI run passes; its status check is required by the
-`main` branch ruleset.
+through the PostgreSQL Compose overlay. Its first CI run passed in PR #33, so
+PostgreSQL with local Distribution storage is supported for one active Grom
+instance. Keep its status check required by the `main` branch ruleset; this
+does not add S3, multi-instance, or a PostgreSQL upgrade path from a release
+that did not advertise PostgreSQL.
 The mandatory GitHub status checks are `Backend Tests`, `PostgreSQL Tests`,
 `Frontend Tests`, `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
-`Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`, and
-`Backup Restore E2E`, and `Production Image Smoke (Docker)`, defined under
-`.github/workflows`. Keep these job names stable and require all ten in the
+`Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`,
+`Backup Restore E2E`, `PostgreSQL Backup Restore E2E`, and
+`Production Image Smoke (Docker)`, defined under `.github/workflows`. Keep
+these job names stable and require all eleven in the
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.

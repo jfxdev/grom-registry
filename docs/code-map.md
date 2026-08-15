@@ -152,7 +152,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `backend/internal/registry/infrastructure/distribution/client.go` | Internal Distribution metadata client; filters dangling tag links, recursively reads image-index children, and calculates logical config-plus-layer platform sizes |
 | `backend/internal/registry/infrastructure/persistence/bun/lifecycle.go` | Inventory, preview, run, and execution-lock persistence |
 | `backend/internal/audit/` | Immutable lifecycle audit event recording |
-| `backend/tests/registrye2e/` | Opt-in public-endpoint registry authorization, slow streaming blob upload, GC same-digest/different-digest republishing, user-session revocation, and full-stack restart-preservation journeys; isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
+| `backend/tests/registrye2e/` | Opt-in public-endpoint registry authorization, logical storage-accounting, slow streaming blob upload, GC same-digest/different-digest republishing, user-session revocation, and full-stack restart-preservation journeys; isolated Compose lifecycle, API and Docker clients, and network-independent fixtures |
 | `backend/tests/bootacceptance/` | Opt-in public boot, migration, readiness, and API-documentation acceptance journey through an isolated Compose stack; includes the reviewed prior-schema fixture and a separate real-migration failure fixture |
 | `backend/tests/backuprestoree2e/` | Opt-in destructive SQLite or PostgreSQL volume-loss recovery journey through public Grom and Docker endpoints |
 | `frontend/e2e/` | Playwright mocked sign-in smoke plus isolated public-stack first-push and destructive-administration journeys |
@@ -166,7 +166,7 @@ OpenAPI types live under `shared/api/generated` and are never edited manually.
 | `make test` | Run backend tests, frontend lint, tests, and type checks |
 | `make test-postgres GROM_TEST_POSTGRES_URL=postgres://...` | Run the backend migration and repository suite against an available PostgreSQL database |
 | `make test-coverage` | Generate Go and frontend LCOV coverage reports used by Codecov |
-| `make test-registry-e2e` | Run the isolated real-Docker authorization, policy, JWT, inventory, session-revocation, and restart-preservation journeys |
+| `make test-registry-e2e` | Run the isolated real-Docker authorization, policy, JWT, inventory and logical-storage-accounting, session-revocation, and restart-preservation journeys |
 | `make test-release-upgrade-e2e` | Pull the configured tagged GHCR baseline for `GROM_UPGRADE_PLATFORM` (default `linux/amd64`), upgrade its preserved SQLite/local-registry volumes to a locally built candidate, and verify metadata, credentials, blobs, and restart preservation |
 | `make test-admin-e2e` | Run isolated real-browser first-push plus destructive access, credential, artifact, lifecycle, repository, project, user, and backup journeys |
 | `make test-boot-acceptance` | Run the isolated default-installation boot, migration, readiness, and API-documentation journey |

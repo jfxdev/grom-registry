@@ -110,6 +110,13 @@ func (c *managementClient) createProject(t *testing.T, name, slug string) openap
 	return project
 }
 
+func (c *managementClient) project(t *testing.T, slug string) openapi.Project {
+	t.Helper()
+	var project openapi.Project
+	c.doJSON(t, http.MethodGet, "/api/v1/projects/"+url.PathEscape(slug), nil, &project, http.StatusOK)
+	return project
+}
+
 func (c *managementClient) createServicePrincipal(t *testing.T, name, username string) servicePrincipal {
 	t.Helper()
 	var account openapi.ServiceAccount
@@ -225,6 +232,13 @@ func (c *managementClient) inventory(t *testing.T, project, repository string) [
 		t.Fatalf("decode inventory page: %v", err)
 	}
 	return inventory.Items
+}
+
+func (c *managementClient) reconcileInventory(t *testing.T, project, repository string) {
+	t.Helper()
+	c.doJSON(t, http.MethodPost,
+		"/api/v1/projects/"+url.PathEscape(project)+"/repository-inventory-reconciliations",
+		openapi.RepositorySelection{Repository: repository}, nil, http.StatusOK)
 }
 
 func (c *managementClient) deleteArtifact(t *testing.T, project, repository, reference string) {

@@ -165,7 +165,8 @@ func TestMarkRepositoryStorageStalePersistsEmptyRepositorySnapshot(t *testing.T)
 			t.Fatal(err)
 		}
 		projectUsage, err := store.StorageUsageForProject(ctx, projectID)
-		if err != nil || projectUsage.Status != storageStale {
+		if err != nil || projectUsage.Status != storageStale ||
+			projectUsage.AccountedBytes == nil || *projectUsage.AccountedBytes != 0 {
 			t.Fatalf("project refresh must preserve empty repository stale snapshot: usage=%+v err=%v", projectUsage, err)
 		}
 	})
