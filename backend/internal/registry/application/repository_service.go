@@ -89,6 +89,7 @@ func (s *RepositoryService) Create(
 			return 0
 		}(),
 		Policies: policies, CreatedAt: now, UpdatedAt: now,
+		AccountedUsage: foundation.PendingStorageUsage(),
 	}
 	if err := s.store.CreateRepository(ctx, repository); err != nil {
 		return nil, err
@@ -112,7 +113,7 @@ func (s *RepositoryService) EnsureFromPush(
 		Status: constants.RepositoryStatusEmpty, CreationSource: constants.RepositoryCreationPush,
 		Profile: constants.RepositoryProfileUnknown, ProfileSource: constants.ProfileSourceNone,
 		ProfileConfidence: constants.ClassificationConfidenceNone,
-		Policies:          []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now,
+		Policies:          []registrydomain.Policy{}, AccountedUsage: foundation.PendingStorageUsage(), CreatedAt: now, UpdatedAt: now,
 	})
 	if err == nil && !created && repository.Status == constants.RepositoryStatusArchived {
 		return repository, false, ErrRepositoryArchived

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useSessionStore } from '@/modules/auth/store/session'
 import { APIError } from '@/shared/api/client'
+import type { AccountedStorageUsage } from '@/shared/api/models'
 import { ActionButton, Button, CancelButton } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { PaginationControls } from '@/shared/components/ui/pagination'
@@ -58,6 +59,22 @@ function openCreateModal() {
 function submitCreate() {
   error.value = ''
   create.mutate({ name: name.value, slug: slug.value })
+}
+
+function accountedUsageLabel(usage: AccountedStorageUsage | null | undefined) {
+  if (!usage) return 'Accounting pending'
+  if (usage.status === 'pending') return 'Accounting pending'
+  if (usage.status === 'stale') return `${formatBytes(usage.accountedBytes)} (stale)`
+  if (usage.status === 'unavailable') return 'Accounting unavailable'
+  return formatBytes(usage.accountedBytes)
+}
+
+function formatBytes(bytes: number | null | undefined) {
+  if (bytes === null || bytes === undefined) return '—'
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${(bytes / (1024 ** index)).toLocaleString(undefined, { maximumFractionDigits: index === 0 ? 0 : 2 })} ${units[index]}`
 }
 </script>
 
@@ -128,6 +145,7 @@ function submitCreate() {
             <span class="status-dot" />
             Active
           </div>
+          <p class="project-created">{{ accountedUsageLabel(project.accountedUsage) }} accounted</p>
           <p class="project-created">Created {{ new Date(project.createdAt).toLocaleDateString() }}</p>
           <ArrowUpRight class="project-open" :size="17" />
         </RouterLink>

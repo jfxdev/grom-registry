@@ -178,6 +178,11 @@ func (d *deletionTestDistribution) FetchManifest(
 	_ context.Context,
 	_, reference string,
 ) (*ManifestMetadata, error) {
+	for _, referrer := range d.referrers {
+		if reference == referrer.Digest {
+			return &ManifestMetadata{Digest: referrer.Digest, ManifestSize: referrer.Size}, nil
+		}
+	}
 	if reference != "dev" && reference != d.digest {
 		for _, child := range d.children {
 			if reference == child.Digest {

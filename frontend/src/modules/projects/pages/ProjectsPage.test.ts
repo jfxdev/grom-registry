@@ -117,4 +117,20 @@ describe('ProjectsPage', () => {
     expect(wrapper.find('.project-list + .panel-pagination').exists()).toBe(true)
     expect(wrapper.find('.project-list .panel-pagination').exists()).toBe(false)
   })
+
+  it('renders ready, pending, stale, and unavailable accounting without treating them as zero', async () => {
+    mocks.listProjects.mockResolvedValue([
+      { id: 'ready', name: 'Ready', slug: 'ready', createdBy: 'user-1', createdAt: '2026-07-29T10:00:00Z', accountedUsage: { status: 'ready', accountedBytes: 0 } },
+      { id: 'pending', name: 'Pending', slug: 'pending', createdBy: 'user-1', createdAt: '2026-07-29T10:00:00Z', accountedUsage: { status: 'pending' } },
+      { id: 'stale', name: 'Stale', slug: 'stale', createdBy: 'user-1', createdAt: '2026-07-29T10:00:00Z', accountedUsage: { status: 'stale', accountedBytes: 1024 } },
+      { id: 'unavailable', name: 'Unavailable', slug: 'unavailable', createdBy: 'user-1', createdAt: '2026-07-29T10:00:00Z', accountedUsage: { status: 'unavailable' } },
+    ])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('0 B accounted')
+    expect(wrapper.text()).toContain('Accounting pending')
+    expect(wrapper.text()).toContain('1 KB (stale)')
+    expect(wrapper.text()).toContain('Accounting unavailable')
+  })
 })

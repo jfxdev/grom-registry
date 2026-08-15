@@ -85,7 +85,7 @@ only if an actual split is implemented.
 | `backend/migrations/` | Ordered migrations applied automatically during boot |
 | `backend/api/openapi.yaml` | Canonical HTTP API contract |
 | `backend/internal/generated/openapi/` | Generated Go transport contracts; never edit manually |
-| `backend/internal/registry/infrastructure/persistence/bun/` | Logical repository, policy, inventory, deletion, lifecycle persistence, and keyset-paginated registry history and repository lists |
+| `backend/internal/registry/infrastructure/persistence/bun/` | Logical repository, policy, inventory, atomic descriptor/accounting facts and snapshots, internal rebuild primitives, deletion, lifecycle persistence, and keyset-paginated registry history and repository lists |
 | `backend/internal/identity/infrastructure/persistence/bun/pagination.go` | Keyset-paginated, server-filtered administrative users, service accounts, and access keys |
 | `backend/internal/projects/infrastructure/persistence/bun/pagination.go` | Keyset-paginated visible projects and principal-keyset project memberships |
 

@@ -66,6 +66,7 @@ func (s *Store) ListRepositories(ctx context.Context, projectID foundation.ID) (
 		return nil, err
 	}
 	result := make([]registrydomain.Repository, 0, len(models))
+	withUsage := make([]*registrydomain.Repository, 0, len(models))
 	for i := range models {
 		repository := toRepository(&models[i])
 		policies, err := s.listPolicies(ctx, repository.ID)
@@ -73,7 +74,12 @@ func (s *Store) ListRepositories(ctx context.Context, projectID foundation.ID) (
 			return nil, err
 		}
 		repository.Policies = policies
+		withUsage = append(withUsage, repository)
 		result = append(result, *repository)
+	}
+	s.attachStorageUsages(ctx, withUsage)
+	for i := range result {
+		result[i].AccountedUsage = withUsage[i].AccountedUsage
 	}
 	return result, nil
 }
@@ -96,6 +102,7 @@ func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.I
 		return foundation.PageResult[registrydomain.Repository]{}, err
 	}
 	result := foundation.PageResult[registrydomain.Repository]{Items: make([]registrydomain.Repository, 0, minRepositoryPage(len(models), request.Limit))}
+	withUsage := make([]*registrydomain.Repository, 0, minRepositoryPage(len(models), request.Limit))
 	for i := 0; i < minRepositoryPage(len(models), request.Limit); i++ {
 		repository := toRepository(&models[i])
 		policies, err := s.listPolicies(ctx, repository.ID)
@@ -103,7 +110,12 @@ func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.I
 			return foundation.PageResult[registrydomain.Repository]{}, err
 		}
 		repository.Policies = policies
+		withUsage = append(withUsage, repository)
 		result.Items = append(result.Items, *repository)
+	}
+	s.attachStorageUsages(ctx, withUsage)
+	for i := range result.Items {
+		result.Items[i].AccountedUsage = withUsage[i].AccountedUsage
 	}
 	if len(models) > request.Limit {
 		last := models[request.Limit-1]
@@ -133,6 +145,7 @@ func (s *Store) FindRepository(ctx context.Context, projectID foundation.ID, nam
 		return nil, err
 	}
 	repository.Policies = policies
+	s.attachStorageUsage(ctx, repository)
 	return repository, nil
 }
 
@@ -147,6 +160,7 @@ func (s *Store) FindRepositoryByID(ctx context.Context, repositoryID foundation.
 		return nil, err
 	}
 	repository.Policies = policies
+	s.attachStorageUsage(ctx, repository)
 	return repository, nil
 }
 
@@ -186,8 +200,16 @@ func (s *Store) RepositoryHasLiveManifests(ctx context.Context, repositoryID fou
 }
 
 func (s *Store) DeleteRepository(ctx context.Context, repositoryID foundation.ID) error {
-	_, err := s.db.NewDelete().Model((*repositoryModel)(nil)).Where("id = ?", repositoryID.String()).Exec(ctx)
-	return err
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var projectID string
+		if err := tx.NewSelect().Model((*repositoryModel)(nil)).Column("project_id").Where("id = ?", repositoryID.String()).Scan(ctx, &projectID); err != nil {
+			return err
+		}
+		if _, err := tx.NewDelete().Model((*repositoryModel)(nil)).Where("id = ?", repositoryID.String()).Exec(ctx); err != nil {
+			return err
+		}
+		return s.refreshProjectStorageSnapshot(ctx, tx, foundation.ID(projectID), time.Now().UTC())
+	})
 }
 
 func (s *Store) SaveRepositoryProfile(ctx context.Context, repository *registrydomain.Repository) error {
@@ -293,8 +315,9 @@ func toRepository(model *repositoryModel) *registrydomain.Repository {
 		Profile: model.Profile, ProfileSource: model.ProfileSource,
 		ProfileConfidence: model.ProfileConfidence, ProfileInferredAt: model.ProfileInferredAt,
 		ProfileNeedsReview: model.ProfileNeedsReview, PolicyVersion: model.PolicyVersion,
-		Policies:  []registrydomain.Policy{},
-		CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
+		Policies:       []registrydomain.Policy{},
+		AccountedUsage: foundation.PendingStorageUsage(),
+		CreatedAt:      model.CreatedAt, UpdatedAt: model.UpdatedAt,
 	}
 }
 

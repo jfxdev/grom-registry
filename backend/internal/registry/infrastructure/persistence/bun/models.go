@@ -149,3 +149,38 @@ type lifecycleLockModel struct {
 	RunID         string    `bun:"run_id,notnull"`
 	AcquiredAt    time.Time `bun:"acquired_at,notnull"`
 }
+
+type blobDescriptorModel struct {
+	bun.BaseModel `bun:"table:registry_blob_descriptors,alias:rbd"`
+	Digest        string    `bun:"digest,pk"`
+	SizeBytes     int64     `bun:"size_bytes,notnull"`
+	MediaType     string    `bun:"media_type,notnull"`
+	FirstSeenAt   time.Time `bun:"first_seen_at,notnull"`
+	LastSeenAt    time.Time `bun:"last_seen_at,notnull"`
+}
+
+type manifestBlobReferenceModel struct {
+	bun.BaseModel  `bun:"table:registry_manifest_blob_references,alias:rmbr"`
+	RepositoryID   string `bun:"repository_id,pk"`
+	ManifestDigest string `bun:"manifest_digest,pk"`
+	BlobDigest     string `bun:"blob_digest,pk"`
+	Role           string `bun:"role,notnull"`
+}
+
+type repositoryStorageSnapshotModel struct {
+	bun.BaseModel    `bun:"table:repository_storage_snapshots,alias:rss"`
+	RepositoryID     string    `bun:"repository_id,pk"`
+	AccountedBytes   int64     `bun:"accounted_bytes,notnull"`
+	InventoryVersion int64     `bun:"inventory_version,notnull"`
+	ReconciledAt     time.Time `bun:"reconciled_at,notnull"`
+	Status           string    `bun:"status,notnull"`
+}
+
+type projectStorageSnapshotModel struct {
+	bun.BaseModel     `bun:"table:project_storage_snapshots,alias:pss"`
+	ProjectID         string    `bun:"project_id,pk"`
+	AccountedBytes    int64     `bun:"accounted_bytes,notnull"`
+	AccountingVersion int64     `bun:"accounting_version,notnull"`
+	ReconciledAt      time.Time `bun:"reconciled_at,notnull"`
+	Status            string    `bun:"status,notnull"`
+}

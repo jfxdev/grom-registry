@@ -7,11 +7,12 @@ import (
 )
 
 type Project struct {
-	ID        foundation.ID `json:"id"`
-	Slug      string        `json:"slug"`
-	Name      string        `json:"name"`
-	CreatedBy foundation.ID `json:"createdBy"`
-	CreatedAt time.Time     `json:"createdAt"`
+	ID             foundation.ID                    `json:"id"`
+	Slug           string                           `json:"slug"`
+	Name           string                           `json:"name"`
+	CreatedBy      foundation.ID                    `json:"createdBy"`
+	CreatedAt      time.Time                        `json:"createdAt"`
+	AccountedUsage foundation.AccountedStorageUsage `json:"accountedUsage"`
 }
 
 type Membership struct {

@@ -1748,7 +1748,7 @@ components:
           description: Reveal-once API token restricted to registry pull access.
     Project:
       type: object
-      required: [id, slug, name, createdBy, createdAt]
+      required: [id, slug, name, createdBy, createdAt, accountedUsage]
       properties:
         id:
           type: string
@@ -1763,6 +1763,8 @@ components:
         createdAt:
           type: string
           format: date-time
+        accountedUsage:
+          $ref: "#/components/schemas/AccountedStorageUsage"
         canManage:
           type: boolean
           description: Whether the signed-in actor may manage this project.
@@ -1886,7 +1888,7 @@ components:
       required:
         [id, projectId, name, description, status, profile, profileSource,
          profileConfidence, profileNeedsReview, creationSource, policyVersion,
-         policies, createdAt, updatedAt]
+         policies, accountedUsage, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -1925,12 +1927,31 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RepositoryPolicy"
+        accountedUsage:
+          $ref: "#/components/schemas/AccountedStorageUsage"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+    AccountedStorageUsage:
+      description: Logical OCI descriptor bytes reachable in this scope. This is not physical Distribution filesystem usage; shared descriptors count once inside the scope and may count in another project.
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ready, pending, stale, unavailable]
+        accountedBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        reconciledAt:
+          type: string
+          format: date-time
+          nullable: true
     CreateRepositoryRequest:
       type: object
       required: [name, policies]
