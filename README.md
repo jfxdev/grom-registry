@@ -1,11 +1,24 @@
-# Grom
+<p align="center">
+  <img src="frontend/src/assets/logos/grom-registry-logo.png" alt="Grom Registry" width="420" />
+</p>
+
+[![Release](https://img.shields.io/github/v/release/jfxdev/grom-registry?display_name=tag)](https://github.com/jfxdev/grom-registry/releases)
+[![License](https://img.shields.io/github/license/jfxdev/grom-registry)](LICENSE)
+[![GHCR](https://img.shields.io/badge/GHCR-ghcr.io%2Fjfxdev%2Fgrom--registry-2496ed?logo=github)](https://github.com/jfxdev/grom-registry/pkgs/container/grom-registry)
+[![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go)](https://go.dev/)
+[![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs)](https://vuejs.org/)
+[![shadcn-vue](https://img.shields.io/badge/shadcn--vue-UI-000000?logo=shadcnui&logoColor=white)](https://www.shadcn-vue.com/)
+[![OCI](https://img.shields.io/badge/OCI-registry-262261?logo=docker)](https://opencontainers.org/)
 
 [![codecov](https://codecov.io/gh/jfxdev/grom-registry/graph/badge.svg?token=5NOmSFnvkT)](https://codecov.io/gh/jfxdev/grom-registry)
 [![CI](https://github.com/jfxdev/grom-registry/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/jfxdev/grom-registry/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/codeql.yml)
 [![Registry E2E](https://github.com/jfxdev/grom-registry/actions/workflows/registry-e2e.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/registry-e2e.yml)
 [![Admin Journey E2E](https://github.com/jfxdev/grom-registry/actions/workflows/admin-journey-e2e.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/admin-journey-e2e.yml)
 [![Boot Acceptance E2E](https://github.com/jfxdev/grom-registry/actions/workflows/boot-acceptance-e2e.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/boot-acceptance-e2e.yml)
 [![Backup Restore E2E](https://github.com/jfxdev/grom-registry/actions/workflows/backup-restore-e2e.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/backup-restore-e2e.yml)
+[![Release Upgrade E2E](https://github.com/jfxdev/grom-registry/actions/workflows/release-upgrade-e2e.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/release-upgrade-e2e.yml)
+[![Production Image Smoke](https://github.com/jfxdev/grom-registry/actions/workflows/production-image-smoke.yml/badge.svg?branch=main)](https://github.com/jfxdev/grom-registry/actions/workflows/production-image-smoke.yml)
 
 Grom is a lightweight, self-hosted OCI registry for individuals and small
 teams. It combines CNCF Distribution with a secure control plane and a simple

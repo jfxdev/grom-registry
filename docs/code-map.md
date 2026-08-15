@@ -19,6 +19,7 @@ Use this map together with the root `AGENTS.md`; update both when paths or owner
 | `deploy/docker/` | Multi-mode image entrypoint for normal, backup-agent, and recovery execution |
 | `deploy/distribution/` | CNCF Distribution configuration |
 | `.github/workflows/ci.yml` | Mandatory SQLite backend checks, separate mandatory PostgreSQL migration/repository suite, golangci-lint, govulncheck, frontend lint/tests/typecheck/build checks, and backend/frontend Codecov coverage and JUnit test-result uploads |
+| `.github/workflows/codeql.yml` | Advisory CodeQL code scanning for Go and JavaScript/TypeScript across pull requests, `main`, merge queues, and a weekly schedule |
 | `codecov.yml` | Explicit 70% patch-coverage gate and narrow generated-code/static-asset exclusions |
 | `.github/workflows/registry-e2e.yml` | Mandatory real-Docker registry authorization, restart-preservation, and session-revocation acceptance check for pull requests, main, and merge queues |
 | `.github/workflows/release-upgrade-e2e.yml` | Tagged-GHCR-release to checkout-candidate SQLite/local-storage upgrade acceptance check; it is intentionally separate from the required, network-independent registry journey |

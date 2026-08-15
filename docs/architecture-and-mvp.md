@@ -380,6 +380,11 @@ Current evidence:
   golangci-lint 2.11.4 performs static analysis, while the official Go
   govulncheck action uses text output so reachable known vulnerabilities fail
   the check.
+- `.github/workflows/codeql.yml` separately scans the Go backend and the
+  JavaScript/TypeScript frontend on pull requests, `main`, merge queues, and a
+  weekly schedule. It uploads code-scanning results with the least privileges
+  needed for that purpose; these two CodeQL jobs remain advisory until the
+  branch ruleset explicitly requires them.
 - Enabling the vulnerability gate identified reachable standard-library
   vulnerability `GO-2026-5856`; `backend/go.mod` and the production Docker
   builder now require Go 1.26.5, the fixed release.

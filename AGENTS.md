@@ -105,6 +105,11 @@ these job names stable and require all eleven in the
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
+`.github/workflows/codeql.yml` scans Go and JavaScript/TypeScript separately
+with CodeQL on pull requests, `main`, merge queues, and a weekly schedule. It
+must retain `security-events: write`, scan both languages, and use a manual Go
+build from `backend`; its two matrix jobs are advisory until an explicit branch
+ruleset change makes them required.
 `Production Image Smoke (Docker)` builds the root Dockerfile from a clean
 checkout, verifies the final image declares the non-root `grom` user, and
 checks health, readiness, API documentation, and the registry bearer challenge
