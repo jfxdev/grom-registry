@@ -1,0 +1,49 @@
+name: OpenAPI Compatibility
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openapi-compatibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  breaking-changes:
+    name: OpenAPI Compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch the compatibility baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_ref="$(jq -r '.pull_request.base.ref // .merge_group.base_ref // "main"' "${GITHUB_EVENT_PATH}")"
+          base_ref="${base_ref#refs/heads/}"
+          git fetch --no-tags --depth=1 origin "refs/heads/${base_ref}:refs/remotes/origin/${base_ref}"
+          echo "spec=origin/${base_ref}:backend/api/openapi.yaml" >> "${GITHUB_OUTPUT}"
+
+      - name: Detect breaking OpenAPI changes
+        uses: oasdiff/oasdiff-action/breaking@033c15c845bef10f148afb0fa781bf1b2a7fe1bf # v0
+        with:
+          base: ${{ steps.baseline.outputs.spec }}
+          revision: HEAD:backend/api/openapi.yaml
+          fail-on: WARN
+          allow-external-refs: false
+          review: false
+          github-token: ""

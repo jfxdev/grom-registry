@@ -100,11 +100,16 @@ The mandatory GitHub status checks are `Backend Tests`, `PostgreSQL Tests`,
 `Frontend Tests`, `Go Lint`, `Go Vulnerability Check`, `Registry E2E (Docker)`,
 `Admin Journey E2E (Docker)`, `Boot Acceptance E2E (Docker)`,
 `Backup Restore E2E`, `PostgreSQL Backup Restore E2E`, and
-`Production Image Smoke (Docker)`, defined under `.github/workflows`. Keep
-these job names stable and require all eleven in the
+`Production Image Smoke (Docker)`, and `OpenAPI Compatibility`, defined under
+`.github/workflows`. Keep these job names stable and require all twelve in the
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
+`.github/workflows/codeql.yml` scans Go and JavaScript/TypeScript separately
+with CodeQL on pull requests, `main`, merge queues, and a weekly schedule. It
+must retain `security-events: write`, scan both languages, and use a manual Go
+build from `backend`; its two matrix jobs are advisory until an explicit branch
+ruleset change makes them required.
 `Production Image Smoke (Docker)` builds the root Dockerfile from a clean
 checkout, verifies the final image declares the non-root `grom` user, and
 checks health, readiness, API documentation, and the registry bearer challenge
@@ -115,6 +120,12 @@ and creates a GitHub Release with its digest reference, SPDX SBOM, Trivy report,
 and checksums. It uses the repository `GITHUB_TOKEN`; do not replace it with a
 long-lived registry credential or make a mutable image tag the canonical
 deployment reference.
+`OpenAPI Compatibility` uses a commit-pinned `oasdiff` action to compare a
+pull request or merge-queue revision with its `main` baseline and fails on
+potential or definite breaking changes. It does not upload the API contract.
+The release workflow repeats the check against the immediately preceding stable
+tag; `v1.0.0` deliberately establishes the first compatibility baseline, while
+all later stable releases must compare successfully before publication.
 The `Backend Tests` and `Frontend Tests` jobs upload separate `backend` and
 `frontend` coverage and JUnit test-result reports to Codecov. They require the
 repository Actions secret `CODECOV_TOKEN`; never commit or log its plaintext
