@@ -3,7 +3,7 @@ import { cn } from '@/shared/lib/cn'
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
-  variant?: 'default' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'delete'
+  variant?: 'default' | 'cyan' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'delete'
   size?: 'default' | 'sm' | 'icon'
   type?: 'button' | 'submit' | 'reset'
   disabled?: boolean
@@ -92,6 +92,27 @@ const classes = computed(() => cn(
 .grom-button-variant-default:active:not(:disabled) {
   box-shadow:
     0 0 0 var(--button-shadow),
+    0 2px 5px rgba(0, 0, 0, 0.22),
+    inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.grom-button-variant-cyan {
+  border-color: #73e5f0;
+  background: linear-gradient(180deg, #70e8f4 0%, #27bdcf 18%, #14899b 100%);
+  color: #062025;
+  box-shadow:
+    0 var(--button-rise) 0 #075a68,
+    0 calc(var(--button-rise) + 4px) 12px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.grom-button-variant-cyan:hover:not(:disabled) {
+  background: linear-gradient(180deg, #9af2fa 0%, #40cddd 22%, #1a9caf 100%);
+}
+
+.grom-button-variant-cyan:active:not(:disabled) {
+  box-shadow:
+    0 0 0 #075a68,
     0 2px 5px rgba(0, 0, 0, 0.22),
     inset 0 1px 2px rgba(0, 0, 0, 0.18);
 }

@@ -90,7 +90,7 @@ describe('UserProfilePage', () => {
     expect(wrapper.get('[role="status"]').text()).toContain('changed successfully')
   })
 
-  it('lets installation viewers create and reveal a read-only registry token', async () => {
+  it('lets Viewers create and reveal a read-only registry token', async () => {
     mocks.user.systemViewer = true
     mocks.createViewerRegistryToken.mockResolvedValue({ token: { id: 'token-1', publicId: 'public', name: 'Local Docker', createdAt: '2026-08-08T00:00:00Z' }, secret: 'grm_public_secret' })
     const wrapper = mountPage()

@@ -200,6 +200,7 @@ func (s *Server) routes() chi.Router {
 			protected.Post("/projects/{project}/repositories", s.createRepository)
 			protected.Get("/projects/{project}/repositories/{repositoryId}", s.getRepository)
 			protected.Post("/projects/{project}/repositories/{repositoryId}/archive", s.archiveRepository)
+			protected.Delete("/projects/{project}/repositories/{repositoryId}/archive", s.unarchiveRepository)
 			protected.Delete("/projects/{project}/repositories/{repositoryId}", s.removeRepository)
 			protected.Get("/projects/{project}/repositories/{repositoryId}/policies", s.getRepositoryPolicies)
 			protected.Put("/projects/{project}/repositories/{repositoryId}/policies", s.replaceRepositoryPolicies)
@@ -652,7 +653,7 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.identity.DisableUser(r.Context(), targetID); err != nil {
 		if target.SystemAdmin {
-			writeError(w, r, http.StatusConflict, "cannot_disable_last_admin", "The last installation administrator cannot be disabled")
+			writeError(w, r, http.StatusConflict, "cannot_disable_last_admin", "The last administrator cannot be disabled")
 			return
 		}
 		writeError(w, r, http.StatusNotFound, "not_found", "User not found")
@@ -974,24 +975,115 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type membershipResponse struct {
+	ProjectID       foundation.ID `json:"projectId"`
+	PrincipalKind   string        `json:"principalKind"`
+	PrincipalID     foundation.ID `json:"principalId"`
+	PrincipalName   string        `json:"principalName"`
+	PrincipalDetail string        `json:"principalDetail"`
+	Role            string        `json:"role"`
+	CreatedAt       time.Time     `json:"createdAt"`
+}
+
+type membershipPageResponse struct {
+	Items      []membershipResponse `json:"items"`
+	NextCursor string               `json:"nextCursor,omitempty"`
+}
+
+type membershipPrincipalDetails struct {
+	name   string
+	detail string
+}
+
+func membershipPrincipalKey(principal foundation.PrincipalRef) string {
+	return principal.Kind + ":" + principal.ID.String()
+}
+
+func matchesMembershipQuery(query string, values ...string) bool {
+	if query == "" {
+		return true
+	}
+	for _, value := range values {
+		if strings.Contains(strings.ToLower(value), query) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) membershipPrincipalDetails(ctx context.Context, query string) (map[string]membershipPrincipalDetails, []foundation.PrincipalRef, error) {
+	users, err := s.identity.ListUsers(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	accounts, err := s.identity.ListServiceAccounts(ctx, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	details := make(map[string]membershipPrincipalDetails, len(users)+len(accounts))
+	matched := make([]foundation.PrincipalRef, 0, len(users)+len(accounts))
+	for _, user := range users {
+		principal := foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: user.ID}
+		details[membershipPrincipalKey(principal)] = membershipPrincipalDetails{name: user.Username, detail: user.Email}
+		if matchesMembershipQuery(query, user.Username, user.Email) {
+			matched = append(matched, principal)
+		}
+	}
+	for _, account := range accounts {
+		principal := foundation.PrincipalRef{Kind: constants.PrincipalServiceAccount, ID: account.ID}
+		details[membershipPrincipalKey(principal)] = membershipPrincipalDetails{name: account.Name, detail: account.Username}
+		if matchesMembershipQuery(query, account.Name, account.Username, account.Description) {
+			matched = append(matched, principal)
+		}
+	}
+	return details, matched, nil
+}
+
 func (s *Server) listMemberships(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
 	if user.SystemViewer {
 		writeError(w, r, http.StatusForbidden, "forbidden", "Installation viewer accounts cannot access user memberships")
 		return
 	}
+	if !validListQuery(r, "cursor", "limit", "q") {
+		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
+		return
+	}
 	projectSlug := chi.URLParam(r, "project")
-	request, _, pageErr := pageRequest(r, "memberships:"+projectSlug)
+	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	request, _, pageErr := pageRequest(r, "memberships:"+projectSlug+":q="+query)
 	if pageErr != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
 		return
 	}
-	memberships, err := s.projects.ListMembershipsPage(r.Context(), principalForUser(user), user.SystemAdmin, projectSlug, request)
+	details, matched, err := s.membershipPrincipalDetails(r.Context(), query)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	var filter *projectdomain.MembershipPrincipalFilter
+	if query != "" {
+		filter = &projectdomain.MembershipPrincipalFilter{Principals: matched}
+	}
+	memberships, err := s.projects.ListMembershipsPage(r.Context(), principalForUser(user), user.SystemAdmin, projectSlug, filter, request)
 	if err != nil {
 		writeError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, memberships)
+	response := membershipPageResponse{Items: make([]membershipResponse, 0, len(memberships.Items)), NextCursor: memberships.NextCursor}
+	for _, membership := range memberships.Items {
+		principal := foundation.PrincipalRef{Kind: membership.PrincipalKind, ID: membership.PrincipalID}
+		identity, ok := details[membershipPrincipalKey(principal)]
+		if !ok {
+			s.internalError(w, r, fmt.Errorf("membership principal %s is missing", membershipPrincipalKey(principal)))
+			return
+		}
+		response.Items = append(response.Items, membershipResponse{
+			ProjectID: membership.ProjectID, PrincipalKind: membership.PrincipalKind, PrincipalID: membership.PrincipalID,
+			PrincipalName: identity.name, PrincipalDetail: identity.detail, Role: membership.Role, CreatedAt: membership.CreatedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) setMembership(w http.ResponseWriter, r *http.Request) {
@@ -1175,6 +1267,22 @@ func (s *Server) archiveRepository(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.repositories.Archive(r.Context(), project.ID, foundation.ID(chi.URLParam(r, "repositoryId")), actor); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
+			return
+		}
+		s.internalError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) unarchiveRepository(w http.ResponseWriter, r *http.Request) {
+	project, actor, ok := s.lifecycleProject(w, r, true)
+	if !ok {
+		return
+	}
+	if err := s.repositories.Unarchive(r.Context(), project.ID, foundation.ID(chi.URLParam(r, "repositoryId")), actor); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, r, http.StatusNotFound, "not_found", "Repository not found")
 			return
@@ -1885,7 +1993,7 @@ func userFromContext(ctx context.Context) *identitydomain.User {
 func requireSystemAdmin(w http.ResponseWriter, r *http.Request) bool {
 	user := userFromContext(r.Context())
 	if user == nil || !user.SystemAdmin {
-		writeError(w, r, http.StatusForbidden, "forbidden", "Installation administrator permission required")
+		writeError(w, r, http.StatusForbidden, "forbidden", "Administrator permission required")
 		return false
 	}
 	return true

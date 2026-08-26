@@ -42,7 +42,7 @@ func (s *Service) Create(
 	name, slug string,
 ) (*projectdomain.Project, error) {
 	if !systemAdmin {
-		return nil, errors.New("installation administrator permission required")
+		return nil, errors.New("administrator permission required")
 	}
 	slug = strings.ToLower(strings.TrimSpace(slug))
 	name = strings.TrimSpace(name)
@@ -80,7 +80,7 @@ func (s *Service) Find(ctx context.Context, slug string) (*projectdomain.Project
 
 func (s *Service) Delete(ctx context.Context, systemAdmin bool, slug string) error {
 	if !systemAdmin {
-		return errors.New("installation administrator permission required")
+		return errors.New("administrator permission required")
 	}
 	project, err := s.repository.FindProjectBySlug(ctx, slug)
 	if err != nil {
@@ -113,7 +113,7 @@ func (s *Service) ListMemberships(ctx context.Context, actor foundation.Principa
 	return s.repository.ListMemberships(ctx, project.ID)
 }
 
-func (s *Service) ListMembershipsPage(ctx context.Context, actor foundation.PrincipalRef, systemAdmin bool, slug string, request foundation.PageRequest) (foundation.PageResult[projectdomain.Membership], error) {
+func (s *Service) ListMembershipsPage(ctx context.Context, actor foundation.PrincipalRef, systemAdmin bool, slug string, filter *projectdomain.MembershipPrincipalFilter, request foundation.PageRequest) (foundation.PageResult[projectdomain.Membership], error) {
 	project, err := s.repository.FindProjectBySlug(ctx, slug)
 	if err != nil {
 		return foundation.PageResult[projectdomain.Membership]{}, err
@@ -128,7 +128,7 @@ func (s *Service) ListMembershipsPage(ctx context.Context, actor foundation.Prin
 	if !ok {
 		return foundation.PageResult[projectdomain.Membership]{}, errors.New("project pagination is not configured")
 	}
-	return paged.ListMembershipsPage(ctx, project.ID, request)
+	return paged.ListMembershipsPage(ctx, project.ID, filter, request)
 }
 
 func (s *Service) SetMembership(ctx context.Context, actor foundation.PrincipalRef, systemAdmin bool, slug string, principal foundation.PrincipalRef, role string) error {

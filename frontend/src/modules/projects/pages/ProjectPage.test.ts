@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   listServiceAccounts: vi.fn(),
   listUsers: vi.fn(),
   archiveRepository: vi.fn(),
+	unarchiveRepository: vi.fn(),
   removeRepository: vi.fn(),
   deleteMember: vi.fn(),
   deleteProject: vi.fn(),
@@ -68,6 +69,7 @@ vi.mock('@/modules/registry', () => ({
 
 vi.mock('../api/projects', () => ({
   archiveRepository: mocks.archiveRepository,
+	unarchiveRepository: mocks.unarchiveRepository,
   deleteArtifact: mocks.deleteArtifact,
   deleteMember: mocks.deleteMember,
   deleteProject: mocks.deleteProject,
@@ -145,6 +147,7 @@ describe('ProjectPage membership management', () => {
     mocks.listUsers.mockReset()
     mocks.setMember.mockReset()
     mocks.archiveRepository.mockReset()
+		mocks.unarchiveRepository.mockReset()
     mocks.removeRepository.mockReset()
     mocks.deleteMember.mockReset()
     mocks.deleteProject.mockReset()
@@ -167,6 +170,7 @@ describe('ProjectPage membership management', () => {
     }])
     mocks.listUsers.mockResolvedValue([])
     mocks.archiveRepository.mockResolvedValue(undefined)
+		mocks.unarchiveRepository.mockResolvedValue(undefined)
     mocks.removeRepository.mockResolvedValue(undefined)
     mocks.deleteMember.mockResolvedValue(undefined)
     mocks.deleteProject.mockResolvedValue(undefined)
@@ -320,7 +324,7 @@ describe('ProjectPage membership management', () => {
     expect(wrapper.get('#repository-details-title').text()).toBe('worker')
   })
 
-  it('archives an active repository and removes an archived repository', async () => {
+  it('confirms archiving, and can unarchive or remove an archived repository', async () => {
     const activeRepository = {
       id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
       creationSource: 'manual', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
@@ -330,11 +334,17 @@ describe('ProjectPage membership management', () => {
     mocks.repositoryId = 'repository-1'
     renderPage()
     await fireEvent.click(await screen.findByRole('button', { name: 'Archive' }))
+    expect(mocks.archiveRepository).not.toHaveBeenCalled()
+    const archiveDialog = screen.getByRole('dialog', { name: 'Archive repository' })
+    expect(archiveDialog.textContent).toContain('New image pushes will be blocked')
+    await fireEvent.submit(within(archiveDialog).getByRole('button', { name: 'Archive repository' }).closest('form')!)
     await waitFor(() => expect(mocks.archiveRepository).toHaveBeenCalledWith('payments', 'repository-1'))
 
     mocks.listRepositories.mockResolvedValue([{ ...activeRepository, status: 'archived' }])
     cleanup()
     renderPage()
+    await fireEvent.click(await screen.findByRole('button', { name: 'Unarchive' }))
+    await waitFor(() => expect(mocks.unarchiveRepository).toHaveBeenCalledWith('payments', 'repository-1'))
     await fireEvent.click(await screen.findByRole('button', { name: 'Remove logical record' }))
     const dialog = screen.getByRole('dialog', { name: 'Remove logical repository' })
     await fireEvent.submit(within(dialog).getByRole('button', { name: 'Remove record' }).closest('form')!)
@@ -443,34 +453,69 @@ describe('ProjectPage membership management', () => {
 
   it('manages existing members and surfaces removal errors', async () => {
     mocks.listMembers.mockResolvedValue([{
-      principalKind: 'user', principalId: 'user-2', role: 'writer', createdAt: '2026-07-29T00:00:00Z',
+      principalKind: 'user', principalId: 'user-2', principalName: 'writer', principalDetail: 'user@example.com', role: 'writer', createdAt: '2026-07-29T00:00:00Z',
     }])
     mocks.listUsers.mockResolvedValue([{ id: 'user-2', email: 'user@example.com', username: 'writer', systemAdmin: false, createdAt: '2026-07-29T00:00:00Z' }])
     mocks.deleteMember.mockRejectedValue(new APIError(409, 'conflict', 'Member removal denied'))
     renderPage()
     await fireEvent.click(await screen.findByRole('button', { name: 'Project settings' }))
-    await fireEvent.click(screen.getByRole('button', { name: 'Change role' }))
-    const memberDialog = screen.getByRole('dialog', { name: 'Add service account' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Change role for writer' }))
+    const memberDialog = screen.getByRole('dialog', { name: 'Change role' })
+    expect(within(memberDialog).queryByLabelText('Principal type')).toBeNull()
+    expect(within(memberDialog).queryByLabelText('Principal')).toBeNull()
+    expect(within(memberDialog).getByText('writer')).toBeTruthy()
     await fireEvent.update(within(memberDialog).getByLabelText('Role'), 'admin')
-    await fireEvent.submit(within(memberDialog).getByRole('button', { name: 'Add member' }).closest('form')!)
+    await fireEvent.submit(within(memberDialog).getByRole('button', { name: 'Save role' }).closest('form')!)
     await waitFor(() => expect(mocks.setMember).toHaveBeenCalledWith('payments', 'user', 'user-2', 'admin'))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add service account' })).toBeNull())
-    await fireEvent.click(screen.getByRole('button', { name: 'Remove user member' }))
-    const removalDialog = screen.getByRole('dialog', { name: 'Remove member' })
-    await fireEvent.submit(within(removalDialog).getByRole('button', { name: 'Remove member' }).closest('form')!)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change role' })).toBeNull())
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove writer from project' }))
+    const removalDialog = screen.getByRole('dialog', { name: 'Remove project permission' })
+    expect(removalDialog.textContent).toContain("Remove this member's writer permission")
+    await fireEvent.submit(within(removalDialog).getByRole('button', { name: 'Remove permission' }).closest('form')!)
     await waitFor(() => expect(mocks.deleteMember).toHaveBeenCalledWith('payments', 'user', 'user-2'))
     expect((await screen.findByText(/Member removal denied/)).textContent).toContain('Member removal denied')
   })
 
-  it('uses a human-readable removal label for service accounts', async () => {
+  it('uses a member name in the removal label for service accounts', async () => {
     mocks.listMembers.mockResolvedValue([{
-      principalKind: 'service_account', principalId: 'service-1', role: 'writer', createdAt: '2026-07-29T00:00:00Z',
+      principalKind: 'service_account', principalId: 'service-1', principalName: 'Payments CI', principalDetail: 'payments-ci', role: 'writer', createdAt: '2026-07-29T00:00:00Z',
     }])
     renderPage()
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Project settings' }))
 
-    expect(screen.getByRole('button', { name: 'Remove service account member' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Change role for Payments CI' }).className).toContain('grom-button-variant-cyan')
+    expect(screen.getByRole('button', { name: 'Remove Payments CI from project' }).className).toContain('grom-button-variant-delete')
+    expect(screen.getByTitle('Service account')).toBeTruthy()
+  })
+
+  it('separates users and service accounts into matching member tables', async () => {
+    mocks.listMembers.mockResolvedValue([
+      { principalKind: 'user', principalId: 'user-2', principalName: 'writer', principalDetail: 'user@example.com', role: 'writer', createdAt: '2026-07-29T00:00:00Z' },
+      { principalKind: 'service_account', principalId: 'service-1', principalName: 'Payments CI', principalDetail: 'payments-ci', role: 'reader', createdAt: '2026-07-29T00:00:00Z' },
+    ])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Project settings"]').trigger('click')
+
+    expect(wrapper.get('.member-tables').findAll('.member-table')).toHaveLength(2)
+    expect(wrapper.text()).toContain('Users')
+    expect(wrapper.text()).toContain('Service accounts')
+  })
+
+  it('searches members on the server and shows their names instead of IDs', async () => {
+    mocks.listMembers.mockImplementation((_slug, _cursor, query) => Promise.resolve(query === 'deploy' ? [{
+      principalKind: 'service_account', principalId: 'service-1', principalName: 'Deploy bot', principalDetail: 'deploy-bot', role: 'writer', createdAt: '2026-07-29T00:00:00Z',
+    }] : []))
+    renderPage()
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Project settings' }))
+    await fireEvent.update(screen.getByRole('searchbox', { name: 'Search members' }), 'deploy')
+
+    await waitFor(() => expect(mocks.listMembers).toHaveBeenLastCalledWith('payments', '', 'deploy'))
+    expect(await screen.findByText('Deploy bot')).toBeTruthy()
+    expect(screen.queryByText('service-1')).toBeNull()
   })
 
   it('shows a project-deletion error without leaving the confirmation dialog', async () => {

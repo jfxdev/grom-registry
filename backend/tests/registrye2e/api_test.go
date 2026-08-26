@@ -47,7 +47,7 @@ func (c *managementClient) login(t *testing.T) {
 	t.Helper()
 	user := c.loginAs(t, e2eAdminEmail, e2eAdminPassword, http.StatusOK)
 	if !user.SystemAdmin {
-		t.Fatal("bootstrap session is not an installation administrator")
+		t.Fatal("bootstrap session is not an administrator")
 	}
 }
 

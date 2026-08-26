@@ -74,7 +74,7 @@ func TestUserDisableRevokesActiveSession(t *testing.T) {
 	)
 	target := admin.createUser(t, targetEmail, targetUsername, targetPassword)
 	if target.SystemAdmin {
-		t.Fatal("target user must not be an installation administrator")
+		t.Fatal("target user must not be an administrator")
 	}
 
 	targetSession := newManagementClient(t, stack.publicURL)

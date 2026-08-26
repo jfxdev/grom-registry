@@ -37,8 +37,13 @@ export const createProject = (input: { name: string; slug: string }) =>
   apiRequest<Project>('/api/v1/projects', { method: 'POST', body: JSON.stringify(input) })
 export const deleteProject = (slug: string) =>
   apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}`, { method: 'DELETE' })
-export const listMembers = (slug: string, cursor = '') =>
-  apiRequest<MembershipPage>(`/api/v1/projects/${encodeURIComponent(slug)}/members${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
+export const listMembers = (slug: string, cursor = '', query = '') => {
+  const params = new URLSearchParams()
+  if (query) params.set('q', query)
+  if (cursor) params.set('cursor', cursor)
+  const suffix = params.toString()
+  return apiRequest<MembershipPage>(`/api/v1/projects/${encodeURIComponent(slug)}/members${suffix ? `?${suffix}` : ''}`)
+}
 export const setMember = (slug: string, kind: PrincipalKind, id: string, role: ProjectRole) =>
   apiRequest<{ status: string }>(`/api/v1/projects/${encodeURIComponent(slug)}/members/${kind}/${id}`, {
     method: 'PUT',
@@ -60,6 +65,10 @@ export const createRepository = (slug: string, input: CreateRepositoryRequest) =
 export const archiveRepository = (slug: string, repositoryId: string) =>
   apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}/archive`, {
     method: 'POST',
+  })
+export const unarchiveRepository = (slug: string, repositoryId: string) =>
+  apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}/archive`, {
+    method: 'DELETE',
   })
 export const removeRepository = (slug: string, repositoryId: string) =>
   apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}`, {

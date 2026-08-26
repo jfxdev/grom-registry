@@ -42,7 +42,7 @@ web interface for access, images, and recovery.
   - [Common commands](#common-commands)
   - [Acceptance commands](#acceptance-commands)
   - [Architecture](#architecture)
-- [MVP scope](#mvp-scope)
+- [Supported scope](#supported-scope)
 - [References](#references)
 
 ## Product
@@ -60,7 +60,7 @@ web interface for access, images, and recovery.
 ### How access works
 
 Projects are the security boundary. Readers can pull, Writers can push, and
-project Admins manage project settings. Installation administrators create
+project Admins manage project settings. Administrators create
 projects, users, service accounts, and recovery points.
 
 Human passwords never work as registry credentials. New users set their own
@@ -115,7 +115,7 @@ and list only immediate proxy networks in `GROM_TRUSTED_PROXIES`.
 
 ### Backup and recovery
 
-Installation administrators create and download recovery points from **Backup
+Administrators create and download recovery points from **Backup
 & recovery**. Grom pauses writes briefly, verifies the bundle, and resumes
 normal work. Store downloaded bundles encrypted and off-host.
 
@@ -214,18 +214,17 @@ The Vue 3 / TypeScript frontend uses the API contract at
 `backend/api/openapi.yaml`. Run `make generate` after changing that contract;
 never edit generated code directly.
 
-## MVP scope
+## Supported scope
 
 The supported path is one active installation with local registry storage and
 Docker image push/pull. High availability, S3 storage, replication, enterprise
 identity, generic OCI/ORAS support, automatic retention purging, and full audit
-browsing are outside this MVP.
+browsing are outside the supported platform scope.
 
 ## References
 
-Detailed design and operational records remain in [`docs/`](docs/):
-[product rules](docs/product-features.md),
-[architecture](docs/architecture-and-mvp.md),
-[backup and recovery](docs/backup-and-disaster-recovery.md),
-[release operations](docs/release-operations.md), and the
+The current platform reference is organized as
+[architecture](docs/architecture.md) and
+[RBAC](docs/rbac.md),
+[data and disaster recovery](docs/data-and-disaster-recovery.md), alongside the
 [contribution guide](AGENTS.md).

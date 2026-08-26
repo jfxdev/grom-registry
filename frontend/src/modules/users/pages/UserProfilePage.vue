@@ -98,7 +98,7 @@ async function copyRegistryToken() { await navigator.clipboard.writeText(reveale
         <dl class="profile-details">
           <div>
             <dt>Account type</dt>
-            <dd><Badge :tone="session.user?.systemAdmin ? 'success' : 'neutral'">{{ session.user?.systemAdmin ? 'Installation administrator' : session.user?.systemViewer ? 'Installation viewer' : 'User' }}</Badge></dd>
+            <dd><Badge :tone="session.user?.systemAdmin ? 'success' : 'neutral'">{{ session.user?.systemAdmin ? 'Administrator' : session.user?.systemViewer ? 'Viewer' : 'User' }}</Badge></dd>
           </div>
           <div>
             <dt>Member since</dt>

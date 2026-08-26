@@ -121,17 +121,32 @@ test('an administrator executes a reviewed retention lifecycle through the publi
   }
 })
 
-test('an administrator archives/removes empty repositories and observes project deletion conflicts', async ({ page }) => {
+test('an administrator archives, unarchives, and removes empty repositories', async ({ page }) => {
   const runtime = await readRuntime()
   await signIn(page, runtime.publicURL)
   await createProject(page, runtime.publicURL, 'Repository removal', 'repository-removal')
   await createEmptyRepository(page, runtime.publicURL, 'repository-removal', 'empty')
   await openRepository(page, runtime.publicURL, 'repository-removal', 'empty')
+  await page.getByRole('button', { name: 'Archive' }).click()
+  const archiveDialog = page.getByRole('dialog', { name: 'Archive repository' })
+  await expect(archiveDialog).toContainText('New image pushes will be blocked')
   const [archiveResponse] = await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/archive')),
-    page.getByRole('button', { name: 'Archive' }).click(),
+    archiveDialog.getByRole('button', { name: 'Archive repository' }).click(),
   ])
   expect(archiveResponse.status()).toBe(204)
+  const [unarchiveResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().endsWith('/archive')),
+    page.getByRole('button', { name: 'Unarchive' }).click(),
+  ])
+  expect(unarchiveResponse.status()).toBe(204)
+  await page.getByRole('button', { name: 'Archive' }).click()
+  const archiveAgainDialog = page.getByRole('dialog', { name: 'Archive repository' })
+  const [archiveAgainResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/archive')),
+    archiveAgainDialog.getByRole('button', { name: 'Archive repository' }).click(),
+  ])
+  expect(archiveAgainResponse.status()).toBe(204)
   const removeRepositoryTrigger = page.getByRole('button', { name: 'Remove logical record' })
   await removeRepositoryTrigger.click()
   const removeDialog = page.getByRole('dialog', { name: 'Remove logical repository' })

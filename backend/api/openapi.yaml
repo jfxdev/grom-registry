@@ -239,7 +239,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: The current administrator cannot disable their own account or the last installation administrator
+          description: The current administrator cannot disable their own account or the last administrator
           content:
             application/json:
               schema:
@@ -254,7 +254,7 @@ paths:
         - $ref: "#/components/parameters/ID"
       responses:
         "200":
-          description: User promoted to installation administrator
+          description: User promoted to administrator
           content:
             application/json:
               schema:
@@ -273,7 +273,7 @@ paths:
         - $ref: "#/components/parameters/ID"
       responses:
         "200":
-          description: User promoted to installation viewer
+          description: User promoted to Viewer
           content:
             application/json:
               schema:
@@ -292,7 +292,7 @@ paths:
         - cookieAuth: []
       responses:
         "200":
-          description: Read-only registry tokens owned by the installation viewer
+          description: Read-only registry tokens owned by a Viewer
           content:
             application/json:
               schema:
@@ -547,6 +547,13 @@ paths:
         - $ref: "#/components/parameters/Project"
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/PageLimit"
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive search across member names, usernames, and email addresses.
+          schema:
+            type: string
+            maxLength: 200
       responses:
         "200":
           description: Project memberships
@@ -685,6 +692,21 @@ paths:
       responses:
         "204":
           description: Logical repository archived; pull remains available and push is blocked
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Registry]
+      operationId: unarchiveProjectRepository
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/RepositoryID"
+      responses:
+        "204":
+          description: Logical repository reactivated; push and pull are available
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -1783,7 +1805,7 @@ components:
       enum: [reader, writer, admin]
     Membership:
       type: object
-      required: [projectId, principalKind, principalId, role, createdAt]
+      required: [projectId, principalKind, principalId, principalName, principalDetail, role, createdAt]
       properties:
         projectId:
           type: string
@@ -1793,6 +1815,12 @@ components:
         principalId:
           type: string
           format: uuid
+        principalName:
+          type: string
+          description: Username for a user or display name for a service account.
+        principalDetail:
+          type: string
+          description: Email address for a user or registry username for a service account.
         role:
           $ref: "#/components/schemas/ProjectRole"
         createdAt:

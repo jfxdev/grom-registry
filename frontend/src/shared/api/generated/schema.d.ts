@@ -430,7 +430,7 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["archiveProjectRepository"];
-        delete?: never;
+        delete: operations["unarchiveProjectRepository"];
         options?: never;
         head?: never;
         patch?: never;
@@ -940,6 +940,10 @@ export interface components {
             principalKind: components["schemas"]["PrincipalKind"];
             /** Format: uuid */
             principalId: string;
+            /** @description Username for a user or display name for a service account. */
+            principalName: string;
+            /** @description Email address for a user or registry username for a service account. */
+            principalDetail: string;
             role: components["schemas"]["ProjectRole"];
             /** Format: date-time */
             createdAt: string;
@@ -1604,7 +1608,7 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The current administrator cannot disable their own account or the last installation administrator */
+            /** @description The current administrator cannot disable their own account or the last administrator */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1626,7 +1630,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description User promoted to installation administrator */
+            /** @description User promoted to administrator */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1650,7 +1654,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description User promoted to installation viewer */
+            /** @description User promoted to Viewer */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1673,7 +1677,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Read-only registry tokens owned by the installation viewer */
+            /** @description Read-only registry tokens owned by a Viewer */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1996,6 +2000,8 @@ export interface operations {
                 /** @description Opaque cursor returned by the previous page */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["PageLimit"];
+                /** @description Case-insensitive search across member names, usernames, and email addresses. */
+                q?: string;
             };
             header?: never;
             path: {
@@ -2191,6 +2197,29 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Logical repository archived; pull remains available and push is blocked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    unarchiveProjectRepository: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: components["parameters"]["Project"];
+                repositoryId: components["parameters"]["RepositoryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Logical repository reactivated; push and pull are available */
             204: {
                 headers: {
                     [name: string]: unknown;

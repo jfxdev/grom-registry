@@ -163,7 +163,7 @@ func runRepositoryPersistenceFlow(
 	if _, err := projectService.Create(ctx, foundation.PrincipalRef{
 		Kind: constants.PrincipalUser, ID: developer.ID,
 	}, false, "Unauthorized", "unauthorized"); err == nil {
-		t.Fatal("expected project creation to require an installation administrator")
+		t.Fatal("expected project creation to require an administrator")
 	}
 	project, err := projectService.Create(ctx, foundation.PrincipalRef{
 		Kind: constants.PrincipalUser, ID: admin.ID,
@@ -459,7 +459,7 @@ func runRepositoryPersistenceFlow(
 		t.Fatal(err)
 	}
 	if err := projectService.Delete(ctx, false, emptyProject.Slug); err == nil {
-		t.Fatal("expected project deletion to require an installation administrator")
+		t.Fatal("expected project deletion to require an administrator")
 	}
 	if err := projectService.Delete(ctx, true, emptyProject.Slug); err != nil {
 		t.Fatalf("delete empty project: %v", err)

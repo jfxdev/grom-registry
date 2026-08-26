@@ -1,18 +1,13 @@
 # Grom agent guide
 
-Read these files before making architectural or cross-module changes:
+Read `docs/architecture.md` before making architectural, cross-module,
+deployment or application-shell changes. Read
+`docs/data-and-disaster-recovery.md` before backup, restore,
+persistent-volume recovery, Distribution storage, or garbage-collection
+changes. Read `docs/rbac.md` before changing identity, credentials,
+authorization, project membership, or registry access.
 
-1. `docs/code-map.md`
-2. `docs/domain-model.md`
-3. `docs/architecture-and-mvp.md`
-
-Read `docs/visual-identity.md` and `docs/visual-implementation-plan.md` before
-making broad frontend styling, branding, asset, or application-shell changes.
-
-Read `docs/backup-and-disaster-recovery-implementation-plan.md` before making
-backup, restore, persistent-volume recovery, or disaster-recovery changes.
-
-The first executable MVP is implemented.
+The platform is implemented.
 Keep this file aligned with the code that actually exists.
 
 ## Commands
@@ -82,8 +77,8 @@ stop its supervised Distribution child before local-storage GC and start a fresh
 ready child afterward; never run the collector concurrently with Distribution or
 replace this with Docker-socket process control.
 `make test-release-upgrade-e2e` is a separate, non-ruleset release-acceptance
-journey: it pulls the image in `GROM_UPGRADE_FROM_IMAGE` (defaulting to the
-current published baseline) for `GROM_UPGRADE_PLATFORM` (defaulting to
+journey: it pulls the image in `GROM_UPGRADE_FROM_IMAGE` (defaulting to
+`ghcr.io/jfxdev/grom-registry:1.0.0`) for `GROM_UPGRADE_PLATFORM` (defaulting to
 `linux/amd64`), deploys it on fresh SQLite/local-storage volumes,
 then upgrades those volumes to a candidate built from the checkout. It must
 preserve the administrator, project, Writer access key, repository inventory,
@@ -135,7 +130,7 @@ the target or broaden exclusions to hide untested production code.
 
 Do not edit generated files under `backend/internal/generated/openapi` or `frontend/src/shared/api/generated`.
 
-The installed backup interface is the installation-admin web UI. Disaster
+The installed backup interface is the administrator web UI. Disaster
 recovery uses the `recovery` mode of the same Grom image and its local web UI.
 Never make a source checkout, `make`, a host shell script, or Docker-socket
 access a requirement of the product flow. The backup agent must remain
@@ -145,7 +140,7 @@ mutations, token exchanges, and registry traffic; Distribution upload purging
 must remain disabled for this profile. Recovery must remain loopback-only by
 default and must refuse non-empty target volumes.
 Backup listings use stable cursor pagination with exactly five recovery points
-per page. Local snapshot deletion is installation-admin-only, requires UI
+per page. Local snapshot deletion is administrator-only, requires UI
 confirmation, resolves only a validated backup UUID, and must remain serialized
 against creation and download. Deleting a local snapshot must never affect an
 already downloaded bundle.
@@ -222,8 +217,8 @@ already downloaded bundle.
 - CNCF Distribution remains the unmodified OCI/Docker registry engine.
 - Grom is the only public entry point; the Distribution port stays private.
 - The first repository path segment is the immutable project authorization boundary.
-- Only installation administrators create projects. When a Writer or Admin registry principal requests push scope inside an existing project, Grom idempotently creates a missing empty logical repository and grants push in the same token so the first push can succeed. Pull never creates repositories. Existing Distribution repositories are reconciled as active repositories without policies.
-- Only installation administrators delete projects. Project deletion is allowed only when no logical repositories remain; never orphan Distribution content or erase repository inventory through project deletion.
+- Only administrators create projects. When a Writer or Admin registry principal requests push scope inside an existing project, Grom idempotently creates a missing empty logical repository and grants push in the same token so the first push can succeed. Pull never creates repositories. Existing Distribution repositories are reconciled as active repositories without policies.
+- Only administrators delete projects. Project deletion is allowed only when no logical repositories remain; never orphan Distribution content or erase repository inventory through project deletion.
 - Repository archival blocks future pushes but preserves pull access and OCI content. Removing an archived logical repository must verify both empty live inventory and absence from Distribution's catalog; it never deletes OCI content and must be audited.
 - Repository behavior policies are isolated through their owning repository and project. Global policy presets are read-only form recommendations and never inherited runtime rules.
 - Repository policy sets are replaceable by project administrators under the repository's optimistic `policyVersion`; never silently overwrite a stale policy set.
@@ -237,11 +232,11 @@ already downloaded bundle.
 - Repository profiles are inferred passively from tagged primary OCI manifests. Referrers such as SBOMs and signatures never change the repository profile.
 - Passive profile inference must not enable policies or reject pushes. Conflicting specific primary types produce the `mixed` profile with `profileNeedsReview=true`.
 - Registry clients use API tokens, never web passwords.
-- Bootstrap creates the only initially defined installation administrator. Every
+- Bootstrap creates the only initially defined administrator. Every
   later user is created as a regular user with a reveal-once registration link
   to choose an initial password and remains disabled until the link is consumed;
-  only an active installation administrator may promote a user to installation
-  administrator. The account and registration token must be created atomically;
+  only an active administrator may promote a user to administrator. The account
+  and registration token must be created atomically;
   registration tokens may enable pending users, while password-reset tokens
   must not re-enable disabled users.
 - User password changes require the current password. Administrator resets use
@@ -250,7 +245,7 @@ already downloaded bundle.
   the target user's sessions. Authenticated users cannot access or consume reset
   links; they must change the password from their profile or sign out first.
   Never log or persist the plaintext reset token.
-- API tokens are normally credentials owned by service accounts. The sole exception is an installation viewer's profile-scoped, reveal-once registry token: it is revocable by that viewer and must always grant only `pull` from projects with explicit membership. It must never grant `push` or `delete`, even if the viewer has a Writer or Admin project membership. Do not add tokens for other user roles or a global user-token page.
+- API tokens are normally credentials owned by service accounts. The sole exception is a Viewer's profile-scoped, reveal-once registry token: it is revocable by that Viewer and must always grant only `pull` from projects with explicit membership. It must never grant `push` or `delete`, even if the Viewer has a Writer or Admin project membership. Do not add tokens for other user roles or a global user-token page.
 - A service account may have at most three active access keys. Keep enforcement
   and the paginated list's active/max counts server-authoritative; the UI must
   never infer the limit from only the current history page.
@@ -258,8 +253,15 @@ already downloaded bundle.
 
 ## Required documentation maintenance
 
-- Update `docs/domain-model.md` when architectural types, ownership, or relationships change.
-- Update `docs/code-map.md` when paths, modules, routes, repositories, or entry points change.
+- Update `docs/architecture.md` when architectural types, ownership,
+  relationships, paths, modules, routes, repositories, entry points, or
+  supported platform behavior changes.
+- Update `docs/rbac.md` when principals, credentials, roles, permissions, or
+  authorization behavior changes.
+- Update `docs/data-and-disaster-recovery.md` when backup, recovery,
+  Distribution-storage measurement, storage accounting, or garbage collection
+  changes.
 - Update this `AGENTS.md` whenever future agents need a new command, constraint, generated-file rule, workflow, pitfall, or compatibility note.
 - Remove stale instructions instead of appending contradictory guidance.
-- Every structural change must explicitly assess whether all three documents need updates.
+- Every structural change must explicitly assess whether these three documents
+  and this file need updates.
