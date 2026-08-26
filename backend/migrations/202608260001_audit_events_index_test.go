@@ -69,8 +69,11 @@ func TestAddAuditEventsIndex(t *testing.T) {
 			t.Fatal(err)
 		}
 		var count int
+		// Scope to this session's temp schema; concurrent test sessions each
+		// create an index with the same name in their own pg_temp namespace.
 		if err := db.NewRaw(
-			"SELECT count(*) FROM pg_indexes WHERE indexname = ?",
+			"SELECT count(*) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "+
+				"WHERE c.relname = ? AND c.relnamespace = pg_my_temp_schema()",
 			"idx_audit_events_created_at_id",
 		).Scan(ctx, &count); err != nil {
 			t.Fatal(err)

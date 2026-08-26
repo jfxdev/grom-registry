@@ -12,8 +12,6 @@ import (
 	"github.com/uptrace/bun"
 )
 
-const auditPageScope = "audit"
-
 type Store struct {
 	db *bun.DB
 }
