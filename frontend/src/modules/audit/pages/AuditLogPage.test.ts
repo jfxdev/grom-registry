@@ -146,4 +146,18 @@ describe('AuditLogPage', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('No audit events')
   })
+
+  it('shows a retryable error instead of the empty state when loading fails', async () => {
+    mocks.listAuditEvents.mockRejectedValue(new Error('request failed'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Unable to load audit events')
+    expect(wrapper.text()).not.toContain('No audit events')
+
+    mocks.listAuditEvents.mockResolvedValue({ items: [] })
+    await wrapper.findAll('button').find((button) => button.text() === 'Retry')!.trigger('click')
+    await flushPromises()
+    expect(mocks.listAuditEvents).toHaveBeenCalledTimes(2)
+  })
 })

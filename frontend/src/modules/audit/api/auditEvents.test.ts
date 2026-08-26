@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ apiRequest: vi.fn() }))
 
 vi.mock('@/shared/api/client', () => ({ apiRequest: mocks.apiRequest }))
 
-import { listAuditEvents, auditEventKeys } from './auditEvents'
+import { listAuditEvents, auditEventKeys, type AuditFilters } from './auditEvents'
 
 describe('listAuditEvents', () => {
   beforeEach(() => {
@@ -48,7 +48,7 @@ describe('listAuditEvents', () => {
   })
 
   it('builds a stable query key from filters and cursor', () => {
-    const filters = { action: 'identity.login_succeeded' }
+    const filters: AuditFilters = { action: 'identity.login_succeeded' }
     expect(auditEventKeys.list(filters, 'c1')).toEqual(['audit-events', filters, 'c1'])
     expect(auditEventKeys.all).toEqual(['audit-events'])
   })

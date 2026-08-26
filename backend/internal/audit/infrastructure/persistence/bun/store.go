@@ -125,9 +125,9 @@ func (s *Store) List(ctx context.Context, filter auditdomain.Filter, request fou
 		query = query.Where("ae.created_at < ?", filter.To)
 	}
 	if actor := strings.ToLower(strings.TrimSpace(filter.Actor)); actor != "" {
-		like := "%" + actor + "%"
+		like := "%" + escapeLike(actor) + "%"
 		query = query.Where(
-			"(LOWER(u.username) LIKE ? OR LOWER(sa.name) LIKE ? OR LOWER(sa.username) LIKE ? OR LOWER(ae.actor_id) LIKE ?)",
+			"(LOWER(u.username) LIKE ? ESCAPE '\\' OR LOWER(sa.name) LIKE ? ESCAPE '\\' OR LOWER(sa.username) LIKE ? ESCAPE '\\' OR LOWER(ae.actor_id) LIKE ? ESCAPE '\\')",
 			like, like, like, like,
 		)
 	}
@@ -147,6 +147,10 @@ func (s *Store) List(ctx context.Context, filter auditdomain.Filter, request fou
 		result.NextCursor = auditNext(request.Scope, last.CreatedAt, last.ID)
 	}
 	return result, nil
+}
+
+func escapeLike(value string) string {
+	return strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(value)
 }
 
 func toListItem(row listRow) auditdomain.ListItem {

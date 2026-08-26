@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run generate:api && vue-tsc -b && vite build",
-    "generate:api": "openapi-typescript ../backend/api/openapi.yaml -o src/shared/api/generated/schema.d.ts",
+    "generate:api": "openapi-typescript ../backend/api/openapi.yaml --enum-values -o src/shared/api/generated/schema.ts",
     "typecheck": "vue-tsc -b",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text",

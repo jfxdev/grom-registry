@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AuditEvent } from '@/shared/api/models'
+import type { AuditAction, AuditEvent, AuditResourceKind } from '@/shared/api/models'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
@@ -12,8 +12,8 @@ import { computed, ref, watch } from 'vue'
 import { AUDIT_ACTIONS, AUDIT_RESOURCE_KINDS, auditEventKeys, listAuditEvents, type AuditFilters } from '../api/auditEvents'
 
 const pagination = useCursorPagination()
-const actionFilter = ref('')
-const resourceFilter = ref('')
+const actionFilter = ref<AuditAction | ''>('')
+const resourceFilter = ref<AuditResourceKind | ''>('')
 const actorQuery = ref('')
 const fromDate = ref('')
 const toDate = ref('')
@@ -111,6 +111,13 @@ function metadataDetail(event: AuditEvent): string {
 
       <div v-if="events.isLoading.value" class="empty-state list-empty-state" role="status">
         <p class="text-sm text-muted-foreground">Loading events…</p>
+      </div>
+      <div v-else-if="events.isError.value" class="empty-state list-empty-state" role="alert">
+        <div>
+          <p class="font-medium text-foreground">Unable to load audit events</p>
+          <p class="mt-1 text-sm">Please try again.</p>
+          <Button class="mt-4" variant="outline" :disabled="events.isFetching.value" @click="events.refetch()">Retry</Button>
+        </div>
       </div>
       <div v-else-if="!currentPageCount" class="empty-state list-empty-state">
         <div>

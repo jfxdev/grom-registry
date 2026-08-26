@@ -161,6 +161,30 @@ func TestListFilters(t *testing.T) {
 	}
 }
 
+func TestListActorFilterTreatsLikeMetacharactersLiterally(t *testing.T) {
+	store, ctx := newListTestStore(t)
+	base := time.Now().UTC().Truncate(time.Second)
+	const literalActor = `literal%_\\actor`
+	if _, err := store.db.ExecContext(ctx, `UPDATE users SET username = ? WHERE id = 'user-1'`, literalActor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx,
+		`INSERT INTO users (id, email, username, password_hash, created_at) VALUES ('user-2', 'nearby@example.com', 'literalXYactor', 'x', ?)`,
+		base); err != nil {
+		t.Fatal(err)
+	}
+	seedEvent(t, store, ctx, "e-literal", "user", "user-1", "identity.login_succeeded", "authentication", base.Add(time.Second))
+	seedEvent(t, store, ctx, "e-nearby", "user", "user-2", "identity.login_succeeded", "authentication", base)
+
+	page, err := store.List(ctx, auditdomain.Filter{Actor: literalActor}, foundation.PageRequest{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].ID != "e-literal" {
+		t.Fatalf("expected only literal actor match, got %+v", page.Items)
+	}
+}
+
 func TestListPaginatesWithKeyset(t *testing.T) {
 	store, ctx := newListTestStore(t)
 	base := time.Now().UTC().Truncate(time.Second)
