@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -10,12 +11,30 @@ import (
 	"github.com/jfxdev/grom/backend/internal/foundation"
 )
 
+// ErrListingUnsupported is returned by List when the backing store does not
+// implement the read port (e.g. a write-only test double).
+var ErrListingUnsupported = errors.New("audit: listing not supported by store")
+
 type Service struct {
-	store auditdomain.Store
+	store  auditdomain.Store
+	reader auditdomain.Reader
 }
 
 func New(store auditdomain.Store) *Service {
-	return &Service{store: store}
+	service := &Service{store: store}
+	if reader, ok := store.(auditdomain.Reader); ok {
+		service.reader = reader
+	}
+	return service
+}
+
+// List returns a paginated, filtered view of audit events. Metadata is already
+// sanitized at write time, so it is exposed verbatim.
+func (s *Service) List(ctx context.Context, filter auditdomain.Filter, request foundation.PageRequest) (foundation.PageResult[auditdomain.ListItem], error) {
+	if s.reader == nil {
+		return foundation.PageResult[auditdomain.ListItem]{}, ErrListingUnsupported
+	}
+	return s.reader.List(ctx, filter, request)
 }
 
 func (s *Service) Record(

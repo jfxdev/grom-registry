@@ -159,6 +159,65 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/audit-events:
+    get:
+      tags: [Audit]
+      operationId: listAuditEvents
+      summary: List audit events
+      description: >-
+        Read-only, paginated listing of immutable audit events for installation
+        administrators. Metadata is sanitized at write time; no plaintext
+        passwords, reset tokens, access keys, sessions, or Authorization values
+        are exposed. There is no mutation path for audit events.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
+        - name: action
+          in: query
+          required: false
+          description: Exact audit action to filter by (e.g. identity.login_succeeded).
+          schema:
+            $ref: "#/components/schemas/AuditAction"
+        - name: resource
+          in: query
+          required: false
+          description: Exact resource kind to filter by (e.g. registry_repository).
+          schema:
+            $ref: "#/components/schemas/AuditResourceKind"
+        - name: actor
+          in: query
+          required: false
+          description: Case-insensitive substring across the resolved actor name, username, and id.
+          schema:
+            type: string
+            maxLength: 200
+        - name: from
+          in: query
+          required: false
+          description: Inclusive lower bound on the event timestamp (RFC3339).
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Exclusive upper bound on the event timestamp (RFC3339).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditEventPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/users:
     get:
       tags: [Identity]
@@ -1484,6 +1543,105 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/User"
+        nextCursor:
+          type: string
+    AuditAction:
+      type: string
+      enum:
+        - identity.login_succeeded
+        - identity.login_failed
+        - identity.registry_auth_failed
+        - identity.user_created
+        - identity.user_promoted_to_system_admin
+        - identity.user_promoted_to_system_viewer
+        - identity.user_disabled
+        - identity.service_account_created
+        - identity.service_account_disabled
+        - identity.access_key_created
+        - identity.access_key_revoked
+        - identity.user_password_changed
+        - identity.user_password_reset_link_created
+        - identity.user_password_reset_completed
+        - projects.project_created
+        - projects.project_delete_requested
+        - projects.project_deleted
+        - projects.membership_upserted
+        - projects.membership_removed
+        - registry.repository_created_from_push
+        - registry.repository_policies_updated
+        - registry.repository_archived
+        - registry.repository_unarchived
+        - registry.repository_removed
+        - registry.artifact_deletion_started
+        - registry.artifact_deletion_completed
+        - registry.artifact_deletion_failed
+        - registry.lifecycle_preview_created
+        - registry.lifecycle_run_started
+        - registry.lifecycle_item_deleted
+        - registry.lifecycle_item_skipped
+        - registry.lifecycle_item_failed
+        - registry.lifecycle_run_completed
+        - registry.lifecycle_run_failed
+        - platform.restore_completed
+        - platform.backup_created
+        - platform.backup_delete_requested
+        - platform.backup_deleted
+        - platform.garbage_collection_started
+        - platform.garbage_collection_completed
+        - platform.garbage_collection_failed
+    AuditResourceKind:
+      type: string
+      enum:
+        - authentication
+        - user
+        - service_account
+        - project
+        - membership
+        - registry_repository
+        - artifact_deletion
+        - lifecycle_run
+        - backup
+        - garbage_collection
+    AuditEvent:
+      type: object
+      required: [id, actorKind, actorId, action, resourceKind, resourceId, metadata, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorKind:
+          type: string
+          description: Kind of principal that performed the action (e.g. user, service_account).
+        actorId:
+          type: string
+          description: Identifier of the actor. May be empty for anonymous events.
+        actorName:
+          type: string
+          description: Resolved display name of the actor, when the actor still exists.
+        actorUsername:
+          type: string
+          description: Resolved username of the actor, when the actor still exists.
+        action:
+          $ref: "#/components/schemas/AuditAction"
+        resourceKind:
+          $ref: "#/components/schemas/AuditResourceKind"
+        resourceId:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Sanitized, free-form event metadata. Sensitive keys are redacted at write time.
+        createdAt:
+          type: string
+          format: date-time
+    AuditEventPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEvent"
         nextCursor:
           type: string
     ServiceAccountPage:

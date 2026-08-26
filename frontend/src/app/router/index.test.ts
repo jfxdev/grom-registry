@@ -44,6 +44,32 @@ describe('application router', () => {
     expect(router.currentRoute.value.name).toBe('projects')
   })
 
+  it('keeps non-administrators away from the audit log', async () => {
+    const session = useSessionStore()
+    session.checked = true
+    session.user = {
+      id: '8a24b252-3aa7-4cc7-8384-52441dab9f1d', email: 'alex@example.com', username: 'alex',
+      systemAdmin: false, systemViewer: true, createdAt: '2026-07-27T00:00:00Z',
+    }
+
+    await router.push('/audit-log')
+
+    expect(router.currentRoute.value.name).toBe('projects')
+  })
+
+  it('resolves the audit log for administrators', async () => {
+    const session = useSessionStore()
+    session.checked = true
+    session.user = {
+      id: '8a24b252-3aa7-4cc7-8384-52441dab9f1d', email: 'alex@example.com', username: 'alex',
+      systemAdmin: true, systemViewer: false, createdAt: '2026-07-27T00:00:00Z',
+    }
+
+    await router.push('/audit-log')
+
+    expect(router.currentRoute.value.name).toBe('audit-log')
+  })
+
   it('resolves a dedicated repository page', async () => {
     const session = useSessionStore()
     session.checked = true

@@ -6,5 +6,6 @@ export const ROUTES = {
   users: '/users',
   serviceAccounts: '/service-accounts',
   backups: '/backups',
+  auditLog: '/audit-log',
   settings: '/settings',
 } as const

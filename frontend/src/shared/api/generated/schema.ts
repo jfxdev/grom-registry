@@ -148,6 +148,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List audit events
+         * @description Read-only, paginated listing of immutable audit events for installation administrators. Metadata is sanitized at write time; no plaintext passwords, reset tokens, access keys, sessions, or Authorization values are exposed. There is no mutation path for audit events.
+         */
+        get: operations["listAuditEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users": {
         parameters: {
             query?: never;
@@ -776,6 +796,35 @@ export interface components {
         };
         UserPage: {
             items: components["schemas"]["User"][];
+            nextCursor?: string;
+        };
+        /** @enum {string} */
+        AuditAction: "identity.login_succeeded" | "identity.login_failed" | "identity.registry_auth_failed" | "identity.user_created" | "identity.user_promoted_to_system_admin" | "identity.user_promoted_to_system_viewer" | "identity.user_disabled" | "identity.service_account_created" | "identity.service_account_disabled" | "identity.access_key_created" | "identity.access_key_revoked" | "identity.user_password_changed" | "identity.user_password_reset_link_created" | "identity.user_password_reset_completed" | "projects.project_created" | "projects.project_delete_requested" | "projects.project_deleted" | "projects.membership_upserted" | "projects.membership_removed" | "registry.repository_created_from_push" | "registry.repository_policies_updated" | "registry.repository_archived" | "registry.repository_unarchived" | "registry.repository_removed" | "registry.artifact_deletion_started" | "registry.artifact_deletion_completed" | "registry.artifact_deletion_failed" | "registry.lifecycle_preview_created" | "registry.lifecycle_run_started" | "registry.lifecycle_item_deleted" | "registry.lifecycle_item_skipped" | "registry.lifecycle_item_failed" | "registry.lifecycle_run_completed" | "registry.lifecycle_run_failed" | "platform.restore_completed" | "platform.backup_created" | "platform.backup_delete_requested" | "platform.backup_deleted" | "platform.garbage_collection_started" | "platform.garbage_collection_completed" | "platform.garbage_collection_failed";
+        /** @enum {string} */
+        AuditResourceKind: "authentication" | "user" | "service_account" | "project" | "membership" | "registry_repository" | "artifact_deletion" | "lifecycle_run" | "backup" | "garbage_collection";
+        AuditEvent: {
+            /** Format: uuid */
+            id: string;
+            /** @description Kind of principal that performed the action (e.g. user, service_account). */
+            actorKind: string;
+            /** @description Identifier of the actor. May be empty for anonymous events. */
+            actorId: string;
+            /** @description Resolved display name of the actor, when the actor still exists. */
+            actorName?: string;
+            /** @description Resolved username of the actor, when the actor still exists. */
+            actorUsername?: string;
+            action: components["schemas"]["AuditAction"];
+            resourceKind: components["schemas"]["AuditResourceKind"];
+            resourceId: string;
+            /** @description Sanitized, free-form event metadata. Sensitive keys are redacted at write time. */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AuditEventPage: {
+            items: components["schemas"]["AuditEvent"][];
             nextCursor?: string;
         };
         ServiceAccountPage: {
@@ -1507,6 +1556,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listAuditEvents: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Exact audit action to filter by (e.g. identity.login_succeeded). */
+                action?: components["schemas"]["AuditAction"];
+                /** @description Exact resource kind to filter by (e.g. registry_repository). */
+                resource?: components["schemas"]["AuditResourceKind"];
+                /** @description Case-insensitive substring across the resolved actor name, username, and id. */
+                actor?: string;
+                /** @description Inclusive lower bound on the event timestamp (RFC3339). */
+                from?: string;
+                /** @description Exclusive upper bound on the event timestamp (RFC3339). */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audit events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPage"];
+                };
             };
             400: components["responses"]["BadRequest"];
             403: components["responses"]["Forbidden"];
@@ -2793,3 +2878,36 @@ export interface operations {
         };
     };
 }
+type FlattenedDeepRequired<T> = {
+    [K in keyof T]-?: FlattenedDeepRequired<T[K] extends unknown[] | undefined | null ? Extract<T[K], unknown[]>[number] : T[K]>;
+};
+type ReadonlyArray<T> = [
+    Exclude<T, undefined>
+] extends [
+    unknown[]
+] ? Readonly<Exclude<T, undefined>> : Readonly<Exclude<T, undefined>[]>;
+export const pathsApiV1ServiceAccountsGetParametersQueryStatusValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/service-accounts"]["get"]["parameters"]["query"]["status"]> = ["active", "disabled", "all"];
+export const deploymentProfileValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Deployment"]["profile"]> = ["development", "permissive", "strict"];
+export const installationStatusDatabaseValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["database"]> = ["sqlite", "postgres"];
+export const installationStatusDistributionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["distribution"]> = ["available", "unavailable"];
+export const backupStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupStatus"]> = ["starting", "quiescing", "creating", "complete", "failed"];
+export const backupOverviewPageSizeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupOverview"]["pageSize"]> = [5];
+export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["identity.login_succeeded", "identity.login_failed", "identity.registry_auth_failed", "identity.user_created", "identity.user_promoted_to_system_admin", "identity.user_promoted_to_system_viewer", "identity.user_disabled", "identity.service_account_created", "identity.service_account_disabled", "identity.access_key_created", "identity.access_key_revoked", "identity.user_password_changed", "identity.user_password_reset_link_created", "identity.user_password_reset_completed", "projects.project_created", "projects.project_delete_requested", "projects.project_deleted", "projects.membership_upserted", "projects.membership_removed", "registry.repository_created_from_push", "registry.repository_policies_updated", "registry.repository_archived", "registry.repository_unarchived", "registry.repository_removed", "registry.artifact_deletion_started", "registry.artifact_deletion_completed", "registry.artifact_deletion_failed", "registry.lifecycle_preview_created", "registry.lifecycle_run_started", "registry.lifecycle_item_deleted", "registry.lifecycle_item_skipped", "registry.lifecycle_item_failed", "registry.lifecycle_run_completed", "registry.lifecycle_run_failed", "platform.restore_completed", "platform.backup_created", "platform.backup_delete_requested", "platform.backup_deleted", "platform.garbage_collection_started", "platform.garbage_collection_completed", "platform.garbage_collection_failed"];
+export const auditResourceKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditResourceKind"]> = ["authentication", "user", "service_account", "project", "membership", "registry_repository", "artifact_deletion", "lifecycle_run", "backup", "garbage_collection"];
+export const principalKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PrincipalKind"]> = ["user", "service_account"];
+export const projectRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProjectRole"]> = ["reader", "writer", "admin"];
+export const repositoryStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryStatus"]> = ["empty", "active", "archived"];
+export const repositoryPolicyTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryPolicyType"]> = ["tag_protection", "immutability", "retention", "tag_naming", "manual_deletion"];
+export const repositoryCreationSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Repository"]["creationSource"]> = ["manual", "push", "reconciled"];
+export const repositoryProfileSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Repository"]["profileSource"]> = ["none", "inferred"];
+export const accountedStorageUsageStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AccountedStorageUsage"]["status"]> = ["ready", "pending", "stale", "unavailable"];
+export const artifactDeletionStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ArtifactDeletion"]["status"]> = ["running", "completed", "failed"];
+export const inventoryStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InventoryState"]> = ["active", "untagged", "missing", "deleted"];
+export const repositoryProfileValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryProfile"]> = ["unknown", "container_image", "terraform_module", "sbom", "generic_oci", "mixed"];
+export const artifactKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ArtifactKind"]> = ["container_image", "image_index", "terraform_module", "sbom_spdx", "sbom_cyclonedx", "signature", "helm_chart", "generic_oci", "unknown_oci"];
+export const artifactRelationshipValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ArtifactRelationship"]> = ["primary", "referrer"];
+export const classificationConfidenceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ClassificationConfidence"]> = ["none", "low", "medium", "high"];
+export const lifecycleDecisionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LifecycleDecision"]> = ["eligible", "retained", "blocked"];
+export const lifecyclePreviewStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LifecyclePreview"]["status"]> = ["ready", "executing", "executed", "expired"];
+export const lifecycleRunItemStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LifecycleRunItem"]["status"]> = ["deleted", "skipped", "failed"];
+export const lifecycleRunStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LifecycleRun"]["status"]> = ["running", "completed", "partially_completed", "failed"];

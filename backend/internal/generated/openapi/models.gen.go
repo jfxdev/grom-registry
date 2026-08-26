@@ -111,6 +111,183 @@ func (e ArtifactRelationship) Valid() bool {
 	}
 }
 
+// Defines values for AuditAction.
+const (
+	IdentityAccessKeyCreated             AuditAction = "identity.access_key_created"
+	IdentityAccessKeyRevoked             AuditAction = "identity.access_key_revoked"
+	IdentityLoginFailed                  AuditAction = "identity.login_failed"
+	IdentityLoginSucceeded               AuditAction = "identity.login_succeeded"
+	IdentityRegistryAuthFailed           AuditAction = "identity.registry_auth_failed"
+	IdentityServiceAccountCreated        AuditAction = "identity.service_account_created"
+	IdentityServiceAccountDisabled       AuditAction = "identity.service_account_disabled"
+	IdentityUserCreated                  AuditAction = "identity.user_created"
+	IdentityUserDisabled                 AuditAction = "identity.user_disabled"
+	IdentityUserPasswordChanged          AuditAction = "identity.user_password_changed"
+	IdentityUserPasswordResetCompleted   AuditAction = "identity.user_password_reset_completed"
+	IdentityUserPasswordResetLinkCreated AuditAction = "identity.user_password_reset_link_created"
+	IdentityUserPromotedToSystemAdmin    AuditAction = "identity.user_promoted_to_system_admin"
+	IdentityUserPromotedToSystemViewer   AuditAction = "identity.user_promoted_to_system_viewer"
+	PlatformBackupCreated                AuditAction = "platform.backup_created"
+	PlatformBackupDeleteRequested        AuditAction = "platform.backup_delete_requested"
+	PlatformBackupDeleted                AuditAction = "platform.backup_deleted"
+	PlatformGarbageCollectionCompleted   AuditAction = "platform.garbage_collection_completed"
+	PlatformGarbageCollectionFailed      AuditAction = "platform.garbage_collection_failed"
+	PlatformGarbageCollectionStarted     AuditAction = "platform.garbage_collection_started"
+	PlatformRestoreCompleted             AuditAction = "platform.restore_completed"
+	ProjectsMembershipRemoved            AuditAction = "projects.membership_removed"
+	ProjectsMembershipUpserted           AuditAction = "projects.membership_upserted"
+	ProjectsProjectCreated               AuditAction = "projects.project_created"
+	ProjectsProjectDeleteRequested       AuditAction = "projects.project_delete_requested"
+	ProjectsProjectDeleted               AuditAction = "projects.project_deleted"
+	RegistryArtifactDeletionCompleted    AuditAction = "registry.artifact_deletion_completed"
+	RegistryArtifactDeletionFailed       AuditAction = "registry.artifact_deletion_failed"
+	RegistryArtifactDeletionStarted      AuditAction = "registry.artifact_deletion_started"
+	RegistryLifecycleItemDeleted         AuditAction = "registry.lifecycle_item_deleted"
+	RegistryLifecycleItemFailed          AuditAction = "registry.lifecycle_item_failed"
+	RegistryLifecycleItemSkipped         AuditAction = "registry.lifecycle_item_skipped"
+	RegistryLifecyclePreviewCreated      AuditAction = "registry.lifecycle_preview_created"
+	RegistryLifecycleRunCompleted        AuditAction = "registry.lifecycle_run_completed"
+	RegistryLifecycleRunFailed           AuditAction = "registry.lifecycle_run_failed"
+	RegistryLifecycleRunStarted          AuditAction = "registry.lifecycle_run_started"
+	RegistryRepositoryArchived           AuditAction = "registry.repository_archived"
+	RegistryRepositoryCreatedFromPush    AuditAction = "registry.repository_created_from_push"
+	RegistryRepositoryPoliciesUpdated    AuditAction = "registry.repository_policies_updated"
+	RegistryRepositoryRemoved            AuditAction = "registry.repository_removed"
+	RegistryRepositoryUnarchived         AuditAction = "registry.repository_unarchived"
+)
+
+// Valid indicates whether the value is a known member of the AuditAction enum.
+func (e AuditAction) Valid() bool {
+	switch e {
+	case IdentityAccessKeyCreated:
+		return true
+	case IdentityAccessKeyRevoked:
+		return true
+	case IdentityLoginFailed:
+		return true
+	case IdentityLoginSucceeded:
+		return true
+	case IdentityRegistryAuthFailed:
+		return true
+	case IdentityServiceAccountCreated:
+		return true
+	case IdentityServiceAccountDisabled:
+		return true
+	case IdentityUserCreated:
+		return true
+	case IdentityUserDisabled:
+		return true
+	case IdentityUserPasswordChanged:
+		return true
+	case IdentityUserPasswordResetCompleted:
+		return true
+	case IdentityUserPasswordResetLinkCreated:
+		return true
+	case IdentityUserPromotedToSystemAdmin:
+		return true
+	case IdentityUserPromotedToSystemViewer:
+		return true
+	case PlatformBackupCreated:
+		return true
+	case PlatformBackupDeleteRequested:
+		return true
+	case PlatformBackupDeleted:
+		return true
+	case PlatformGarbageCollectionCompleted:
+		return true
+	case PlatformGarbageCollectionFailed:
+		return true
+	case PlatformGarbageCollectionStarted:
+		return true
+	case PlatformRestoreCompleted:
+		return true
+	case ProjectsMembershipRemoved:
+		return true
+	case ProjectsMembershipUpserted:
+		return true
+	case ProjectsProjectCreated:
+		return true
+	case ProjectsProjectDeleteRequested:
+		return true
+	case ProjectsProjectDeleted:
+		return true
+	case RegistryArtifactDeletionCompleted:
+		return true
+	case RegistryArtifactDeletionFailed:
+		return true
+	case RegistryArtifactDeletionStarted:
+		return true
+	case RegistryLifecycleItemDeleted:
+		return true
+	case RegistryLifecycleItemFailed:
+		return true
+	case RegistryLifecycleItemSkipped:
+		return true
+	case RegistryLifecyclePreviewCreated:
+		return true
+	case RegistryLifecycleRunCompleted:
+		return true
+	case RegistryLifecycleRunFailed:
+		return true
+	case RegistryLifecycleRunStarted:
+		return true
+	case RegistryRepositoryArchived:
+		return true
+	case RegistryRepositoryCreatedFromPush:
+		return true
+	case RegistryRepositoryPoliciesUpdated:
+		return true
+	case RegistryRepositoryRemoved:
+		return true
+	case RegistryRepositoryUnarchived:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuditResourceKind.
+const (
+	AuditResourceKindArtifactDeletion   AuditResourceKind = "artifact_deletion"
+	AuditResourceKindAuthentication     AuditResourceKind = "authentication"
+	AuditResourceKindBackup             AuditResourceKind = "backup"
+	AuditResourceKindGarbageCollection  AuditResourceKind = "garbage_collection"
+	AuditResourceKindLifecycleRun       AuditResourceKind = "lifecycle_run"
+	AuditResourceKindMembership         AuditResourceKind = "membership"
+	AuditResourceKindProject            AuditResourceKind = "project"
+	AuditResourceKindRegistryRepository AuditResourceKind = "registry_repository"
+	AuditResourceKindServiceAccount     AuditResourceKind = "service_account"
+	AuditResourceKindUser               AuditResourceKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the AuditResourceKind enum.
+func (e AuditResourceKind) Valid() bool {
+	switch e {
+	case AuditResourceKindArtifactDeletion:
+		return true
+	case AuditResourceKindAuthentication:
+		return true
+	case AuditResourceKindBackup:
+		return true
+	case AuditResourceKindGarbageCollection:
+		return true
+	case AuditResourceKindLifecycleRun:
+		return true
+	case AuditResourceKindMembership:
+		return true
+	case AuditResourceKindProject:
+		return true
+	case AuditResourceKindRegistryRepository:
+		return true
+	case AuditResourceKindServiceAccount:
+		return true
+	case AuditResourceKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BackupOverviewPageSize.
 const (
 	N5 BackupOverviewPageSize = 5
@@ -610,6 +787,42 @@ type ArtifactKind string
 
 // ArtifactRelationship defines model for ArtifactRelationship.
 type ArtifactRelationship string
+
+// AuditAction defines model for AuditAction.
+type AuditAction string
+
+// AuditEvent defines model for AuditEvent.
+type AuditEvent struct {
+	Action AuditAction `json:"action"`
+
+	// ActorId Identifier of the actor. May be empty for anonymous events.
+	ActorId string `json:"actorId"`
+
+	// ActorKind Kind of principal that performed the action (e.g. user, service_account).
+	ActorKind string `json:"actorKind"`
+
+	// ActorName Resolved display name of the actor, when the actor still exists.
+	ActorName *string `json:"actorName,omitempty"`
+
+	// ActorUsername Resolved username of the actor, when the actor still exists.
+	ActorUsername *string            `json:"actorUsername,omitempty"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	Id            openapi_types.UUID `json:"id"`
+
+	// Metadata Sanitized, free-form event metadata. Sensitive keys are redacted at write time.
+	Metadata     map[string]interface{} `json:"metadata"`
+	ResourceId   string                 `json:"resourceId"`
+	ResourceKind AuditResourceKind      `json:"resourceKind"`
+}
+
+// AuditEventPage defines model for AuditEventPage.
+type AuditEventPage struct {
+	Items      []AuditEvent `json:"items"`
+	NextCursor *string      `json:"nextCursor,omitempty"`
+}
+
+// AuditResourceKind defines model for AuditResourceKind.
+type AuditResourceKind string
 
 // BackupOperation defines model for BackupOperation.
 type BackupOperation struct {
@@ -1164,6 +1377,28 @@ type TooManyRequests = Error
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
+
+// ListAuditEventsParams defines parameters for ListAuditEvents.
+type ListAuditEventsParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Action Exact audit action to filter by (e.g. identity.login_succeeded).
+	Action *AuditAction `form:"action,omitempty" json:"action,omitempty"`
+
+	// Resource Exact resource kind to filter by (e.g. registry_repository).
+	Resource *AuditResourceKind `form:"resource,omitempty" json:"resource,omitempty"`
+
+	// Actor Case-insensitive substring across the resolved actor name, username, and id.
+	Actor *string `form:"actor,omitempty" json:"actor,omitempty"`
+
+	// From Inclusive lower bound on the event timestamp (RFC3339).
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Exclusive upper bound on the event timestamp (RFC3339).
+	To *time.Time `form:"to,omitempty" json:"to,omitempty"`
+}
 
 // ListBackupsParams defines parameters for ListBackups.
 type ListBackupsParams struct {

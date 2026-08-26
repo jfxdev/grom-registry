@@ -192,7 +192,7 @@ jobs:
         working-directory: frontend
         run: |
           npm run generate:api
-          git diff --exit-code -- src/shared/api/generated/schema.d.ts
+          git diff --exit-code -- src/shared/api/generated/schema.ts
 
       - name: Run frontend lint
         working-directory: frontend

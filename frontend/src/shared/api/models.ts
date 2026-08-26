@@ -2,6 +2,10 @@ import type { components, operations } from './generated/schema'
 
 export type User = components['schemas']['User']
 export type UserPage = components['schemas']['UserPage']
+export type AuditEvent = components['schemas']['AuditEvent']
+export type AuditEventPage = components['schemas']['AuditEventPage']
+export type AuditAction = components['schemas']['AuditAction']
+export type AuditResourceKind = components['schemas']['AuditResourceKind']
 export type CreateUserResponse = components['schemas']['CreateUserResponse']
 export type Deployment = components['schemas']['Deployment']
 export type InstallationStatus = components['schemas']['InstallationStatus']

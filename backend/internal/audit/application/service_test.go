@@ -88,6 +88,15 @@ func TestRecordNormalizesTypedValuesAndRawJSONBeforeSanitizing(t *testing.T) {
 	}
 }
 
+func TestListWithoutReaderIsUnsupported(t *testing.T) {
+	// testStore implements only the write port, so listing must be refused
+	// rather than silently returning an empty page.
+	service := New(&testStore{})
+	if _, err := service.List(context.Background(), auditdomain.Filter{}, foundation.PageRequest{Limit: 10}); !errors.Is(err, ErrListingUnsupported) {
+		t.Fatalf("expected ErrListingUnsupported, got %v", err)
+	}
+}
+
 func TestRecordRejectsCyclicMetadata(t *testing.T) {
 	cyclic := map[string]any{}
 	cyclic["self"] = cyclic

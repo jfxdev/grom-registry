@@ -14,6 +14,7 @@ import {
   Menu,
   PanelLeft,
   UserRound,
+  ScrollText,
   ShieldCheck,
   DatabaseBackup,
   Settings,
@@ -52,6 +53,7 @@ const navigationSections = [
     label: 'Management',
     items: [
       { label: 'Backup & recovery', to: ROUTES.backups, icon: DatabaseBackup, adminOnly: true },
+      { label: 'Audit log', to: ROUTES.auditLog, icon: ScrollText, adminOnly: true },
       { label: 'Settings', to: ROUTES.settings, icon: Settings, adminOnly: true },
     ],
   },
