@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jfxdev/grom/backend/api"
 	auditapp "github.com/jfxdev/grom/backend/internal/audit/application"
+	auditdomain "github.com/jfxdev/grom/backend/internal/audit/domain"
 	"github.com/jfxdev/grom/backend/internal/constants"
 	"github.com/jfxdev/grom/backend/internal/foundation"
 	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
@@ -221,6 +222,8 @@ func (s *Server) routes() chi.Router {
 			protected.Post("/backups", s.createBackup)
 			protected.Delete("/backups/{backupId}", s.deleteBackup)
 			protected.Get("/backups/{backupId}/download", s.downloadBackup)
+
+			protected.Get("/audit-events", s.listAuditEvents)
 		})
 	})
 
@@ -560,6 +563,62 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, users)
+}
+
+func (s *Server) listAuditEvents(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	if !validListQuery(r, "cursor", "limit", "action", "resource", "actor", "from", "to") {
+		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
+		return
+	}
+	query := r.URL.Query()
+	filter := auditdomain.Filter{
+		Actor:        strings.TrimSpace(query.Get("actor")),
+		Action:       strings.TrimSpace(query.Get("action")),
+		ResourceKind: strings.TrimSpace(query.Get("resource")),
+	}
+	if raw := strings.TrimSpace(query.Get("from")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_query", "The from timestamp must be an RFC3339 value")
+			return
+		}
+		filter.From = parsed
+	}
+	if raw := strings.TrimSpace(query.Get("to")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_query", "The to timestamp must be an RFC3339 value")
+			return
+		}
+		filter.To = parsed
+	}
+	request, _, err := pageRequest(r, auditEventsScope(filter))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	events, err := s.audit.List(r.Context(), filter, request)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
+}
+
+// auditEventsScope namespaces the page cursor by the active filters so a cursor
+// minted for one filter set cannot be replayed against another.
+func auditEventsScope(filter auditdomain.Filter) string {
+	return fmt.Sprintf(
+		"audit-events:action=%s:resource=%s:actor=%s:from=%s:to=%s",
+		strings.ToLower(filter.Action),
+		strings.ToLower(filter.ResourceKind),
+		strings.ToLower(filter.Actor),
+		filter.From.UTC().Format(time.RFC3339Nano),
+		filter.To.UTC().Format(time.RFC3339Nano),
+	)
 }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {

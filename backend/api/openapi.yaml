@@ -159,6 +159,67 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/audit-events:
+    get:
+      tags: [Audit]
+      operationId: listAuditEvents
+      summary: List audit events
+      description: >-
+        Read-only, paginated listing of immutable audit events for installation
+        administrators. Metadata is sanitized at write time; no plaintext
+        passwords, reset tokens, access keys, sessions, or Authorization values
+        are exposed. There is no mutation path for audit events.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
+        - name: action
+          in: query
+          required: false
+          description: Exact audit action to filter by (e.g. identity.login_succeeded).
+          schema:
+            type: string
+            maxLength: 200
+        - name: resource
+          in: query
+          required: false
+          description: Exact resource kind to filter by (e.g. registry_repository).
+          schema:
+            type: string
+            maxLength: 200
+        - name: actor
+          in: query
+          required: false
+          description: Case-insensitive substring across the resolved actor name, username, and id.
+          schema:
+            type: string
+            maxLength: 200
+        - name: from
+          in: query
+          required: false
+          description: Inclusive lower bound on the event timestamp (RFC3339).
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Exclusive upper bound on the event timestamp (RFC3339).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditEventPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/users:
     get:
       tags: [Identity]
@@ -1484,6 +1545,48 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/User"
+        nextCursor:
+          type: string
+    AuditEvent:
+      type: object
+      required: [id, actorKind, actorId, action, resourceKind, resourceId, metadata, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorKind:
+          type: string
+          description: Kind of principal that performed the action (e.g. user, service_account).
+        actorId:
+          type: string
+          description: Identifier of the actor. May be empty for anonymous events.
+        actorName:
+          type: string
+          description: Resolved display name of the actor, when the actor still exists.
+        actorUsername:
+          type: string
+          description: Resolved username of the actor, when the actor still exists.
+        action:
+          type: string
+        resourceKind:
+          type: string
+        resourceId:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Sanitized, free-form event metadata. Sensitive keys are redacted at write time.
+        createdAt:
+          type: string
+          format: date-time
+    AuditEventPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEvent"
         nextCursor:
           type: string
     ServiceAccountPage:

@@ -611,6 +611,36 @@ type ArtifactKind string
 // ArtifactRelationship defines model for ArtifactRelationship.
 type ArtifactRelationship string
 
+// AuditEvent defines model for AuditEvent.
+type AuditEvent struct {
+	Action string `json:"action"`
+
+	// ActorId Identifier of the actor. May be empty for anonymous events.
+	ActorId string `json:"actorId"`
+
+	// ActorKind Kind of principal that performed the action (e.g. user, service_account).
+	ActorKind string `json:"actorKind"`
+
+	// ActorName Resolved display name of the actor, when the actor still exists.
+	ActorName *string `json:"actorName,omitempty"`
+
+	// ActorUsername Resolved username of the actor, when the actor still exists.
+	ActorUsername *string            `json:"actorUsername,omitempty"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	Id            openapi_types.UUID `json:"id"`
+
+	// Metadata Sanitized, free-form event metadata. Sensitive keys are redacted at write time.
+	Metadata     map[string]interface{} `json:"metadata"`
+	ResourceId   string                 `json:"resourceId"`
+	ResourceKind string                 `json:"resourceKind"`
+}
+
+// AuditEventPage defines model for AuditEventPage.
+type AuditEventPage struct {
+	Items      []AuditEvent `json:"items"`
+	NextCursor *string      `json:"nextCursor,omitempty"`
+}
+
 // BackupOperation defines model for BackupOperation.
 type BackupOperation struct {
 	CompletedAt *time.Time         `json:"completedAt,omitempty"`
@@ -1164,6 +1194,28 @@ type TooManyRequests = Error
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
+
+// ListAuditEventsParams defines parameters for ListAuditEvents.
+type ListAuditEventsParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Action Exact audit action to filter by (e.g. identity.login_succeeded).
+	Action *string `form:"action,omitempty" json:"action,omitempty"`
+
+	// Resource Exact resource kind to filter by (e.g. registry_repository).
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty"`
+
+	// Actor Case-insensitive substring across the resolved actor name, username, and id.
+	Actor *string `form:"actor,omitempty" json:"actor,omitempty"`
+
+	// From Inclusive lower bound on the event timestamp (RFC3339).
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Exclusive upper bound on the event timestamp (RFC3339).
+	To *time.Time `form:"to,omitempty" json:"to,omitempty"`
+}
 
 // ListBackupsParams defines parameters for ListBackups.
 type ListBackupsParams struct {

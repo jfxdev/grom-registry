@@ -148,6 +148,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List audit events
+         * @description Read-only, paginated listing of immutable audit events for installation administrators. Metadata is sanitized at write time; no plaintext passwords, reset tokens, access keys, sessions, or Authorization values are exposed. There is no mutation path for audit events.
+         */
+        get: operations["listAuditEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users": {
         parameters: {
             query?: never;
@@ -776,6 +796,31 @@ export interface components {
         };
         UserPage: {
             items: components["schemas"]["User"][];
+            nextCursor?: string;
+        };
+        AuditEvent: {
+            /** Format: uuid */
+            id: string;
+            /** @description Kind of principal that performed the action (e.g. user, service_account). */
+            actorKind: string;
+            /** @description Identifier of the actor. May be empty for anonymous events. */
+            actorId: string;
+            /** @description Resolved display name of the actor, when the actor still exists. */
+            actorName?: string;
+            /** @description Resolved username of the actor, when the actor still exists. */
+            actorUsername?: string;
+            action: string;
+            resourceKind: string;
+            resourceId: string;
+            /** @description Sanitized, free-form event metadata. Sensitive keys are redacted at write time. */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AuditEventPage: {
+            items: components["schemas"]["AuditEvent"][];
             nextCursor?: string;
         };
         ServiceAccountPage: {
@@ -1507,6 +1552,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listAuditEvents: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Exact audit action to filter by (e.g. identity.login_succeeded). */
+                action?: string;
+                /** @description Exact resource kind to filter by (e.g. registry_repository). */
+                resource?: string;
+                /** @description Case-insensitive substring across the resolved actor name, username, and id. */
+                actor?: string;
+                /** @description Inclusive lower bound on the event timestamp (RFC3339). */
+                from?: string;
+                /** @description Exclusive upper bound on the event timestamp (RFC3339). */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audit events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPage"];
+                };
             };
             400: components["responses"]["BadRequest"];
             403: components["responses"]["Forbidden"];
