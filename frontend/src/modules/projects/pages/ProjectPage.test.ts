@@ -468,15 +468,15 @@ describe('ProjectPage membership management', () => {
     await fireEvent.submit(within(memberDialog).getByRole('button', { name: 'Save role' }).closest('form')!)
     await waitFor(() => expect(mocks.setMember).toHaveBeenCalledWith('payments', 'user', 'user-2', 'admin'))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change role' })).toBeNull())
-    await fireEvent.click(screen.getByRole('button', { name: 'Remove writer from project' }))
-    const removalDialog = screen.getByRole('dialog', { name: 'Remove project permission' })
-    expect(removalDialog.textContent).toContain("Remove this member's writer permission")
-    await fireEvent.submit(within(removalDialog).getByRole('button', { name: 'Remove permission' }).closest('form')!)
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove user member' }))
+    const removalDialog = screen.getByRole('dialog', { name: 'Remove member' })
+    expect(removalDialog.textContent).toContain('loses project access')
+    await fireEvent.submit(within(removalDialog).getByRole('button', { name: 'Remove member' }).closest('form')!)
     await waitFor(() => expect(mocks.deleteMember).toHaveBeenCalledWith('payments', 'user', 'user-2'))
     expect((await screen.findByText(/Member removal denied/)).textContent).toContain('Member removal denied')
   })
 
-  it('uses a member name in the removal label for service accounts', async () => {
+  it('uses a kind-based removal label for service accounts', async () => {
     mocks.listMembers.mockResolvedValue([{
       principalKind: 'service_account', principalId: 'service-1', principalName: 'Payments CI', principalDetail: 'payments-ci', role: 'writer', createdAt: '2026-07-29T00:00:00Z',
     }])
@@ -485,7 +485,7 @@ describe('ProjectPage membership management', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Project settings' }))
 
     expect(screen.getByRole('button', { name: 'Change role for Payments CI' }).className).toContain('grom-button-variant-cyan')
-    expect(screen.getByRole('button', { name: 'Remove Payments CI from project' }).className).toContain('grom-button-variant-delete')
+    expect(screen.getByRole('button', { name: 'Remove service account member' }).className).toContain('grom-button-variant-delete')
     expect(screen.getByTitle('Service account')).toBeTruthy()
   })
 

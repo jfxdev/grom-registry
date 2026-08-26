@@ -616,7 +616,7 @@ function profileLabel(profile: Repository['profile']) {
                   <p class="member-assigned text-xs text-muted-foreground">{{ new Date(member.createdAt).toLocaleDateString() }}</p>
                   <div class="member-actions flex gap-1">
                     <ActionButton variant="cyan" size="icon" :aria-label="`Change role for ${member.principalName}`" @click="editMember(member)"><Pencil :size="15" /></ActionButton>
-                    <DeleteButton size="icon" :aria-label="`Remove ${member.principalName} from project`" @click="memberError = ''; membershipToRemove = member" />
+                    <DeleteButton size="icon" :aria-label="`Remove ${member.principalKind === 'service_account' ? 'service account' : 'user'} member`" @click="memberError = ''; membershipToRemove = member" />
                   </div>
                 </div>
               </div>
@@ -897,14 +897,14 @@ function profileLabel(profile: Repository['profile']) {
 
     <Dialog v-if="membershipToRemove" labelled-by="remove-member-title" @close="membershipToRemove = null">
       <form class="modal form-stack" aria-labelledby="remove-member-title" @submit.prevent="removeMember.mutate()">
-        <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Access change</p><h2 id="remove-member-title" class="text-lg font-semibold">Remove project permission</h2></div><Button variant="ghost" size="icon" type="button" aria-label="Close member removal" @click="membershipToRemove = null"><X :size="18" /></Button></div>
+        <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Access change</p><h2 id="remove-member-title" class="text-lg font-semibold">Remove member</h2></div><Button variant="ghost" size="icon" type="button" aria-label="Close member removal" @click="membershipToRemove = null"><X :size="18" /></Button></div>
         <div class="member-role-target">
           <div><p class="text-sm font-semibold">{{ membershipToRemove.principalName }}</p><p class="mt-1 text-xs text-muted-foreground">{{ membershipToRemove.principalDetail }}</p></div>
           <div class="flex items-center gap-2"><PrincipalTypeBadge :kind="membershipToRemove.principalKind" /><Badge>{{ membershipToRemove.role }}</Badge></div>
         </div>
-        <div class="deletion-warning"><AlertTriangle :size="18" /><p>Remove this member's <strong>{{ membershipToRemove.role }}</strong> permission from this project? Access is revoked on the next registry token exchange.</p></div>
+        <div class="deletion-warning"><AlertTriangle :size="18" /><p>This member loses project access once their <strong>{{ membershipToRemove.role }}</strong> permission is removed. Access ends on the next registry token exchange.</p></div>
         <p v-if="memberError" class="error-text" role="alert">{{ memberError }}</p>
-        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="membershipToRemove = null">Cancel</Button><DeleteButton type="submit" :disabled="removeMember.isPending.value">{{ removeMember.isPending.value ? 'Removing…' : 'Remove permission' }}</DeleteButton></div>
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="membershipToRemove = null">Cancel</Button><DeleteButton type="submit" :disabled="removeMember.isPending.value">{{ removeMember.isPending.value ? 'Removing…' : 'Remove member' }}</DeleteButton></div>
       </form>
     </Dialog>
 
