@@ -412,6 +412,21 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	if setServiceAccountMemberResponse.Code != http.StatusOK {
 		t.Fatalf("set service account membership: expected 200, got %d: %s", setServiceAccountMemberResponse.Code, setServiceAccountMemberResponse.Body.String())
 	}
+	listMembersResponse := httptest.NewRecorder()
+	server.listMemberships(listMembersResponse, withUserAndParams(
+		httptest.NewRequest(http.MethodGet, "http://grom/api/v1/projects/payments/members?q=ci", nil),
+		admin, map[string]string{"project": project.Slug},
+	))
+	if listMembersResponse.Code != http.StatusOK {
+		t.Fatalf("list matching members: expected 200, got %d: %s", listMembersResponse.Code, listMembersResponse.Body.String())
+	}
+	var memberPage membershipPageResponse
+	if err := json.NewDecoder(listMembersResponse.Body).Decode(&memberPage); err != nil {
+		t.Fatal(err)
+	}
+	if len(memberPage.Items) != 1 || memberPage.Items[0].PrincipalName != "CI" || memberPage.Items[0].PrincipalDetail != "ci" {
+		t.Fatalf("unexpected named membership search response: %#v", memberPage)
+	}
 	deleteMemberResponse := httptest.NewRecorder()
 	server.deleteMembership(deleteMemberResponse, withUserAndParams(httptest.NewRequest(http.MethodDelete, "http://grom/api/v1/projects/payments/members/user/"+target.ID.String(), nil), admin, memberParams))
 	if deleteMemberResponse.Code != http.StatusNoContent {
@@ -682,7 +697,7 @@ func TestAccessLogDoesNotRecordAuthorizationHeader(t *testing.T) {
 	}
 }
 
-func TestCreateProjectRequiresInstallationAdministrator(t *testing.T) {
+func TestCreateProjectRequiresAdministrator(t *testing.T) {
 	server := &Server{}
 	request := httptest.NewRequest(http.MethodPost, "http://backend/api/v1/projects", nil)
 	request = request.WithContext(context.WithValue(request.Context(), currentUserKey{}, &identitydomain.User{
@@ -697,7 +712,7 @@ func TestCreateProjectRequiresInstallationAdministrator(t *testing.T) {
 	}
 }
 
-func TestDeleteProjectRequiresInstallationAdministrator(t *testing.T) {
+func TestDeleteProjectRequiresAdministrator(t *testing.T) {
 	server := &Server{}
 	request := httptest.NewRequest(http.MethodDelete, "http://backend/api/v1/projects/payments", nil)
 	request = request.WithContext(context.WithValue(request.Context(), currentUserKey{}, &identitydomain.User{
@@ -712,7 +727,7 @@ func TestDeleteProjectRequiresInstallationAdministrator(t *testing.T) {
 	}
 }
 
-func TestListServiceAccountsRequiresInstallationAdministrator(t *testing.T) {
+func TestListServiceAccountsRequiresAdministrator(t *testing.T) {
 	server := &Server{}
 	request := httptest.NewRequest(http.MethodGet, "http://backend/api/v1/service-accounts", nil)
 	request = request.WithContext(context.WithValue(request.Context(), currentUserKey{}, &identitydomain.User{
@@ -751,7 +766,7 @@ func TestAdministrativeListQueriesRejectOverlongAndUnknownParameters(t *testing.
 	}
 }
 
-func TestBackupHandlersRequireInstallationAdministrator(t *testing.T) {
+func TestBackupHandlersRequireAdministrator(t *testing.T) {
 	server := &Server{}
 	for _, test := range []struct {
 		name    string

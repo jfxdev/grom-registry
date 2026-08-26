@@ -2,11 +2,13 @@
 import Button from './Button.vue'
 
 withDefaults(defineProps<{
+  variant?: 'default' | 'cyan'
   type?: 'button' | 'submit' | 'reset'
   size?: 'default' | 'sm' | 'icon'
   disabled?: boolean
   loading?: boolean
 }>(), {
+  variant: 'default',
   type: 'button',
   size: 'default',
   disabled: false,
@@ -16,7 +18,7 @@ withDefaults(defineProps<{
 
 <template>
   <Button
-    variant="default"
+    :variant="variant"
     :type="type"
     :size="size"
     :disabled="disabled"

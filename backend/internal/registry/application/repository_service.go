@@ -308,6 +308,31 @@ func (s *RepositoryService) Archive(ctx context.Context, projectID, repositoryID
 	return nil
 }
 
+// Unarchive re-enables pushes. The repository is initially marked empty until
+// the next catalog reconciliation determines whether Distribution has content.
+func (s *RepositoryService) Unarchive(ctx context.Context, projectID, repositoryID foundation.ID, actor foundation.PrincipalRef) error {
+	repository, err := s.store.FindRepositoryByID(ctx, repositoryID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		return err
+	}
+	if repository.ProjectID != projectID {
+		return sql.ErrNoRows
+	}
+	if repository.Status != constants.RepositoryStatusArchived {
+		return nil
+	}
+	if err := s.store.SetRepositoryStatus(ctx, repositoryID, constants.RepositoryStatusEmpty); err != nil {
+		return err
+	}
+	if s.audit != nil {
+		return s.audit.Record(ctx, actor, constants.AuditRepositoryUnarchived, constants.AuditResourceRepository, repositoryID, map[string]any{"name": repository.Name})
+	}
+	return nil
+}
+
 func (s *RepositoryService) Remove(ctx context.Context, projectID, repositoryID foundation.ID, actor foundation.PrincipalRef) error {
 	repository, err := s.ValidateRemoval(ctx, projectID, repositoryID)
 	if err != nil {

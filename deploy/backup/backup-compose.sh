@@ -142,7 +142,7 @@ case "${action}" in
     stopped=0
     "${compose[@]}" run --rm --no-deps backup-inspect
     printf '%s\n' "The local backup contains credentials, signing material, and private image content."
-    printf 'Retain it off-host with authenticated encryption; see docs/backup-and-disaster-recovery.md.\n'
+    printf 'Retain it off-host with authenticated encryption; see docs/architecture.md.\n'
     ;;
   inspect)
     [ "$#" -eq 2 ] || fail "usage: backup-compose.sh inspect /absolute/path/to/backup"

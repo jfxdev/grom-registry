@@ -58,6 +58,58 @@ describe('ProjectsPage', () => {
     expect(wrapper.text()).not.toContain('Project already exists')
   })
 
+  it('auto-fills the slug from the name while the slug is untouched', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button').trigger('click')
+    const [nameInput, slugInput] = wrapper.get('form').findAll('input')
+    await nameInput!.setValue('My Payments App')
+
+    expect((slugInput!.element as HTMLInputElement).value).toBe('my-payments-app')
+  })
+
+  it('stops auto-filling the slug once the user edits it, keeping the manual value', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button').trigger('click')
+    const [nameInput, slugInput] = wrapper.get('form').findAll('input')
+    await nameInput!.setValue('Payments')
+    expect((slugInput!.element as HTMLInputElement).value).toBe('payments')
+
+    await slugInput!.setValue('billing')
+    await nameInput!.setValue('Payments API')
+
+    expect((slugInput!.element as HTMLInputElement).value).toBe('billing')
+  })
+
+  it('resumes auto-filling the slug after the user clears it', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button').trigger('click')
+    const [nameInput, slugInput] = wrapper.get('form').findAll('input')
+    await nameInput!.setValue('Payments')
+    await slugInput!.setValue('billing')
+    await slugInput!.setValue('')
+    await nameInput!.setValue('Web Store')
+
+    expect((slugInput!.element as HTMLInputElement).value).toBe('web-store')
+  })
+
+  it('sanitizes a manually edited slug on blur', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button').trigger('click')
+    const slugInput = wrapper.get('form').findAll('input')[1]!
+    await slugInput.setValue('My Custom Slug!')
+    await slugInput.trigger('blur')
+
+    expect((slugInput.element as HTMLInputElement).value).toBe('my-custom-slug')
+  })
+
   it('filters projects by name or slug from the main panel search', async () => {
     mocks.listProjects.mockResolvedValue([
       {

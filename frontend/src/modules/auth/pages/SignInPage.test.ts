@@ -36,6 +36,12 @@ describe('SignInPage', () => {
     expect(wrapper.get('button[aria-label="Hide password"]').attributes('aria-label')).toBe('Hide password')
   })
 
+  it('explains that new users require an invitation', () => {
+    const wrapper = mount(SignInPage)
+
+    expect(wrapper.text()).toContain('New users are invited by an administrator.')
+  })
+
   it('renders a sign-in error as an alert', async () => {
     mocks.signIn.mockRejectedValue(new Error('no session'))
     const wrapper = mount(SignInPage)

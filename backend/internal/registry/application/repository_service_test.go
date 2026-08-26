@@ -108,7 +108,7 @@ func TestEvaluateDeletionDeterminesReasonRequirementBeforeProtection(t *testing.
 	}
 }
 
-func TestArchiveThenRemoveEmptyRepository(t *testing.T) {
+func TestArchiveUnarchiveThenRemoveEmptyRepository(t *testing.T) {
 	projectID := foundation.ID("project")
 	repositoryID := foundation.ID("repository")
 	store := &repositoryLifecycleStore{repository: &registrydomain.Repository{
@@ -121,6 +121,15 @@ func TestArchiveThenRemoveEmptyRepository(t *testing.T) {
 	}
 	if store.repository.Status != constants.RepositoryStatusArchived {
 		t.Fatalf("status = %q", store.repository.Status)
+	}
+	if err := service.Unarchive(context.Background(), projectID, repositoryID, actor); err != nil {
+		t.Fatalf("unarchive: %v", err)
+	}
+	if store.repository.Status != constants.RepositoryStatusEmpty {
+		t.Fatalf("status after unarchive = %q", store.repository.Status)
+	}
+	if err := service.Archive(context.Background(), projectID, repositoryID, actor); err != nil {
+		t.Fatalf("archive again: %v", err)
 	}
 	if err := service.Remove(context.Background(), projectID, repositoryID, actor); err != nil {
 		t.Fatalf("remove: %v", err)

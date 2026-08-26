@@ -36,6 +36,10 @@ async function submit() {
 <template>
   <main class="signin-page">
     <section class="signin-surface">
+      <span class="signin-corner signin-corner--top-left" aria-hidden="true" />
+      <span class="signin-corner signin-corner--top-right" aria-hidden="true" />
+      <span class="signin-corner signin-corner--bottom-right" aria-hidden="true" />
+      <span class="signin-corner signin-corner--bottom-left" aria-hidden="true" />
       <GromBrand class="signin-brand" layout="stacked" :crest-size="82" />
       <CrystalDivider class="signin-divider" />
 
@@ -43,6 +47,7 @@ async function submit() {
         <div class="signin-heading">
           <h1>Sign in</h1>
           <p>Manage projects, repositories and access keys.</p>
+          <p class="signin-invitation">New users are invited by an administrator.</p>
         </div>
 
         <label class="field-label">
@@ -148,6 +153,43 @@ async function submit() {
   content: "";
 }
 
+.signin-corner {
+  position: absolute;
+  z-index: 2;
+  width: calc(var(--corner) * 1.414214);
+  height: 1px;
+  background: var(--border-brand);
+  pointer-events: none;
+}
+
+.signin-corner--top-left {
+  top: var(--corner);
+  left: 0;
+  transform-origin: left center;
+  transform: rotate(-45deg);
+}
+
+.signin-corner--top-right {
+  top: 0;
+  right: var(--corner);
+  transform-origin: right center;
+  transform: rotate(-135deg);
+}
+
+.signin-corner--bottom-right {
+  right: var(--corner);
+  bottom: 0;
+  transform-origin: right center;
+  transform: rotate(135deg);
+}
+
+.signin-corner--bottom-left {
+  bottom: var(--corner);
+  left: 0;
+  transform-origin: left center;
+  transform: rotate(45deg);
+}
+
 .signin-brand {
   position: relative;
   z-index: 1;
@@ -180,6 +222,12 @@ async function submit() {
   color: var(--muted-foreground);
   font-size: 0.86rem;
   line-height: 1.5;
+}
+
+.signin-heading .signin-invitation {
+  margin-top: 0.35rem;
+  color: color-mix(in srgb, var(--accent) 75%, var(--muted-foreground));
+  font-size: 0.76rem;
 }
 
 .password-field {
@@ -245,6 +293,10 @@ async function submit() {
   }
 
   .signin-surface::before {
+    display: none;
+  }
+
+  .signin-corner {
     display: none;
   }
 

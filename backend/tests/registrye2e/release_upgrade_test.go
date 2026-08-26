@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultUpgradeBaseImage = "ghcr.io/jfxdev/grom-registry:0.0.1"
+	defaultUpgradeBaseImage = "ghcr.io/jfxdev/grom-registry:1.0.0"
 	defaultUpgradePlatform  = "linux/amd64"
 )
 

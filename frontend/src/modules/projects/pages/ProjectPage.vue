@@ -17,23 +17,26 @@ import type {
   LifecycleRun,
   ManifestInventory,
   ManifestPlatform,
+  Membership,
   PrincipalKind,
   ProjectRole,
   Repository,
   RepositoryPolicySet,
 } from '@/shared/api/models'
 import { Badge } from '@/shared/components/ui/badge'
-import { Button, DeleteButton } from '@/shared/components/ui/button'
+import { ActionButton, Button, DeleteButton } from '@/shared/components/ui/button'
 import { Card } from '@/shared/components/ui/card'
 import { DangerZone } from '@/shared/components/ui/danger-zone'
 import { Dialog } from '@/shared/components/ui/dialog'
+import { Input } from '@/shared/components/ui/input'
+import { PrincipalTypeBadge } from '@/shared/components/ui/principal-type-badge'
 import { DockerPushBanner } from '@/shared/components/registry'
 import { PaginationControls } from '@/shared/components/ui/pagination'
 import { ROUTES } from '@/shared/constants'
 import { writeClipboardText } from '@/shared/lib/clipboard'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { AlertTriangle, Box, Check, ChevronLeft, Clipboard, Plus, RefreshCw, Settings2, Trash2, Users, X } from '@lucide/vue'
+import { AlertTriangle, Box, Check, ChevronLeft, Clipboard, Pencil, Plus, RefreshCw, Search, Settings2, Trash2, Users, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -50,7 +53,8 @@ import {
   projectKeys,
   previewArtifactDeletion,
 	removeRepository,
-  setMember,
+	setMember,
+	unarchiveRepository,
 } from '../api/projects'
 import RepositoryCreateModal from '../components/RepositoryCreateModal.vue'
 import RepositoryPolicyModal from '../components/RepositoryPolicyModal.vue'
@@ -70,7 +74,9 @@ const memberId = ref('')
 const memberKind = ref<PrincipalKind>('service_account')
 const memberRole = ref<ProjectRole>('reader')
 const memberError = ref('')
-const membershipToRemove = ref<{ kind: PrincipalKind; id: string } | null>(null)
+const memberToEdit = ref<Membership | null>(null)
+const editedMemberRole = ref<ProjectRole>('reader')
+const membershipToRemove = ref<Membership | null>(null)
 const copied = ref('')
 const copyError = ref('')
 const deletionPreview = ref<ArtifactDeletionPreview | null>(null)
@@ -88,9 +94,11 @@ const projectSettingsOpen = ref(false)
 const projectDeletionError = ref('')
 const selectedManifest = ref<ManifestInventory | null>(null)
 const repositoryOperationError = ref('')
+const archiveRepositoryOpen = ref(false)
 const removeRepositoryOpen = ref(false)
 const repositoryPagination = useCursorPagination()
 const memberPagination = useCursorPagination()
+const memberSearch = ref('')
 const tagPagination = useCursorPagination()
 const inventoryPagination = useCursorPagination()
 const deletionPagination = useCursorPagination()
@@ -110,7 +118,7 @@ function openProjectDeletion() {
 
 const project = useQuery({ queryKey: computed(() => projectKeys.detail(slug.value)), queryFn: () => getProject(slug.value) })
 const repositories = useQuery({ queryKey: computed(() => [...projectKeys.repositories(slug.value), repositoryPagination.cursor.value]), queryFn: () => listRepositories(slug.value, repositoryPagination.cursor.value) })
-const members = useQuery({ queryKey: computed(() => [...projectKeys.members(slug.value), memberPagination.cursor.value]), queryFn: () => listMembers(slug.value, memberPagination.cursor.value), enabled: computed(() => session.user?.systemViewer !== true) })
+const members = useQuery({ queryKey: computed(() => [...projectKeys.members(slug.value), memberSearch.value.trim(), memberPagination.cursor.value]), queryFn: () => listMembers(slug.value, memberPagination.cursor.value, memberSearch.value.trim()), enabled: computed(() => session.user?.systemViewer !== true) })
 const accounts = useQuery({ queryKey: serviceAccountKeys.list(), queryFn: () => listServiceAccounts(), enabled: computed(() => session.user?.systemViewer !== true) })
 const canManage = computed(() =>
   session.user?.systemViewer !== true && project.data.value?.canManage === true,
@@ -159,6 +167,13 @@ const currentInventoryItems = computed(() =>
 const historicalInventoryItems = computed(() =>
   pageItems(inventory.data.value).filter((manifest) => manifest.state === 'missing' || manifest.state === 'deleted'),
 )
+const memberGroups = computed(() => {
+  const items = pageItems(members.data.value)
+  return [
+    { kind: 'user' as const, label: 'Users', members: items.filter((member) => member.principalKind === 'user') },
+    { kind: 'service_account' as const, label: 'Service accounts', members: items.filter((member) => member.principalKind === 'service_account') },
+  ].filter((group) => group.members.length)
+})
 
 watch([repositoryId, () => repositories.data.value, () => routedRepository.data.value], ([id, page, routed]) => {
   if (!id) {
@@ -174,6 +189,8 @@ watch(repositoryId, () => {
   deletionPagination.reset()
   lifecyclePagination.reset()
 })
+
+watch(memberSearch, () => memberPagination.reset())
 
 async function openRepository(repository: Repository) {
   await router.push({ name: 'repository-detail', params: { project: slug.value, repositoryId: repository.id } })
@@ -205,8 +222,19 @@ const addMember = useMutation({
     memberError.value = caught instanceof APIError ? caught.message : 'Could not add this project member'
   },
 })
+const changeMemberRole = useMutation({
+  mutationFn: () => setMember(slug.value, memberToEdit.value!.principalKind, memberToEdit.value!.principalId, editedMemberRole.value),
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: projectKeys.members(slug.value) })
+    memberError.value = ''
+    memberToEdit.value = null
+  },
+  onError: (caught) => {
+    memberError.value = caught instanceof APIError ? caught.message : 'Could not change this member role'
+  },
+})
 const removeMember = useMutation({
-  mutationFn: () => deleteMember(slug.value, membershipToRemove.value!.kind, membershipToRemove.value!.id),
+  mutationFn: () => deleteMember(slug.value, membershipToRemove.value!.principalKind, membershipToRemove.value!.principalId),
   onSuccess: async () => {
     await queryClient.invalidateQueries({ queryKey: projectKeys.members(slug.value) })
     membershipToRemove.value = null
@@ -222,8 +250,18 @@ const archive = useMutation({
     await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
     selectedRepository.value = selectedRepository.value ? { ...selectedRepository.value, status: 'archived' } : null
     repositoryOperationError.value = ''
+		archiveRepositoryOpen.value = false
   },
   onError: (caught) => { repositoryOperationError.value = caught instanceof APIError ? caught.message : 'Could not archive this repository' },
+})
+const unarchive = useMutation({
+  mutationFn: () => unarchiveRepository(slug.value, selectedRepository.value!.id),
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: projectKeys.repositories(slug.value) })
+    selectedRepository.value = selectedRepository.value ? { ...selectedRepository.value, status: 'empty' } : null
+    repositoryOperationError.value = ''
+  },
+  onError: (caught) => { repositoryOperationError.value = caught instanceof APIError ? caught.message : 'Could not unarchive this repository' },
 })
 const removeLogicalRepository = useMutation({
   mutationFn: () => removeRepository(slug.value, selectedRepository.value!.id),
@@ -415,12 +453,10 @@ function accountedUsageLabel(usage: AccountedStorageUsage | undefined) {
   return formatAccountedBytes(usage.accountedBytes)
 }
 
-function editMember(kind: PrincipalKind, id: string, role: ProjectRole) {
-  memberKind.value = kind
-  memberId.value = id
-  memberRole.value = role
+function editMember(member: Membership) {
+  memberToEdit.value = member
+  editedMemberRole.value = member.role
   memberError.value = ''
-  memberModal.value = true
 }
 
 function openMemberModal() {
@@ -434,6 +470,12 @@ function openMemberModal() {
 
 function closeMemberModal() {
   memberModal.value = false
+  memberError.value = ''
+}
+
+function closeChangeMemberRoleModal() {
+  if (changeMemberRole.isPending.value) return
+  memberToEdit.value = null
   memberError.value = ''
 }
 
@@ -526,7 +568,7 @@ function profileLabel(profile: Repository['profile']) {
       labelled-by="project-settings-title"
       @close="projectSettingsOpen = false"
     >
-      <section class="modal form-stack" aria-labelledby="project-settings-title">
+      <section class="modal form-stack project-settings-modal" aria-labelledby="project-settings-title">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="eyebrow">Project</p>
@@ -538,7 +580,7 @@ function profileLabel(profile: Repository['profile']) {
           </Button>
         </div>
         <section class="settings-members">
-          <div class="flex items-center justify-between gap-3">
+          <div class="members-toolbar">
             <div class="flex items-center gap-2">
               <Users :size="16" class="text-muted-foreground" />
               <div>
@@ -546,21 +588,39 @@ function profileLabel(profile: Repository['profile']) {
                 <p class="mt-1 text-xs text-muted-foreground">Control who can access this project.</p>
               </div>
             </div>
-            <Button size="sm" @click="openMemberModal"><Plus :size="15" /> Add member</Button>
+            <div class="members-toolbar-actions">
+              <div class="member-search">
+                <Search :size="15" aria-hidden="true" />
+                <Input v-model="memberSearch" type="search" placeholder="Search members" aria-label="Search members" />
+              </div>
+              <Button size="sm" @click="openMemberModal"><Plus :size="15" /> Add member</Button>
+            </div>
           </div>
           <div v-if="!pageItems(members.data.value).length" class="mt-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            No members are assigned to this project.
+            {{ memberSearch.trim() ? 'No members match this search.' : 'No members are assigned to this project.' }}
           </div>
-          <div v-else class="table-shell mt-3">
-            <div v-for="member in pageItems(members.data.value)" :key="`${member.principalKind}:${member.principalId}`" class="data-row">
-              <div><p class="text-sm font-semibold">{{ member.principalKind.replace('_', ' ') }}</p><p class="mt-1 font-mono text-xs text-muted-foreground">{{ member.principalId }}</p></div>
-              <p class="text-xs text-muted-foreground">Assigned {{ new Date(member.createdAt).toLocaleDateString() }}</p>
-              <Badge>{{ member.role }}</Badge>
-              <div class="flex gap-1">
-                <Button variant="ghost" size="sm" @click="editMember(member.principalKind, member.principalId, member.role)">Change role</Button>
-                <Button variant="ghost" size="icon" :aria-label="`Remove ${member.principalKind.replace('_', ' ')} member`" @click="memberError = ''; membershipToRemove = { kind: member.principalKind, id: member.principalId }"><Trash2 :size="15" /></Button>
+          <div v-else class="member-tables mt-3">
+            <section v-for="group in memberGroups" :key="group.kind" class="member-table-group" :aria-labelledby="`member-group-${group.kind}`">
+              <div class="member-table-group-heading">
+                <h4 :id="`member-group-${group.kind}`">{{ group.label }}</h4>
+                <span>{{ group.members.length }} on this page</span>
               </div>
-            </div>
+              <div class="member-table">
+                <div class="member-table-head" aria-hidden="true">
+                  <span>Member</span><span>Type</span><span>Role</span><span>Assigned</span><span>Actions</span>
+                </div>
+                <div v-for="member in group.members" :key="`${member.principalKind}:${member.principalId}`" class="member-row">
+                  <div class="member-identity"><p class="text-sm font-semibold">{{ member.principalName }}</p><p class="mt-1 text-xs text-muted-foreground">{{ member.principalDetail }}</p></div>
+                  <PrincipalTypeBadge class="member-type" :kind="member.principalKind" :icon-only="true" />
+                  <Badge class="member-role">{{ member.role }}</Badge>
+                  <p class="member-assigned text-xs text-muted-foreground">{{ new Date(member.createdAt).toLocaleDateString() }}</p>
+                  <div class="member-actions flex gap-1">
+                    <ActionButton variant="cyan" size="icon" :aria-label="`Change role for ${member.principalName}`" @click="editMember(member)"><Pencil :size="15" /></ActionButton>
+                    <DeleteButton size="icon" :aria-label="`Remove ${member.principalKind === 'service_account' ? 'service account' : 'user'} member`" @click="memberError = ''; membershipToRemove = member" />
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
           <PaginationControls
             :page="memberPagination.page.value"
@@ -665,10 +725,13 @@ function profileLabel(profile: Repository['profile']) {
           >
             <RefreshCw :size="14" /> {{ reviewLifecycle.isPending.value ? 'Reviewing…' : 'Review lifecycle' }}
           </Button>
-          <Button v-if="canManage && selectedRepository.status !== 'archived'" variant="outline" size="sm" :disabled="archive.isPending.value" @click="archive.mutate()">
-            {{ archive.isPending.value ? 'Archiving…' : 'Archive' }}
+          <Button v-if="canManage && selectedRepository.status !== 'archived'" variant="outline" size="sm" :disabled="archive.isPending.value" @click="repositoryOperationError = ''; archiveRepositoryOpen = true">
+            Archive
           </Button>
-          <DeleteButton v-else-if="canManage" size="sm" @click="repositoryOperationError = ''; removeRepositoryOpen = true">Remove logical record</DeleteButton>
+          <Button v-if="canManage && selectedRepository.status === 'archived'" variant="outline" size="sm" :disabled="unarchive.isPending.value" @click="unarchive.mutate()">
+            {{ unarchive.isPending.value ? 'Unarchiving…' : 'Unarchive' }}
+          </Button>
+          <DeleteButton v-if="canManage && selectedRepository.status === 'archived'" size="sm" @click="repositoryOperationError = ''; removeRepositoryOpen = true">Remove logical record</DeleteButton>
           <Button variant="ghost" size="icon" aria-label="Back to project" @click="closeRepository"><X :size="18" /></Button>
         </div>
       </div>
@@ -803,6 +866,15 @@ function profileLabel(profile: Repository['profile']) {
       </div>
     </section>
 
+    <Dialog v-if="archiveRepositoryOpen && selectedRepository" labelled-by="archive-repository-title" @close="archiveRepositoryOpen = false">
+      <form class="modal form-stack" aria-labelledby="archive-repository-title" @submit.prevent="archive.mutate()">
+        <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Repository access</p><h2 id="archive-repository-title" class="text-lg font-semibold">Archive repository</h2></div><Button variant="ghost" size="icon" type="button" aria-label="Close repository archive confirmation" @click="archiveRepositoryOpen = false"><X :size="18" /></Button></div>
+        <div class="deletion-warning"><AlertTriangle :size="18" /><p>Archive <strong>{{ selectedRepository.name }}</strong>? New image pushes will be blocked. Pulls and existing OCI content will remain available until you unarchive it.</p></div>
+        <p v-if="repositoryOperationError" class="error-text" role="alert">{{ repositoryOperationError }}</p>
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="archiveRepositoryOpen = false">Cancel</Button><Button type="submit" :disabled="archive.isPending.value">{{ archive.isPending.value ? 'Archiving…' : 'Archive repository' }}</Button></div>
+      </form>
+    </Dialog>
+
     <Dialog v-if="removeRepositoryOpen && selectedRepository" labelled-by="remove-repository-title" @close="removeRepositoryOpen = false">
       <form class="modal form-stack" aria-labelledby="remove-repository-title" @submit.prevent="removeLogicalRepository.mutate()">
         <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Destructive action</p><h2 id="remove-repository-title" class="text-lg font-semibold">Remove logical repository</h2></div><Button variant="ghost" size="icon" type="button" aria-label="Close logical repository removal" @click="removeRepositoryOpen = false"><X :size="18" /></Button></div>
@@ -826,7 +898,11 @@ function profileLabel(profile: Repository['profile']) {
     <Dialog v-if="membershipToRemove" labelled-by="remove-member-title" @close="membershipToRemove = null">
       <form class="modal form-stack" aria-labelledby="remove-member-title" @submit.prevent="removeMember.mutate()">
         <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Access change</p><h2 id="remove-member-title" class="text-lg font-semibold">Remove member</h2></div><Button variant="ghost" size="icon" type="button" aria-label="Close member removal" @click="membershipToRemove = null"><X :size="18" /></Button></div>
-        <div class="deletion-warning"><AlertTriangle :size="18" /><p>This principal loses project access on its next registry token exchange.</p></div>
+        <div class="member-role-target">
+          <div><p class="text-sm font-semibold">{{ membershipToRemove.principalName }}</p><p class="mt-1 text-xs text-muted-foreground">{{ membershipToRemove.principalDetail }}</p></div>
+          <div class="flex items-center gap-2"><PrincipalTypeBadge :kind="membershipToRemove.principalKind" /><Badge>{{ membershipToRemove.role }}</Badge></div>
+        </div>
+        <div class="deletion-warning"><AlertTriangle :size="18" /><p>This member loses project access once their <strong>{{ membershipToRemove.role }}</strong> permission is removed. Access ends on the next registry token exchange.</p></div>
         <p v-if="memberError" class="error-text" role="alert">{{ memberError }}</p>
         <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="membershipToRemove = null">Cancel</Button><DeleteButton type="submit" :disabled="removeMember.isPending.value">{{ removeMember.isPending.value ? 'Removing…' : 'Remove member' }}</DeleteButton></div>
       </form>
@@ -920,9 +996,9 @@ function profileLabel(profile: Repository['profile']) {
         </div>
 
         <div class="lifecycle-summary">
-          <div><strong>{{ lifecyclePreview.eligibleCount }}</strong><span>eligible</span></div>
-          <div><strong>{{ lifecyclePreview.retainedCount }}</strong><span>retained</span></div>
-          <div><strong>{{ lifecyclePreview.blockedCount }}</strong><span>blocked</span></div>
+          <div><strong>{{ lifecyclePreview.eligibleCount }}</strong> <span>eligible</span></div>
+          <div><strong>{{ lifecyclePreview.retainedCount }}</strong> <span>retained</span></div>
+          <div><strong>{{ lifecyclePreview.blockedCount }}</strong> <span>blocked</span></div>
         </div>
 
         <div class="lifecycle-items">
@@ -983,6 +1059,25 @@ function profileLabel(profile: Repository['profile']) {
         <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="closeMemberModal">Cancel</Button><Button type="submit" :disabled="!canManage || !memberId || addMember.isPending.value">Add member</Button></div>
       </form>
     </Dialog>
+
+    <Dialog v-if="memberToEdit && canManage" labelled-by="change-member-role-title" @close="closeChangeMemberRoleModal">
+      <form class="modal form-stack" aria-labelledby="change-member-role-title" @submit.prevent="changeMemberRole.mutate()">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="change-member-role-title" class="text-lg font-semibold">Change role</h2>
+            <p class="mt-1 text-sm text-muted-foreground">Update access for the selected member only.</p>
+          </div>
+          <Button variant="ghost" size="icon" type="button" aria-label="Close change role" @click="closeChangeMemberRoleModal"><X :size="18" /></Button>
+        </div>
+        <div class="member-role-target">
+          <div><p class="text-sm font-semibold">{{ memberToEdit.principalName }}</p><p class="mt-1 text-xs text-muted-foreground">{{ memberToEdit.principalDetail }}</p></div>
+          <PrincipalTypeBadge :kind="memberToEdit.principalKind" />
+        </div>
+        <label class="field-label">Role<select v-model="editedMemberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">Writer · pull and push</option><option value="admin">Admin · manage project</option></select></label>
+        <p v-if="memberError" class="error-text" role="alert">{{ memberError }}</p>
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="closeChangeMemberRoleModal">Cancel</Button><Button type="submit" :disabled="changeMemberRole.isPending.value">{{ changeMemberRole.isPending.value ? 'Saving…' : 'Save role' }}</Button></div>
+      </form>
+    </Dialog>
   </div>
 </template>
 
@@ -990,6 +1085,185 @@ function profileLabel(profile: Repository['profile']) {
 .settings-members {
   border-top: 1px solid var(--border);
   padding-top: 1rem;
+}
+
+.project-settings-modal {
+  width: min(100%, 48rem);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.members-toolbar,
+.members-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.members-toolbar {
+  justify-content: space-between;
+}
+
+.member-search {
+  position: relative;
+  width: min(15rem, 34vw);
+}
+
+.member-search > svg {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 0.7rem;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.member-search :deep(.grom-input) {
+  padding-left: 2.15rem;
+}
+
+.member-table {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--surface);
+}
+
+.member-tables {
+  display: grid;
+  gap: 1rem;
+}
+
+.member-table-group {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.member-table-group-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.member-table-group-heading h4 {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.member-table-group-heading span {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+}
+
+.member-role-target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.018);
+  padding: 0.8rem;
+}
+
+.member-table-head,
+.member-row {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.25fr) minmax(7.75rem, 0.8fr) minmax(4.5rem, auto) minmax(6.5rem, 0.7fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.75rem 1rem;
+}
+
+.member-table-head {
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.member-row + .member-row {
+  border-top: 1px solid var(--border);
+}
+
+.member-role,
+.member-type {
+  justify-self: start;
+}
+
+.member-actions {
+  justify-self: end;
+}
+
+@media (max-width: 700px) {
+  .project-settings-modal {
+    width: 100%;
+    max-height: calc(100vh - 1.25rem);
+    padding: 1rem;
+  }
+
+  .members-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .members-toolbar-actions {
+    width: 100%;
+  }
+
+  .member-search {
+    width: auto;
+    flex: 1;
+  }
+
+  .member-table-head {
+    display: none;
+  }
+
+  .member-row {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    gap: 0.55rem;
+    padding: 0.7rem 0.85rem;
+  }
+
+  .member-identity {
+    min-width: 0;
+  }
+
+  .member-identity p:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .member-identity p:last-child {
+    display: none;
+  }
+
+  .member-type {
+    display: inline-flex;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .member-role {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .member-assigned {
+    display: none;
+  }
+
+  .member-actions {
+    grid-column: 4;
+    grid-row: 1;
+    justify-self: end;
+  }
 }
 
 .project-registry-url {
@@ -1000,7 +1274,6 @@ function profileLabel(profile: Repository['profile']) {
 }
 
 .repository-detail {
-  margin-top: 1.25rem;
   max-width: 980px;
 }
 

@@ -14,6 +14,15 @@ describe('ActionButton', () => {
     expect(wrapper.text()).toBe('Create project')
   })
 
+  it('supports the cyan action variant', () => {
+    const wrapper = mount(ActionButton, {
+      props: { variant: 'cyan' },
+      slots: { default: 'Change role' },
+    })
+
+    expect(wrapper.get('button').classes()).toContain('grom-button-variant-cyan')
+  })
+
   it('forwards state and click events', async () => {
     const onClick = vi.fn()
     const wrapper = mount(ActionButton, {

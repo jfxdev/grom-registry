@@ -206,7 +206,7 @@ func (s *Service) PromoteUserToSystemViewer(ctx context.Context, id foundation.I
 		return nil, err
 	}
 	if user.SystemAdmin {
-		return nil, errors.New("installation administrators cannot be promoted to viewer")
+		return nil, errors.New("administrators cannot be promoted to viewer")
 	}
 	if user.SystemViewer {
 		return user, nil

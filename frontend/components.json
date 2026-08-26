@@ -10,6 +10,8 @@
   "aliases": {
     "components": "@/shared/components",
     "utils": "@/shared/lib/cn",
-    "ui": "@/shared/components/ui"
+    "ui": "@/shared/components/ui",
+    "lib": "@/shared/lib",
+    "composables": "@/shared/composables"
   }
 }

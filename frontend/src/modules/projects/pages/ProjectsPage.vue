@@ -9,7 +9,7 @@ import { ROUTES } from '@/shared/constants'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ArrowUpRight, Box, Plus, Search, X } from '@lucide/vue'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { createProject, listProjects, projectKeys } from '../api/projects'
 
 const queryClient = useQueryClient()
@@ -17,6 +17,7 @@ const session = useSessionStore()
 const modalOpen = ref(false)
 const name = ref('')
 const slug = ref('')
+const slugEdited = ref(false)
 const error = ref('')
 const searchQuery = ref('')
 const pagination = useCursorPagination()
@@ -40,6 +41,7 @@ const create = useMutation({
     modalOpen.value = false
     name.value = ''
     slug.value = ''
+    slugEdited.value = false
     error.value = ''
   },
   onError: (caught) => {
@@ -47,12 +49,28 @@ const create = useMutation({
   },
 })
 
-function syncSlug() {
-  slug.value = name.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+function slugify(value: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+watch(name, (value) => {
+  if (!slugEdited.value) slug.value = slugify(value)
+})
+
+function onSlugInput(event: globalThis.Event) {
+  slugEdited.value = (event.target as globalThis.HTMLInputElement).value.trim() !== ''
+}
+
+function onSlugBlur() {
+  slug.value = slugify(slug.value)
+  slugEdited.value = slug.value !== ''
 }
 
 function openCreateModal() {
   error.value = ''
+  name.value = ''
+  slug.value = ''
+  slugEdited.value = false
   modalOpen.value = true
 }
 
@@ -171,8 +189,8 @@ function formatBytes(bytes: number | null | undefined) {
           </div>
           <Button variant="ghost" size="icon" aria-label="Close" @click="modalOpen = false"><X :size="18" /></Button>
         </div>
-        <label class="field-label">Name<Input v-model="name" required @blur="!slug && syncSlug()" /></label>
-        <label class="field-label">Slug<Input v-model="slug" required placeholder="payments" /></label>
+        <label class="field-label">Name<Input v-model="name" required /></label>
+        <label class="field-label">Slug<Input v-model="slug" required placeholder="payments" @input="onSlugInput" @blur="onSlugBlur" /></label>
         <p v-if="error" class="error-text">{{ error }}</p>
         <div class="flex justify-end gap-2">
           <CancelButton @click="modalOpen = false" />
@@ -254,7 +272,7 @@ function formatBytes(bytes: number | null | undefined) {
 
 .project-row {
   display: grid;
-  grid-template-columns: minmax(12rem, 1fr) 8rem 11rem auto;
+  grid-template-columns: minmax(12rem, 1fr) 8rem auto 11rem auto;
   align-items: center;
   gap: 1rem;
   min-height: 4.65rem;
@@ -370,7 +388,7 @@ function formatBytes(bytes: number | null | undefined) {
 
 @media (max-width: 900px) {
   .project-row {
-    grid-template-columns: minmax(10rem, 1fr) auto;
+    grid-template-columns: minmax(10rem, 1fr) auto auto;
   }
 
   .project-created {

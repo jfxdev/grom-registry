@@ -62,7 +62,7 @@ func (r *Repository) ListProjectsPageForPrincipal(ctx context.Context, principal
 	return result, nil
 }
 
-func (r *Repository) ListMembershipsPage(ctx context.Context, projectID foundation.ID, request foundation.PageRequest) (foundation.PageResult[projectdomain.Membership], error) {
+func (r *Repository) ListMembershipsPage(ctx context.Context, projectID foundation.ID, filter *projectdomain.MembershipPrincipalFilter, request foundation.PageRequest) (foundation.PageResult[projectdomain.Membership], error) {
 	marker := ""
 	if request.Cursor != "" {
 		cursor, err := foundation.DecodePageCursor(request.Cursor, request.Scope)
@@ -73,6 +73,18 @@ func (r *Repository) ListMembershipsPage(ctx context.Context, projectID foundati
 	}
 	models := make([]membershipModel, 0, request.Limit+1)
 	query := r.db.NewSelect().Model(&models).Where("project_id = ?", projectID.String())
+	if filter != nil {
+		if len(filter.Principals) == 0 {
+			return foundation.PageResult[projectdomain.Membership]{Items: []projectdomain.Membership{}}, nil
+		}
+		conditions := make([]string, 0, len(filter.Principals))
+		arguments := make([]any, 0, len(filter.Principals)*2)
+		for _, principal := range filter.Principals {
+			conditions = append(conditions, "(principal_kind = ? AND principal_id = ?)")
+			arguments = append(arguments, principal.Kind, principal.ID.String())
+		}
+		query = query.Where("("+strings.Join(conditions, " OR ")+")", arguments...)
+	}
 	if marker != "" {
 		parts := strings.SplitN(marker, "\x00", 2)
 		query = query.Where("(principal_kind > ? OR (principal_kind = ? AND principal_id > ?))", parts[0], parts[0], parts[1])

@@ -19,5 +19,11 @@ type Repository interface {
 
 type PagedRepository interface {
 	ListProjectsPageForPrincipal(ctx context.Context, principal foundation.PrincipalRef, systemAdmin bool, request foundation.PageRequest) (foundation.PageResult[Project], error)
-	ListMembershipsPage(ctx context.Context, projectID foundation.ID, request foundation.PageRequest) (foundation.PageResult[Membership], error)
+	ListMembershipsPage(ctx context.Context, projectID foundation.ID, filter *MembershipPrincipalFilter, request foundation.PageRequest) (foundation.PageResult[Membership], error)
+}
+
+// MembershipPrincipalFilter keeps identity lookup outside the Projects context
+// while allowing it to page only the membership records selected by a caller.
+type MembershipPrincipalFilter struct {
+	Principals []foundation.PrincipalRef
 }

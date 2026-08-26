@@ -8,6 +8,7 @@ import type {
 } from '@/shared/api/models'
 import { Button } from '@/shared/components/ui/button'
 import { Card } from '@/shared/components/ui/card'
+import { ComboboxSelect } from '@/shared/components/ui/combobox'
 import { Dialog } from '@/shared/components/ui/dialog'
 import { Plus, Trash2, X } from '@lucide/vue'
 import { ref } from 'vue'
@@ -199,9 +200,7 @@ async function save() {
       </div>
 
       <div class="add-policy">
-        <select v-model="newType" class="field-control">
-          <option v-for="type in policyTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
-        </select>
+        <ComboboxSelect v-model="newType" :options="policyTypes" placeholder="Select a policy type…" empty-text="No matching policy type." />
         <Button variant="outline" @click="addPolicy"><Plus :size="15" /> Add policy</Button>
       </div>
 

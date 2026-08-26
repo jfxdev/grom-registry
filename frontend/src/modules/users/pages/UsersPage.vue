@@ -329,7 +329,7 @@ async function copyRegistrationLink() {
 
     <div v-if="promoteTarget" class="modal-backdrop" @click.self="closePromote">
       <form class="modal form-stack" aria-labelledby="promote-user-title" @submit.prevent="promote.mutate(promoteTarget!.id)">
-        <div class="flex items-start justify-between"><div><h2 id="promote-user-title" class="text-lg font-semibold">Make {{ promoteTarget.username }} an administrator?</h2><p class="mt-1 text-sm text-muted-foreground">Installation administrators can manage users, service accounts, and projects.</p></div><Button variant="ghost" size="icon" aria-label="Close administrator promotion" @click="closePromote"><X :size="18" /></Button></div>
+        <div class="flex items-start justify-between"><div><h2 id="promote-user-title" class="text-lg font-semibold">Make {{ promoteTarget.username }} an administrator?</h2><p class="mt-1 text-sm text-muted-foreground">Administrators can manage users, service accounts, and projects.</p></div><Button variant="ghost" size="icon" aria-label="Close administrator promotion" @click="closePromote"><X :size="18" /></Button></div>
         <p v-if="promoteError" class="error-text" role="alert">{{ promoteError }}</p>
         <div class="flex justify-end gap-2"><Button variant="ghost" type="button" :disabled="promote.isPending.value" @click="closePromote">Cancel</Button><Button type="submit" :loading="promote.isPending.value">Make administrator</Button></div>
       </form>

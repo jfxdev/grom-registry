@@ -890,9 +890,15 @@ type ManifestPlatform struct {
 
 // Membership defines model for Membership.
 type Membership struct {
-	CreatedAt     time.Time          `json:"createdAt"`
-	PrincipalId   openapi_types.UUID `json:"principalId"`
-	PrincipalKind PrincipalKind      `json:"principalKind"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// PrincipalDetail Email address for a user or registry username for a service account.
+	PrincipalDetail string             `json:"principalDetail"`
+	PrincipalId     openapi_types.UUID `json:"principalId"`
+	PrincipalKind   PrincipalKind      `json:"principalKind"`
+
+	// PrincipalName Username for a user or display name for a service account.
+	PrincipalName string             `json:"principalName"`
 	ProjectId     openapi_types.UUID `json:"projectId"`
 	Role          ProjectRole        `json:"role"`
 }
@@ -1193,6 +1199,9 @@ type ListProjectMembersParams struct {
 	// Cursor Opaque cursor returned by the previous page
 	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Q Case-insensitive search across member names, usernames, and email addresses.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
 }
 
 // ListProjectRepositoriesParams defines parameters for ListProjectRepositories.
