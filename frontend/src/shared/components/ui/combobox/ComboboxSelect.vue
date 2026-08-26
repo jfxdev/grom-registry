@@ -59,7 +59,7 @@ function displayLabel(value: unknown) {
     <ComboboxList class="combobox-select-list" disable-portal>
       <ComboboxEmpty>{{ emptyText }}</ComboboxEmpty>
       <ComboboxGroup>
-        <ComboboxItem v-for="option in options" :key="String(option.value)" :value="option.value">
+        <ComboboxItem v-for="option in options" :key="`${typeof option.value}:${option.value}`" :value="option.value">
           {{ option.label }}
           <ComboboxItemIndicator>
             <Check :size="15" />

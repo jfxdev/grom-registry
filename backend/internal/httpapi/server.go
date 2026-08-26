@@ -1032,7 +1032,7 @@ func (s *Server) membershipPrincipalDetails(ctx context.Context, query string) (
 	for _, account := range accounts {
 		principal := foundation.PrincipalRef{Kind: constants.PrincipalServiceAccount, ID: account.ID}
 		details[membershipPrincipalKey(principal)] = membershipPrincipalDetails{name: account.Name, detail: account.Username}
-		if matchesMembershipQuery(query, account.Name, account.Username, account.Description) {
+		if matchesMembershipQuery(query, account.Name, account.Username) {
 			matched = append(matched, principal)
 		}
 	}

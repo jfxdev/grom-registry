@@ -13,6 +13,7 @@ const props = withDefaults(defineProps<ComboboxContentProps & {
   align: "center",
   sideOffset: 4,
   disablePortal: false,
+  class: undefined,
 })
 const emits = defineEmits<ComboboxContentEmits>()
 

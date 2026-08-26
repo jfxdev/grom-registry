@@ -57,12 +57,13 @@ watch(name, (value) => {
   if (!slugEdited.value) slug.value = slugify(value)
 })
 
-function onSlugInput(event: Event) {
-  slugEdited.value = (event.target as HTMLInputElement).value.trim() !== ''
+function onSlugInput(event: globalThis.Event) {
+  slugEdited.value = (event.target as globalThis.HTMLInputElement).value.trim() !== ''
 }
 
 function onSlugBlur() {
   slug.value = slugify(slug.value)
+  slugEdited.value = slug.value !== ''
 }
 
 function openCreateModal() {
