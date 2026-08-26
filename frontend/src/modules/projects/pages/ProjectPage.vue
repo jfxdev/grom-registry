@@ -996,9 +996,9 @@ function profileLabel(profile: Repository['profile']) {
         </div>
 
         <div class="lifecycle-summary">
-          <div><strong>{{ lifecyclePreview.eligibleCount }}</strong><span>eligible</span></div>
-          <div><strong>{{ lifecyclePreview.retainedCount }}</strong><span>retained</span></div>
-          <div><strong>{{ lifecyclePreview.blockedCount }}</strong><span>blocked</span></div>
+          <div><strong>{{ lifecyclePreview.eligibleCount }}</strong> <span>eligible</span></div>
+          <div><strong>{{ lifecyclePreview.retainedCount }}</strong> <span>retained</span></div>
+          <div><strong>{{ lifecyclePreview.blockedCount }}</strong> <span>blocked</span></div>
         </div>
 
         <div class="lifecycle-items">
