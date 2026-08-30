@@ -26,22 +26,25 @@ type Repository struct {
 }
 
 type Policy struct {
-	ID                   foundation.ID `json:"id"`
-	RepositoryID         foundation.ID `json:"-"`
-	Type                 string        `json:"type"`
-	Enabled              bool          `json:"enabled"`
-	TagPatterns          []string      `json:"tagPatterns,omitempty"`
-	PreventOverwrite     bool          `json:"preventOverwrite"`
-	PreventDeletion      bool          `json:"preventDeletion"`
-	ExcludeFromLifecycle bool          `json:"excludeFromLifecycle"`
-	ExpireAfterDays      *int          `json:"expireAfterDays,omitempty"`
-	KeepLast             *int          `json:"keepLast,omitempty"`
-	UntaggedGraceDays    *int          `json:"untaggedGraceDays,omitempty"`
-	AllowedPatterns      []string      `json:"allowedPatterns,omitempty"`
-	RequireReason        bool          `json:"requireReason"`
-	Version              int           `json:"version"`
-	CreatedAt            time.Time     `json:"createdAt"`
-	UpdatedAt            time.Time     `json:"updatedAt"`
+	ID                       foundation.ID `json:"id"`
+	RepositoryID             foundation.ID `json:"-"`
+	Type                     string        `json:"type"`
+	Enabled                  bool          `json:"enabled"`
+	TagPatterns              []string      `json:"tagPatterns,omitempty"`
+	PreventOverwrite         bool          `json:"preventOverwrite"`
+	PreventDeletion          bool          `json:"preventDeletion"`
+	ExcludeFromLifecycle     bool          `json:"excludeFromLifecycle"`
+	ExpireAfterDays          *int          `json:"expireAfterDays,omitempty"`
+	ExpireAfterDaysEnabled   *bool         `json:"expireAfterDaysEnabled,omitempty"`
+	KeepLast                 *int          `json:"keepLast,omitempty"`
+	KeepLastEnabled          *bool         `json:"keepLastEnabled,omitempty"`
+	UntaggedGraceDays        *int          `json:"untaggedGraceDays,omitempty"`
+	UntaggedGraceDaysEnabled *bool         `json:"untaggedGraceDaysEnabled,omitempty"`
+	AllowedPatterns          []string      `json:"allowedPatterns,omitempty"`
+	RequireReason            bool          `json:"requireReason"`
+	Version                  int           `json:"version"`
+	CreatedAt                time.Time     `json:"createdAt"`
+	UpdatedAt                time.Time     `json:"updatedAt"`
 }
 
 type PolicyPreset struct {

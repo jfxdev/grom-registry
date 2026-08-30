@@ -1220,36 +1220,54 @@ type RepositoryPage struct {
 
 // RepositoryPolicy defines model for RepositoryPolicy.
 type RepositoryPolicy struct {
-	AllowedPatterns      *[]string            `json:"allowedPatterns,omitempty"`
-	CreatedAt            time.Time            `json:"createdAt"`
-	Enabled              bool                 `json:"enabled"`
-	ExcludeFromLifecycle *bool                `json:"excludeFromLifecycle,omitempty"`
-	ExpireAfterDays      *int                 `json:"expireAfterDays,omitempty"`
-	Id                   openapi_types.UUID   `json:"id"`
-	KeepLast             *int                 `json:"keepLast,omitempty"`
-	PreventDeletion      *bool                `json:"preventDeletion,omitempty"`
-	PreventOverwrite     *bool                `json:"preventOverwrite,omitempty"`
-	RequireReason        *bool                `json:"requireReason,omitempty"`
-	TagPatterns          *[]string            `json:"tagPatterns,omitempty"`
-	Type                 RepositoryPolicyType `json:"type"`
-	UntaggedGraceDays    *int                 `json:"untaggedGraceDays,omitempty"`
-	UpdatedAt            time.Time            `json:"updatedAt"`
-	Version              int                  `json:"version"`
+	AllowedPatterns      *[]string `json:"allowedPatterns,omitempty"`
+	CreatedAt            time.Time `json:"createdAt"`
+	Enabled              bool      `json:"enabled"`
+	ExcludeFromLifecycle *bool     `json:"excludeFromLifecycle,omitempty"`
+	ExpireAfterDays      *int      `json:"expireAfterDays,omitempty"`
+
+	// ExpireAfterDaysEnabled Whether expiration by age is active. When omitted, existing policies infer it from expireAfterDays.
+	ExpireAfterDaysEnabled *bool              `json:"expireAfterDaysEnabled,omitempty"`
+	Id                     openapi_types.UUID `json:"id"`
+	KeepLast               *int               `json:"keepLast,omitempty"`
+
+	// KeepLastEnabled Whether retaining the newest artifacts is active. When omitted, existing policies infer it from keepLast.
+	KeepLastEnabled   *bool                `json:"keepLastEnabled,omitempty"`
+	PreventDeletion   *bool                `json:"preventDeletion,omitempty"`
+	PreventOverwrite  *bool                `json:"preventOverwrite,omitempty"`
+	RequireReason     *bool                `json:"requireReason,omitempty"`
+	TagPatterns       *[]string            `json:"tagPatterns,omitempty"`
+	Type              RepositoryPolicyType `json:"type"`
+	UntaggedGraceDays *int                 `json:"untaggedGraceDays,omitempty"`
+
+	// UntaggedGraceDaysEnabled Whether untagged artifact cleanup is active. When omitted, existing policies infer it from untaggedGraceDays.
+	UntaggedGraceDaysEnabled *bool     `json:"untaggedGraceDaysEnabled,omitempty"`
+	UpdatedAt                time.Time `json:"updatedAt"`
+	Version                  int       `json:"version"`
 }
 
 // RepositoryPolicyInput defines model for RepositoryPolicyInput.
 type RepositoryPolicyInput struct {
-	AllowedPatterns      *[]string            `json:"allowedPatterns,omitempty"`
-	Enabled              bool                 `json:"enabled"`
-	ExcludeFromLifecycle *bool                `json:"excludeFromLifecycle,omitempty"`
-	ExpireAfterDays      *int                 `json:"expireAfterDays,omitempty"`
-	KeepLast             *int                 `json:"keepLast,omitempty"`
-	PreventDeletion      *bool                `json:"preventDeletion,omitempty"`
-	PreventOverwrite     *bool                `json:"preventOverwrite,omitempty"`
-	RequireReason        *bool                `json:"requireReason,omitempty"`
-	TagPatterns          *[]string            `json:"tagPatterns,omitempty"`
-	Type                 RepositoryPolicyType `json:"type"`
-	UntaggedGraceDays    *int                 `json:"untaggedGraceDays,omitempty"`
+	AllowedPatterns      *[]string `json:"allowedPatterns,omitempty"`
+	Enabled              bool      `json:"enabled"`
+	ExcludeFromLifecycle *bool     `json:"excludeFromLifecycle,omitempty"`
+	ExpireAfterDays      *int      `json:"expireAfterDays,omitempty"`
+
+	// ExpireAfterDaysEnabled Whether expiration by age is active. When omitted, existing policies infer it from expireAfterDays.
+	ExpireAfterDaysEnabled *bool `json:"expireAfterDaysEnabled,omitempty"`
+	KeepLast               *int  `json:"keepLast,omitempty"`
+
+	// KeepLastEnabled Whether retaining the newest artifacts is active. When omitted, existing policies infer it from keepLast.
+	KeepLastEnabled   *bool                `json:"keepLastEnabled,omitempty"`
+	PreventDeletion   *bool                `json:"preventDeletion,omitempty"`
+	PreventOverwrite  *bool                `json:"preventOverwrite,omitempty"`
+	RequireReason     *bool                `json:"requireReason,omitempty"`
+	TagPatterns       *[]string            `json:"tagPatterns,omitempty"`
+	Type              RepositoryPolicyType `json:"type"`
+	UntaggedGraceDays *int                 `json:"untaggedGraceDays,omitempty"`
+
+	// UntaggedGraceDaysEnabled Whether untagged artifact cleanup is active. When omitted, existing policies infer it from untaggedGraceDays.
+	UntaggedGraceDaysEnabled *bool `json:"untaggedGraceDaysEnabled,omitempty"`
 }
 
 // RepositoryPolicySet defines model for RepositoryPolicySet.

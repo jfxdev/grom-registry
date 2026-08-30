@@ -112,6 +112,11 @@ Repository policies are replaced under policyVersion. They cover tag protection,
 immutability, retention, tag naming, and deletion reasons. Global presets are
 form recommendations only; they have no runtime effect.
 
+Each retention policy has independent expiry-by-age, newest-artifacts, and
+untagged-grace criteria. Operators enable only the criteria needed for that
+policy and may preserve a disabled criterion's value for a later re-enable;
+older policies infer enabled criteria from their configured limits.
+
 - Manual deletion creates a preview, reconciles, resolves a digest, and
   revalidates tags, policies, and OCI relationships before deletion.
 - Subjects with referrers and referrer artifacts are protected. An image index

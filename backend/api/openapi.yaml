@@ -2034,14 +2034,23 @@ components:
           type: integer
           minimum: 1
           maximum: 3650
+        expireAfterDaysEnabled:
+          type: boolean
+          description: Whether expiration by age is active. When omitted, existing policies infer it from expireAfterDays.
         keepLast:
           type: integer
           minimum: 1
           maximum: 10000
+        keepLastEnabled:
+          type: boolean
+          description: Whether retaining the newest artifacts is active. When omitted, existing policies infer it from keepLast.
         untaggedGraceDays:
           type: integer
           minimum: 1
           maximum: 3650
+        untaggedGraceDaysEnabled:
+          type: boolean
+          description: Whether untagged artifact cleanup is active. When omitted, existing policies infer it from untaggedGraceDays.
         allowedPatterns:
           type: array
           maxItems: 32

@@ -465,8 +465,16 @@ func validatePolicy(policy *registrydomain.Policy) error {
 			return fmt.Errorf("immutable tag patterns and overwrite protection are required")
 		}
 	case constants.RepositoryPolicyRetention:
-		if policy.ExpireAfterDays == nil && policy.KeepLast == nil && policy.UntaggedGraceDays == nil {
-			return fmt.Errorf("at least one retention limit is required")
+		expireEnabled := retentionCriterionEnabled(policy.ExpireAfterDaysEnabled, policy.ExpireAfterDays)
+		keepLastEnabled := retentionCriterionEnabled(policy.KeepLastEnabled, policy.KeepLast)
+		untaggedEnabled := retentionCriterionEnabled(policy.UntaggedGraceDaysEnabled, policy.UntaggedGraceDays)
+		if (expireEnabled && policy.ExpireAfterDays == nil) ||
+			(keepLastEnabled && policy.KeepLast == nil) ||
+			(untaggedEnabled && policy.UntaggedGraceDays == nil) {
+			return fmt.Errorf("each enabled retention criterion requires its limit")
+		}
+		if policy.Enabled && !expireEnabled && !keepLastEnabled && !untaggedEnabled {
+			return fmt.Errorf("at least one enabled retention criterion is required")
 		}
 	case constants.RepositoryPolicyTagNaming:
 		if len(policy.AllowedPatterns) == 0 {
@@ -491,6 +499,13 @@ func validatePolicy(policy *registrydomain.Policy) error {
 		return fmt.Errorf("policy numeric limits are outside the supported range")
 	}
 	return nil
+}
+
+func retentionCriterionEnabled(enabled *bool, limit *int) bool {
+	if enabled != nil {
+		return *enabled
+	}
+	return limit != nil
 }
 
 func within(value *int, minimum, maximum int) bool {

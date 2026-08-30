@@ -38,7 +38,9 @@ func PolicyPresets() []registrydomain.PolicyPreset {
 			Policy: registrydomain.Policy{
 				Type: constants.RepositoryPolicyRetention, Enabled: true,
 				TagPatterns:     []string{"pr-*", "branch-*", "snapshot-*"},
-				ExpireAfterDays: &fourteen, KeepLast: &five, UntaggedGraceDays: &two,
+				ExpireAfterDays: &fourteen, ExpireAfterDaysEnabled: boolPointer(true),
+				KeepLast: &five, KeepLastEnabled: boolPointer(true),
+				UntaggedGraceDays: &two, UntaggedGraceDaysEnabled: boolPointer(true),
 			},
 		},
 		{
@@ -59,4 +61,8 @@ func PolicyPresets() []registrydomain.PolicyPreset {
 			},
 		},
 	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }

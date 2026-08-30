@@ -111,10 +111,19 @@ function updateNumber(
 
 function updateBoolean(
   preset: PolicyPreset,
-  field: 'preventOverwrite' | 'preventDeletion' | 'excludeFromLifecycle' | 'requireReason',
+  field: 'preventOverwrite' | 'preventDeletion' | 'excludeFromLifecycle' | 'requireReason' |
+    'expireAfterDaysEnabled' | 'keepLastEnabled' | 'untaggedGraceDaysEnabled',
   event: unknown,
 ) {
   ensureConfiguration(preset)[field] = (event as { target: { checked: boolean } }).target.checked
+}
+
+function retentionCriterionEnabled(
+  policy: RepositoryPolicyInput,
+  field: 'expireAfterDaysEnabled' | 'keepLastEnabled' | 'untaggedGraceDaysEnabled',
+  limit: 'expireAfterDays' | 'keepLast' | 'untaggedGraceDays',
+) {
+  return policy[field] ?? policy[limit] !== undefined
 }
 
 function ensureConfiguration(preset: PolicyPreset): RepositoryPolicyInput {
@@ -134,8 +143,19 @@ function summary(preset: PolicyPreset) {
       return `Protect ${policy.tagPatterns?.join(', ') || 'selected tags'}`
     case 'immutability':
       return `${policy.tagPatterns?.join(', ') || 'Selected tags'} become immutable`
-    case 'retention':
-      return `Expire after ${policy.expireAfterDays ?? '—'} days · keep ${policy.keepLast ?? '—'}`
+    case 'retention': {
+      const criteria = []
+      if (retentionCriterionEnabled(policy, 'expireAfterDaysEnabled', 'expireAfterDays')) {
+        criteria.push(`Expire after ${policy.expireAfterDays ?? '—'} days`)
+      }
+      if (retentionCriterionEnabled(policy, 'keepLastEnabled', 'keepLast')) {
+        criteria.push(`Keep ${policy.keepLast ?? '—'} latest`)
+      }
+      if (retentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', 'untaggedGraceDays')) {
+        criteria.push(`Clean untagged after ${policy.untaggedGraceDays ?? '—'} days`)
+      }
+      return criteria.join(' · ') || 'No retention criteria enabled'
+    }
     case 'tag_naming':
       return `Accept ${policy.allowedPatterns?.join(', ') || 'configured patterns'}`
     case 'manual_deletion':
@@ -261,37 +281,58 @@ function summary(preset: PolicyPreset) {
                   />
                 </label>
 
-                <div v-if="configurationFor(preset).type === 'retention'" class="number-grid">
-                  <label class="field-label">
-                    Expire after days
-                    <Input
-                      type="number"
-                      :model-value="String(configurationFor(preset).expireAfterDays ?? '')"
-                      min="1"
-                      max="3650"
-                      @update:model-value="updateNumber(preset, 'expireAfterDays', $event)"
-                    />
-                  </label>
-                  <label class="field-label">
-                    Keep latest
-                    <Input
-                      type="number"
-                      :model-value="String(configurationFor(preset).keepLast ?? '')"
-                      min="1"
-                      max="10000"
-                      @update:model-value="updateNumber(preset, 'keepLast', $event)"
-                    />
-                  </label>
-                  <label class="field-label">
-                    Untagged grace
-                    <Input
-                      type="number"
-                      :model-value="String(configurationFor(preset).untaggedGraceDays ?? '')"
-                      min="1"
-                      max="3650"
-                      @update:model-value="updateNumber(preset, 'untaggedGraceDays', $event)"
-                    />
-                  </label>
+                <div v-if="configurationFor(preset).type === 'retention'" class="retention-criteria">
+                  <article class="retention-criterion-card" :class="{ disabled: !retentionCriterionEnabled(configurationFor(preset), 'expireAfterDaysEnabled', 'expireAfterDays') }">
+                    <div class="retention-criterion">
+                      <strong>Expire after days</strong>
+                      <small>Remove matching images after this age.</small>
+                      <div class="retention-control">
+                        <Input
+                          type="number"
+                          :disabled="!retentionCriterionEnabled(configurationFor(preset), 'expireAfterDaysEnabled', 'expireAfterDays')"
+                          :model-value="String(configurationFor(preset).expireAfterDays ?? '')"
+                          min="1"
+                          max="3650"
+                          @update:model-value="updateNumber(preset, 'expireAfterDays', $event)"
+                        />
+                        <input class="retention-toggle" :checked="retentionCriterionEnabled(configurationFor(preset), 'expireAfterDaysEnabled', 'expireAfterDays')" type="checkbox" aria-label="Enable expire after days" @change="updateBoolean(preset, 'expireAfterDaysEnabled', $event)" />
+                      </div>
+                    </div>
+                  </article>
+                  <article class="retention-criterion-card" :class="{ disabled: !retentionCriterionEnabled(configurationFor(preset), 'keepLastEnabled', 'keepLast') }">
+                    <div class="retention-criterion">
+                      <strong>Keep latest</strong>
+                      <small>Always retain this many of the newest images.</small>
+                      <div class="retention-control">
+                        <Input
+                          type="number"
+                          :disabled="!retentionCriterionEnabled(configurationFor(preset), 'keepLastEnabled', 'keepLast')"
+                          :model-value="String(configurationFor(preset).keepLast ?? '')"
+                          min="1"
+                          max="10000"
+                          @update:model-value="updateNumber(preset, 'keepLast', $event)"
+                        />
+                        <input class="retention-toggle" :checked="retentionCriterionEnabled(configurationFor(preset), 'keepLastEnabled', 'keepLast')" type="checkbox" aria-label="Enable keep last" @change="updateBoolean(preset, 'keepLastEnabled', $event)" />
+                      </div>
+                    </div>
+                  </article>
+                  <article class="retention-criterion-card" :class="{ disabled: !retentionCriterionEnabled(configurationFor(preset), 'untaggedGraceDaysEnabled', 'untaggedGraceDays') }">
+                    <div class="retention-criterion">
+                      <strong>Untagged grace</strong>
+                      <small>Clean untagged images after this grace period.</small>
+                      <div class="retention-control">
+                        <Input
+                          type="number"
+                          :disabled="!retentionCriterionEnabled(configurationFor(preset), 'untaggedGraceDaysEnabled', 'untaggedGraceDays')"
+                          :model-value="String(configurationFor(preset).untaggedGraceDays ?? '')"
+                          min="1"
+                          max="3650"
+                          @update:model-value="updateNumber(preset, 'untaggedGraceDays', $event)"
+                        />
+                        <input class="retention-toggle" :checked="retentionCriterionEnabled(configurationFor(preset), 'untaggedGraceDaysEnabled', 'untaggedGraceDays')" type="checkbox" aria-label="Enable untagged grace days" @change="updateBoolean(preset, 'untaggedGraceDaysEnabled', $event)" />
+                      </div>
+                    </div>
+                  </article>
                 </div>
 
                 <div class="toggle-grid">
@@ -449,6 +490,44 @@ function summary(preset: PolicyPreset) {
 
 .number-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.retention-criteria {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .8rem;
+}
+
+.retention-criterion {
+  display: grid;
+  gap: .45rem;
+}
+
+.retention-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .65rem;
+}
+
+.retention-toggle {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+.retention-criterion-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: .7rem;
+  background: rgba(0, 0, 0, .1);
+  padding: .75rem;
+  transition: opacity var(--motion-standard) ease, border-color var(--motion-standard) ease;
+}
+
+.retention-criterion-card.disabled {
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  opacity: .55;
 }
 
 .policy-list {
@@ -653,6 +732,7 @@ function summary(preset: PolicyPreset) {
 
   .details-grid,
   .number-grid,
+  .retention-criteria,
   .policy-content {
     grid-template-columns: 1fr;
   }

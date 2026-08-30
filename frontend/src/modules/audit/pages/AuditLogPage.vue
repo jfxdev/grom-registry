@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import type { AuditAction, AuditEvent, AuditResourceKind } from '@/shared/api/models'
-import { Button } from '@/shared/components/ui/button'
+import { Button, DeleteButton } from '@/shared/components/ui/button'
+import { ButtonGroup } from '@/shared/components/ui/button-group'
+import { Calendar } from '@/shared/components/ui/calendar'
 import { Dialog } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { PaginationControls } from '@/shared/components/ui/pagination'
+import { Popover } from '@/shared/components/ui/popover'
 import { PrincipalTypeBadge } from '@/shared/components/ui/principal-type-badge'
+import { Select } from '@/shared/components/ui/select'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
+import type { DateValue } from '@internationalized/date'
+import { getLocalTimeZone, today } from '@internationalized/date'
 import { useQuery } from '@tanstack/vue-query'
-import { ScrollText, Search, X } from '@lucide/vue'
+import { CalendarDays, ScrollText, Search, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { AUDIT_ACTIONS, AUDIT_RESOURCE_KINDS, auditEventKeys, listAuditEvents, type AuditFilters } from '../api/auditEvents'
 
@@ -15,20 +21,33 @@ const pagination = useCursorPagination()
 const actionFilter = ref<AuditAction | ''>('')
 const resourceFilter = ref<AuditResourceKind | ''>('')
 const actorQuery = ref('')
-const fromDate = ref('')
-const toDate = ref('')
+const fromDate = ref<DateValue>()
+const toDate = ref<DateValue>()
+const calendarPlaceholder = today(getLocalTimeZone())
+const auditActionOptions: { value: AuditAction | ''; label: string }[] = [
+  { value: '', label: 'All actions' },
+  ...AUDIT_ACTIONS.map((action) => ({ value: action, label: action })),
+]
+const auditResourceOptions: { value: AuditResourceKind | ''; label: string }[] = [
+  { value: '', label: 'All resources' },
+  ...AUDIT_RESOURCE_KINDS.map((resource) => ({ value: resource, label: resource })),
+]
+
+function formatDate(date: DateValue): string {
+  return date.toDate(getLocalTimeZone()).toLocaleDateString()
+}
 
 // The API expects RFC3339 bounds: `from` is inclusive, `to` is exclusive, so an
 // end date is advanced to the start of the following day to include it fully.
-function startOfDay(date: string): string | undefined {
+// Bounds are computed in UTC regardless of the viewer's local time zone so the
+// selected calendar day maps to a stable day boundary.
+function startOfDay(date: DateValue | undefined): string | undefined {
   if (!date) return undefined
-  return new Date(`${date}T00:00:00.000Z`).toISOString()
+  return new Date(Date.UTC(date.year, date.month - 1, date.day)).toISOString()
 }
-function endOfDayExclusive(date: string): string | undefined {
+function endOfDayExclusive(date: DateValue | undefined): string | undefined {
   if (!date) return undefined
-  const next = new Date(`${date}T00:00:00.000Z`)
-  next.setUTCDate(next.getUTCDate() + 1)
-  return next.toISOString()
+  return new Date(Date.UTC(date.year, date.month - 1, date.day + 1)).toISOString()
 }
 
 const filters = computed<AuditFilters>(() => ({
@@ -92,20 +111,53 @@ function metadataDetail(event: AuditEvent): string {
           <p>Filter by action, resource, actor, or time range.</p>
         </div>
         <div class="audit-filters">
-          <select v-model="actionFilter" class="field-control" aria-label="Filter by action">
-            <option value="">All actions</option>
-            <option v-for="action in AUDIT_ACTIONS" :key="action" :value="action">{{ action }}</option>
-          </select>
-          <select v-model="resourceFilter" class="field-control" aria-label="Filter by resource type">
-            <option value="">All resources</option>
-            <option v-for="resource in AUDIT_RESOURCE_KINDS" :key="resource" :value="resource">{{ resource }}</option>
-          </select>
           <div class="list-search">
             <Search :size="16" aria-hidden="true" />
             <Input v-model="actorQuery" type="search" placeholder="Search actor" aria-label="Search by actor" />
           </div>
-          <label class="audit-date">From<input v-model="fromDate" type="date" class="field-control" aria-label="From date" /></label>
-          <label class="audit-date">To<input v-model="toDate" type="date" class="field-control" aria-label="To date" /></label>
+          <Select v-model="resourceFilter" :options="auditResourceOptions" ariaLabel="Filter by resource type" />
+          <Select v-model="actionFilter" :options="auditActionOptions" ariaLabel="Filter by action" />
+          <div class="audit-date-field">
+            <ButtonGroup aria-label="From date filter">
+              <Popover aria-label="Choose a from date">
+                <template #trigger="{ open }">
+                  <Button type="button" size="sm" variant="outline" aria-label="Choose from date" :aria-expanded="open">
+                    <CalendarDays :size="14" aria-hidden="true" />
+                    <span>{{ fromDate ? formatDate(fromDate) : 'From date' }}</span>
+                  </Button>
+                </template>
+                <template #default="{ close }">
+                  <Calendar
+                    :model-value="fromDate"
+                    :default-placeholder="fromDate ?? calendarPlaceholder"
+                    @update:model-value="(value) => { fromDate = value; close() }"
+                  />
+                </template>
+              </Popover>
+              <DeleteButton v-if="fromDate" type="button" size="icon" aria-label="Clear from date" @click="fromDate = undefined" />
+            </ButtonGroup>
+          </div>
+          <div class="audit-date-field">
+            <ButtonGroup aria-label="To date filter">
+              <Popover aria-label="Choose a to date">
+                <template #trigger="{ open }">
+                  <Button type="button" size="sm" variant="outline" aria-label="Choose to date" :aria-expanded="open">
+                    <CalendarDays :size="14" aria-hidden="true" />
+                    <span>{{ toDate ? formatDate(toDate) : 'To date' }}</span>
+                  </Button>
+                </template>
+                <template #default="{ close }">
+                  <Calendar
+                    :model-value="toDate"
+                    :default-placeholder="toDate ?? fromDate ?? calendarPlaceholder"
+                    :min-value="fromDate"
+                    @update:model-value="(value) => { toDate = value; close() }"
+                  />
+                </template>
+              </Popover>
+              <DeleteButton v-if="toDate" type="button" size="icon" aria-label="Clear to date" @click="toDate = undefined" />
+            </ButtonGroup>
+          </div>
         </div>
       </div>
 
@@ -245,16 +297,9 @@ function metadataDetail(event: AuditEvent): string {
   gap: 0.65rem;
 }
 
-.audit-filters .field-control {
-  min-height: 2.35rem;
-}
-
-.audit-date {
+.audit-date-field {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  color: var(--muted-foreground);
-  font-size: 0.68rem;
+  align-items: center;
 }
 
 .list-search {

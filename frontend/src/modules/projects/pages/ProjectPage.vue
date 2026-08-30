@@ -23,7 +23,9 @@ import type {
   Repository,
   RepositoryPolicySet,
 } from '@/shared/api/models'
+import { Accordion } from '@/shared/components/ui/accordion'
 import { Badge } from '@/shared/components/ui/badge'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/shared/components/ui/breadcrumb'
 import { ActionButton, Button, DeleteButton } from '@/shared/components/ui/button'
 import { Card } from '@/shared/components/ui/card'
 import { DangerZone } from '@/shared/components/ui/danger-zone'
@@ -36,7 +38,7 @@ import { ROUTES } from '@/shared/constants'
 import { writeClipboardText } from '@/shared/lib/clipboard'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { AlertTriangle, Box, Check, ChevronLeft, Clipboard, Pencil, Plus, RefreshCw, Search, Settings2, Trash2, Users, X } from '@lucide/vue'
+import { AlertTriangle, Archive, ArchiveRestore, Box, Check, Clipboard, HardDrive, Pencil, Plus, RefreshCw, Search, Settings2, ShieldCheck, Tags, Terminal, Trash2, Users, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -69,6 +71,7 @@ const registryHost = window.location.host
 const selectedRepository = ref<Repository | null>(null)
 const repositoryModal = ref(false)
 const policyModal = ref(false)
+const pushInstructionsOpen = ref(false)
 const memberModal = ref(false)
 const memberId = ref('')
 const memberKind = ref<PrincipalKind>('service_account')
@@ -194,10 +197,6 @@ watch(memberSearch, () => memberPagination.reset())
 
 async function openRepository(repository: Repository) {
   await router.push({ name: 'repository-detail', params: { project: slug.value, repositoryId: repository.id } })
-}
-
-async function closeRepository() {
-  await router.push({ name: 'project-detail', params: { project: slug.value } })
 }
 
 const removeProject = useMutation({
@@ -491,13 +490,66 @@ function changeMemberKind() {
 function profileLabel(profile: Repository['profile']) {
   return profile.replaceAll('_', ' ')
 }
+
+const policyTypeLabels: Record<string, string> = {
+  retention: 'Retention',
+  tag_protection: 'Tag protection',
+  immutability: 'Immutability',
+  tag_naming: 'Tag naming',
+  manual_deletion: 'Manual deletion',
+}
+
+function policyTypeLabel(type: string) {
+  return policyTypeLabels[type] ?? type
+}
+
+function retentionCriterionActive(enabled: boolean | undefined, limit: number | undefined) {
+  return (enabled ?? limit !== undefined) && limit !== undefined
+}
+
+function tagScopeSuffix(patterns: string[] | undefined) {
+  return patterns?.length ? ` matching ${patterns.join(', ')}` : ''
+}
+
+function policySummary(policy: Repository['policies'][number]) {
+  const scope = tagScopeSuffix(policy.tagPatterns)
+  if (policy.type === 'retention') {
+    const sentences: string[] = []
+    if (retentionCriterionActive(policy.expireAfterDaysEnabled, policy.expireAfterDays)) sentences.push(`Removes tags${scope} older than ${policy.expireAfterDays} days`)
+    if (retentionCriterionActive(policy.keepLastEnabled, policy.keepLast)) sentences.push(`Always keeps the last ${policy.keepLast} tags${scope}`)
+    if (retentionCriterionActive(policy.untaggedGraceDaysEnabled, policy.untaggedGraceDays)) sentences.push(`Cleans untagged images after ${policy.untaggedGraceDays} days`)
+    return sentences.length ? `${sentences.join('. ')}.` : 'No active criteria.'
+  }
+  if (policy.type === 'tag_protection') {
+    const actions: string[] = []
+    if (policy.preventDeletion) actions.push('deletion')
+    if (policy.preventOverwrite) actions.push('overwrite')
+    if (policy.excludeFromLifecycle) actions.push('automatic lifecycle cleanup')
+    return actions.length ? `Protects tags${scope} from ${actions.join(', ')}.` : `No active rules for tags${scope}.`
+  }
+  if (policy.type === 'immutability') {
+    return policy.preventOverwrite ? `Blocks tag overwrite for tags${scope}.` : `No active rules for tags${scope}.`
+  }
+  if (policy.type === 'tag_naming') {
+    return policy.allowedPatterns?.length ? `Only allows tags matching ${policy.allowedPatterns.join(', ')}.` : 'No naming restriction.'
+  }
+  return policy.requireReason ? 'Requires a reason before manual deletion.' : 'No reason required for manual deletion.'
+}
 </script>
 
 <template>
   <div class="page-shell">
-    <RouterLink v-if="!repositoryId" :to="ROUTES.projects" class="mb-5 inline-flex items-center gap-1 text-xs text-muted-foreground no-underline hover:text-foreground">
-      <ChevronLeft :size="15" /> Projects
-    </RouterLink>
+    <Breadcrumb v-if="!repositoryId" class="mb-5">
+      <BreadcrumbList>
+        <BreadcrumbItem>
+          <BreadcrumbLink as="router-link" :to="ROUTES.projects">Projects</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbPage>{{ project.data.value?.name ?? slug }}</BreadcrumbPage>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
     <header v-if="!repositoryId" class="page-header">
       <div>
         <p class="eyebrow">Project namespace</p>
@@ -511,6 +563,7 @@ function profileLabel(profile: Repository['profile']) {
       </div>
       <div class="flex items-center gap-2">
         <Badge tone="success">Active</Badge>
+        <Button variant="outline" size="sm" @click="pushInstructionsOpen = true"><Terminal :size="14" /> Instructions</Button>
         <Button v-if="canManage" size="sm" @click="repositoryModal = true"><Plus :size="15" /> New repository</Button>
         <Button
           v-if="canManage"
@@ -523,8 +576,6 @@ function profileLabel(profile: Repository['profile']) {
         </Button>
       </div>
     </header>
-
-    <DockerPushBanner v-if="!repositoryId" :registry-host="registryHost" :project="slug" />
 
     <section v-if="!repositoryId">
       <div v-if="!pageItems(repositories.data.value).length" class="empty-state mt-5">
@@ -681,41 +732,33 @@ function profileLabel(profile: Repository['profile']) {
     </Dialog>
 
     <section v-if="repositoryId && selectedRepository" class="repository-detail form-stack" aria-labelledby="repository-details-title">
-      <RouterLink :to="{ name: 'project-detail', params: { project: slug } }" class="inline-flex items-center gap-1 text-xs text-muted-foreground no-underline hover:text-foreground">
-        <ChevronLeft :size="15" /> {{ project.data.value?.name ?? slug }}
-      </RouterLink>
-      <div class="flex items-start justify-between">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink as="router-link" :to="ROUTES.projects">Projects</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink as="router-link" :to="{ name: 'project-detail', params: { project: slug } }">{{ project.data.value?.name ?? slug }}</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{{ selectedRepository.name }}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+      <header class="page-header">
         <div>
           <p class="eyebrow">Repository</p>
-          <h2 id="repository-details-title" class="text-xl font-semibold">{{ selectedRepository.name }}</h2>
-          <div class="mt-2 flex items-center gap-2">
-            <Badge :tone="selectedRepository.profileNeedsReview ? 'danger' : selectedRepository.profile === 'unknown' ? 'neutral' : 'success'">
-              {{ profileLabel(selectedRepository.profile) }}
-            </Badge>
-            <span class="text-xs text-muted-foreground">
-              {{ selectedRepository.profileSource === 'inferred'
-                ? `${selectedRepository.profileConfidence} confidence · inferred from uploaded content`
-                : 'Waiting for the first identifiable upload' }}
-            </span>
-          </div>
-          <p v-if="selectedRepository.profileNeedsReview" class="mt-2 text-xs text-destructive">
-            Different primary artifact types were detected in this repository.
+          <h1 id="repository-details-title" class="page-title">{{ selectedRepository.name }}</h1>
+          <p class="page-description">
+            {{ selectedRepository.profileSource === 'inferred'
+              ? `${selectedRepository.profileConfidence} confidence · inferred from uploaded content`
+              : 'Waiting for the first identifiable upload' }}
           </p>
-          <p class="mt-3 text-sm text-muted-foreground">
-            Accounted registry usage: <strong class="text-foreground">{{ accountedUsageLabel(selectedRepository.accountedUsage) }}</strong>
-            <span v-if="selectedRepository.accountedUsage?.status === 'stale'"> — last successful accounting is stale.</span>
-          </p>
-          <p v-if="selectedRepository.accountedUsage?.reconciledAt" class="mt-1 text-xs text-muted-foreground">Last reconciled {{ new Date(selectedRepository.accountedUsage.reconciledAt!).toLocaleString() }}. This is logical descriptor usage, not reclaimable physical storage.</p>
         </div>
         <div class="flex items-center gap-2">
-          <Button
-            v-if="canManage"
-            variant="outline"
-            size="sm"
-            @click="policyModal = true"
-          >
-            <Settings2 :size="14" /> Policies
-          </Button>
+          <Button variant="outline" size="sm" @click="pushInstructionsOpen = true"><Terminal :size="14" /> Instructions</Button>
           <Button
             v-if="canManage"
             variant="outline"
@@ -726,75 +769,131 @@ function profileLabel(profile: Repository['profile']) {
             <RefreshCw :size="14" /> {{ reviewLifecycle.isPending.value ? 'Reviewing…' : 'Review lifecycle' }}
           </Button>
           <Button v-if="canManage && selectedRepository.status !== 'archived'" variant="outline" size="sm" :disabled="archive.isPending.value" @click="repositoryOperationError = ''; archiveRepositoryOpen = true">
-            Archive
+            <Archive :size="14" /> Archive
           </Button>
           <Button v-if="canManage && selectedRepository.status === 'archived'" variant="outline" size="sm" :disabled="unarchive.isPending.value" @click="unarchive.mutate()">
-            {{ unarchive.isPending.value ? 'Unarchiving…' : 'Unarchive' }}
+            <ArchiveRestore :size="14" /> {{ unarchive.isPending.value ? 'Unarchiving…' : 'Unarchive' }}
           </Button>
           <DeleteButton v-if="canManage && selectedRepository.status === 'archived'" size="sm" @click="repositoryOperationError = ''; removeRepositoryOpen = true">Remove logical record</DeleteButton>
-          <Button variant="ghost" size="icon" aria-label="Back to project" @click="closeRepository"><X :size="18" /></Button>
+        </div>
+      </header>
+
+      <div v-if="selectedRepository.profileNeedsReview" class="operation-warning" role="alert">
+        <AlertTriangle :size="18" />
+        <div>
+          <strong>Profile needs review</strong>
+          <p>Different primary artifact types were detected in this repository.</p>
         </div>
       </div>
-      <div v-if="!pageItems(tags.data.value).length" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No tags available.</div>
-      <div v-else class="space-y-3">
-        <Card v-for="tag in pageItems(tags.data.value)" :key="tag" class="overflow-hidden">
-          <div class="flex items-start justify-between gap-3 border-b px-4 py-3">
-            <div>
-              <p class="eyebrow">Tag</p>
-              <code class="mt-1 block text-base font-semibold text-accent">{{ tag }}</code>
-            </div>
-            <div class="flex shrink-0 gap-1">
-              <Button variant="ghost" size="sm" @click="copyCommand(pullCommand(selectedRepository!.name, tag), `pull:${tag}`)">
-                <Check v-if="copied === `pull:${tag}`" :size="14" /><Clipboard v-else :size="14" /> Copy pull
-              </Button>
-              <Button
-                v-if="canManage"
-                variant="ghost"
-                size="icon"
-                :aria-label="`Delete ${tag}`"
-                :disabled="previewDeletion.isPending.value"
-                @click="requestArtifactDeletionPreview($event, tag)"
-              >
-                <Trash2 :size="15" />
-              </Button>
-            </div>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="w-full min-w-[580px] text-sm">
-              <thead class="border-b text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th class="px-4 py-3">Digest</th>
-                  <th class="px-4 py-3">OS/ARCH</th>
-                  <th class="px-4 py-3 text-right">Compressed size</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="platform in platformsForTag(tag)" :key="platform.digest" class="border-b last:border-0">
-                  <td class="px-4 py-3"><code class="text-xs text-accent">{{ platform.digest || manifestForTag(tag)?.digest || '—' }}</code></td>
-                  <td class="px-4 py-3 text-muted-foreground">{{ platform.os }}/{{ platform.architecture }}{{ platform.variant ? `/${platform.variant}` : '' }}</td>
-                  <td class="px-4 py-3 text-right tabular-nums">{{ formatCompressedSize(platform.compressedSize) }}</td>
-                </tr>
-                <tr v-if="!platformsForTag(tag).length">
-                  <td class="px-4 py-3"><code class="text-xs text-accent">{{ manifestForTag(tag)?.digest ?? '—' }}</code></td>
-                  <td class="px-4 py-3 text-muted-foreground">—</td>
-                  <td class="px-4 py-3 text-right tabular-nums">—</td>
-                </tr>
-              </tbody>
-            </table>
+
+      <section class="overview-grid" aria-label="Repository overview">
+        <Card class="overview-card">
+          <div class="overview-icon"><Box :size="18" /></div>
+          <div>
+            <p class="overview-label">Profile</p>
+            <p class="overview-value">{{ profileLabel(selectedRepository.profile) }}</p>
+            <p class="overview-detail">{{ selectedRepository.profileSource === 'inferred' ? `${selectedRepository.profileConfidence} confidence` : 'Not yet inferred' }}</p>
           </div>
         </Card>
-      </div>
-      <PaginationControls
-        :page="tagPagination.page.value"
-        :has-previous="tagPagination.hasPrevious.value"
-        :has-next="Boolean(tags.data.value?.nextCursor)"
-        :disabled="tags.isFetching.value"
-        @previous="tagPagination.previous()"
-        @next="tagPagination.next(tags.data.value?.nextCursor)"
-      />
-      <DockerPushBanner :registry-host="registryHost" :project="slug" :repository="selectedRepository.name" />
-      <div class="operation-history">
-        <h3 class="text-sm font-semibold">Manifest inventory</h3>
+        <Card class="overview-card">
+          <div class="overview-icon"><ShieldCheck :size="18" /></div>
+          <div>
+            <p class="overview-label">Status</p>
+            <p class="overview-value capitalize">{{ selectedRepository.status }}</p>
+            <p class="overview-detail">{{ selectedRepository.creationSource === 'push' ? 'Created by push' : 'Created manually' }}</p>
+          </div>
+        </Card>
+        <Card class="overview-card">
+          <div class="overview-icon"><HardDrive :size="18" /></div>
+          <div>
+            <p class="overview-label">Accounted usage</p>
+            <p class="overview-value">{{ accountedUsageLabel(selectedRepository.accountedUsage) }}</p>
+            <p class="overview-detail">
+              <template v-if="selectedRepository.accountedUsage?.reconciledAt">Last reconciled {{ new Date(selectedRepository.accountedUsage.reconciledAt!).toLocaleString() }}</template>
+              <template v-else>Logical descriptor usage, not reclaimable physical storage.</template>
+              <template v-if="selectedRepository.accountedUsage?.status === 'stale'"> · stale</template>
+            </p>
+          </div>
+        </Card>
+        <Card class="overview-card">
+          <div class="overview-icon"><Tags :size="18" /></div>
+          <div>
+            <p class="overview-label">Policies</p>
+            <p class="overview-value">{{ selectedRepository.policies.filter((policy) => policy.enabled).length }}/{{ selectedRepository.policies.length }} enabled</p>
+            <p class="overview-detail">Behavior policies applied to this repository.</p>
+          </div>
+        </Card>
+      </section>
+
+      <section class="repo-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Tags</h2>
+            <p>Pull commands and platform manifests for each published tag.</p>
+          </div>
+        </div>
+        <div class="repo-panel-body">
+          <div v-if="!pageItems(tags.data.value).length" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No tags available.</div>
+          <div v-else class="space-y-3">
+            <Card v-for="tag in pageItems(tags.data.value)" :key="tag" class="overflow-hidden">
+              <div class="flex items-start justify-between gap-3 border-b px-4 py-3">
+                <div>
+                  <p class="eyebrow">Tag</p>
+                  <code class="mt-1 block text-base font-semibold text-accent">{{ tag }}</code>
+                </div>
+                <div class="flex shrink-0 gap-1">
+                  <Button variant="ghost" size="sm" @click="copyCommand(pullCommand(selectedRepository!.name, tag), `pull:${tag}`)">
+                    <Check v-if="copied === `pull:${tag}`" :size="14" /><Clipboard v-else :size="14" /> Copy pull
+                  </Button>
+                  <Button
+                    v-if="canManage"
+                    variant="ghost"
+                    size="icon"
+                    :aria-label="`Delete ${tag}`"
+                    :disabled="previewDeletion.isPending.value"
+                    @click="requestArtifactDeletionPreview($event, tag)"
+                  >
+                    <Trash2 :size="15" />
+                  </Button>
+                </div>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[580px] text-sm">
+                  <thead class="border-b text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th class="px-4 py-3">Digest</th>
+                      <th class="px-4 py-3">OS/ARCH</th>
+                      <th class="px-4 py-3 text-right">Compressed size</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="platform in platformsForTag(tag)" :key="platform.digest" class="border-b last:border-0">
+                      <td class="px-4 py-3"><code class="text-xs text-accent">{{ platform.digest || manifestForTag(tag)?.digest || '—' }}</code></td>
+                      <td class="px-4 py-3 text-muted-foreground">{{ platform.os }}/{{ platform.architecture }}{{ platform.variant ? `/${platform.variant}` : '' }}</td>
+                      <td class="px-4 py-3 text-right tabular-nums">{{ formatCompressedSize(platform.compressedSize) }}</td>
+                    </tr>
+                    <tr v-if="!platformsForTag(tag).length">
+                      <td class="px-4 py-3"><code class="text-xs text-accent">{{ manifestForTag(tag)?.digest ?? '—' }}</code></td>
+                      <td class="px-4 py-3 text-muted-foreground">—</td>
+                      <td class="px-4 py-3 text-right tabular-nums">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+          <PaginationControls
+            :page="tagPagination.page.value"
+            :has-previous="tagPagination.hasPrevious.value"
+            :has-next="Boolean(tags.data.value?.nextCursor)"
+            :disabled="tags.isFetching.value"
+            @previous="tagPagination.previous()"
+            @next="tagPagination.next(tags.data.value?.nextCursor)"
+          />
+        </div>
+      </section>
+
+      <Accordion title="Manifest inventory" :description="`${pageItems(inventory.data.value).length} observed manifests`" default-open>
         <p v-if="inventory.isLoading.value" class="text-xs text-muted-foreground">Loading manifest inventory…</p>
         <p v-else-if="!pageItems(inventory.data.value).length" class="text-xs text-muted-foreground">No observed manifests yet.</p>
         <template v-if="currentInventoryItems.length">
@@ -819,44 +918,80 @@ function profileLabel(profile: Repository['profile']) {
           @previous="inventoryPagination.previous()"
           @next="inventoryPagination.next(inventory.data.value?.nextCursor)"
         />
-      </div>
+      </Accordion>
+
+      <section class="repo-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Policies</h2>
+            <p>Retention, protection, and naming rules applied to this repository.</p>
+          </div>
+          <Button v-if="canManage" variant="outline" size="sm" @click="policyModal = true">Manage</Button>
+        </div>
+        <div class="repo-panel-body">
+          <p v-if="!selectedRepository.policies.length" class="text-xs text-muted-foreground">No behavior policies configured.</p>
+          <ul v-else class="policy-summary-list">
+            <li
+              v-for="policy in selectedRepository.policies"
+              :key="policy.id"
+              class="policy-summary-item"
+              :class="{ 'policy-summary-item-enabled': policy.enabled }"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <strong class="text-sm">{{ policyTypeLabel(policy.type) }}</strong>
+                <Badge :tone="policy.enabled ? 'success' : 'neutral'">{{ policy.enabled ? 'Enabled' : 'Disabled' }}</Badge>
+              </div>
+              <p class="mt-1 text-xs text-muted-foreground">{{ policySummary(policy) }}</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
       <p v-if="copyError" class="error-text" role="alert">{{ copyError }}</p>
       <p v-if="repositoryOperationError" class="error-text" role="alert">{{ repositoryOperationError }}</p>
       <p v-if="deletionError && !deletionPreview" class="error-text">{{ deletionError }}</p>
       <p v-if="lifecycleError && !lifecyclePreview" class="error-text">{{ lifecycleError }}</p>
-      <div v-if="canManage && (pageItems(artifactDeletionHistory.data.value).length || pageItems(lifecycleHistory.data.value).length)" class="operation-history">
-        <h3 class="text-sm font-semibold">Deletion history</h3>
-        <Card v-for="deletion in pageItems(artifactDeletionHistory.data.value)" :key="deletion.id" class="p-3">
-          <div class="flex items-center justify-between gap-3">
-            <code class="break-all text-xs">{{ deletion.digest }}</code>
-            <Badge :tone="deletion.status === 'completed' ? 'success' : 'danger'">{{ deletion.status }}</Badge>
+
+      <section v-if="canManage && (pageItems(artifactDeletionHistory.data.value).length || pageItems(lifecycleHistory.data.value).length)" class="repo-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Deletion history</h2>
+            <p>Manual deletions and lifecycle runs executed against this repository.</p>
           </div>
-          <p class="mt-1 text-xs text-muted-foreground">Manual · {{ new Date(deletion.startedAt).toLocaleString() }} · {{ deletion.reason || 'No reason' }}</p>
-        </Card>
-        <PaginationControls
-          :page="deletionPagination.page.value"
-          :has-previous="deletionPagination.hasPrevious.value"
-          :has-next="Boolean(artifactDeletionHistory.data.value?.nextCursor)"
-          :disabled="artifactDeletionHistory.isFetching.value"
-          @previous="deletionPagination.previous()"
-          @next="deletionPagination.next(artifactDeletionHistory.data.value?.nextCursor)"
-        />
-        <Card v-for="run in pageItems(lifecycleHistory.data.value)" :key="run.id" class="p-3">
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-xs">Lifecycle · {{ run.items.length }} candidates</span>
-            <Badge :tone="run.status === 'completed' ? 'success' : run.status === 'failed' ? 'danger' : 'warning'">{{ run.status }}</Badge>
-          </div>
-          <p class="mt-1 text-xs text-muted-foreground">{{ new Date(run.startedAt).toLocaleString() }} · {{ run.reason }}</p>
-        </Card>
-        <PaginationControls
-          :page="lifecyclePagination.page.value"
-          :has-previous="lifecyclePagination.hasPrevious.value"
-          :has-next="Boolean(lifecycleHistory.data.value?.nextCursor)"
-          :disabled="lifecycleHistory.isFetching.value"
-          @previous="lifecyclePagination.previous()"
-          @next="lifecyclePagination.next(lifecycleHistory.data.value?.nextCursor)"
-        />
-      </div>
+        </div>
+        <div class="repo-panel-body">
+          <Card v-for="deletion in pageItems(artifactDeletionHistory.data.value)" :key="deletion.id" class="p-3">
+            <div class="flex items-center justify-between gap-3">
+              <code class="break-all text-xs">{{ deletion.digest }}</code>
+              <Badge :tone="deletion.status === 'completed' ? 'success' : 'danger'">{{ deletion.status }}</Badge>
+            </div>
+            <p class="mt-1 text-xs text-muted-foreground">Manual · {{ new Date(deletion.startedAt).toLocaleString() }} · {{ deletion.reason || 'No reason' }}</p>
+          </Card>
+          <PaginationControls
+            :page="deletionPagination.page.value"
+            :has-previous="deletionPagination.hasPrevious.value"
+            :has-next="Boolean(artifactDeletionHistory.data.value?.nextCursor)"
+            :disabled="artifactDeletionHistory.isFetching.value"
+            @previous="deletionPagination.previous()"
+            @next="deletionPagination.next(artifactDeletionHistory.data.value?.nextCursor)"
+          />
+          <Card v-for="run in pageItems(lifecycleHistory.data.value)" :key="run.id" class="p-3">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-xs">Lifecycle · {{ run.items.length }} candidates</span>
+              <Badge :tone="run.status === 'completed' ? 'success' : run.status === 'failed' ? 'danger' : 'warning'">{{ run.status }}</Badge>
+            </div>
+            <p class="mt-1 text-xs text-muted-foreground">{{ new Date(run.startedAt).toLocaleString() }} · {{ run.reason }}</p>
+          </Card>
+          <PaginationControls
+            :page="lifecyclePagination.page.value"
+            :has-previous="lifecyclePagination.hasPrevious.value"
+            :has-next="Boolean(lifecycleHistory.data.value?.nextCursor)"
+            :disabled="lifecycleHistory.isFetching.value"
+            @previous="lifecyclePagination.previous()"
+            @next="lifecyclePagination.next(lifecycleHistory.data.value?.nextCursor)"
+          />
+        </div>
+      </section>
     </section>
 
     <section v-else-if="repositoryId && !repositories.isLoading.value" class="empty-state mt-5">
@@ -914,6 +1049,21 @@ function profileLabel(profile: Repository['profile']) {
       @close="repositoryModal = false"
       @created="handleRepositoryCreated"
     />
+
+    <Dialog v-if="pushInstructionsOpen" labelled-by="push-instructions-title" @close="pushInstructionsOpen = false">
+      <section class="modal form-stack" aria-labelledby="push-instructions-title">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="eyebrow">Docker</p>
+            <h2 id="push-instructions-title" class="text-lg font-semibold">Push instructions</h2>
+          </div>
+          <Button variant="ghost" size="icon" aria-label="Close push instructions" @click="pushInstructionsOpen = false">
+            <X :size="18" />
+          </Button>
+        </div>
+        <DockerPushBanner :registry-host="registryHost" :project="slug" :repository="selectedRepository?.name" />
+      </section>
+    </Dialog>
 
     <Dialog v-if="deletionPreview" labelled-by="delete-artifact-title" :restore-focus="deletionTrigger" @close="deletionPreview = null">
       <form class="modal form-stack" aria-labelledby="delete-artifact-title" @submit.prevent="confirmDeletion.mutate()">
@@ -1274,7 +1424,84 @@ function profileLabel(profile: Repository['profile']) {
 }
 
 .repository-detail {
-  max-width: 980px;
+  max-width: 1240px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.overview-card {
+  display: flex;
+  min-height: 8.5rem;
+  gap: 1rem;
+}
+
+.overview-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border: 1px solid rgba(145, 173, 36, .16);
+  border-radius: .7rem;
+  background: rgba(145, 173, 36, .08);
+  color: #c9df6c;
+}
+
+.overview-label { color: var(--muted-foreground); font-size: .72rem; font-weight: 600; }
+.overview-value { margin-top: .3rem; font-size: 1.1rem; font-weight: 680; }
+.overview-detail { margin-top: .5rem; color: var(--muted-foreground); font-size: .76rem; line-height: 1.4; }
+
+.repo-panel {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: .8rem;
+  background: var(--card);
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding: 1.15rem 1.25rem;
+}
+
+.panel-heading h2 { font-weight: 650; }
+.panel-heading p { margin-top: .25rem; color: var(--muted-foreground); font-size: .8rem; }
+
+.repo-panel-body {
+  display: grid;
+  gap: .85rem;
+  padding: 1.15rem 1.25rem;
+}
+
+.policy-summary-list {
+  display: grid;
+  gap: .6rem;
+  list-style: none;
+  padding: 0;
+}
+
+.policy-summary-item {
+  border: 1px solid var(--border);
+  border-radius: .65rem;
+  padding: .65rem .75rem;
+}
+
+.policy-summary-item-enabled {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+@media (max-width: 900px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 code {
@@ -1317,12 +1544,17 @@ code {
   overflow: auto;
 }
 
-.operation-history {
-  display: grid;
-  gap: .5rem;
-  border-top: 1px solid var(--border);
-  padding-top: 1rem;
+.operation-warning {
+  display: flex;
+  gap: .75rem;
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--warning) 7%, transparent);
+  padding: .9rem 1rem;
+  color: var(--foreground);
 }
+
+.operation-warning p { margin-top: .2rem; color: var(--muted-foreground); font-size: .82rem; }
 
 .deletion-warning {
   display: flex;

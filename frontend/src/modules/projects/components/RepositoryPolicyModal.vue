@@ -8,10 +8,10 @@ import type {
 } from '@/shared/api/models'
 import { Button } from '@/shared/components/ui/button'
 import { Card } from '@/shared/components/ui/card'
-import { ComboboxSelect } from '@/shared/components/ui/combobox'
 import { Dialog } from '@/shared/components/ui/dialog'
+import { Select } from '@/shared/components/ui/select'
 import { Plus, Trash2, X } from '@lucide/vue'
-import { ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { replaceRepositoryPolicies } from '../api/projects'
 
 const props = defineProps<{ project: string; repository: Repository }>()
@@ -37,8 +37,11 @@ function toInput(policy: Repository['policies'][number]): RepositoryPolicyInput 
     preventDeletion: policy.preventDeletion,
     excludeFromLifecycle: policy.excludeFromLifecycle,
     expireAfterDays: policy.expireAfterDays,
+    expireAfterDaysEnabled: retentionCriterionEnabled(policy, 'expireAfterDaysEnabled', 'expireAfterDays'),
     keepLast: policy.keepLast,
+    keepLastEnabled: retentionCriterionEnabled(policy, 'keepLastEnabled', 'keepLast'),
     untaggedGraceDays: policy.untaggedGraceDays,
+    untaggedGraceDaysEnabled: retentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', 'untaggedGraceDays'),
     allowedPatterns: policy.allowedPatterns ? [...policy.allowedPatterns] : undefined,
     requireReason: policy.requireReason,
   }
@@ -48,6 +51,13 @@ const policies = ref<RepositoryPolicyInput[]>(props.repository.policies.map(toIn
 const newType = ref<RepositoryPolicyType>('retention')
 const saving = ref(false)
 const error = ref('')
+const dialogRoot = ref<{ element?: globalThis.HTMLElement }>()
+const selectPortal = ref<globalThis.HTMLElement>()
+
+onMounted(async () => {
+  await nextTick()
+  selectPortal.value = dialogRoot.value?.element
+})
 
 function addPolicy() {
   const policy: RepositoryPolicyInput = {
@@ -60,8 +70,11 @@ function addPolicy() {
   }
   if (newType.value === 'retention') {
     policy.expireAfterDays = 30
+    policy.expireAfterDaysEnabled = true
     policy.keepLast = 10
+    policy.keepLastEnabled = true
     policy.untaggedGraceDays = 7
+    policy.untaggedGraceDaysEnabled = true
     policy.tagPatterns = ['*']
   } else if (newType.value === 'tag_protection') {
     policy.tagPatterns = ['prod', 'v*']
@@ -99,13 +112,41 @@ function setOptionalNumber(
   policy[field] = Number.isFinite(parsed) && Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
 }
 
+type RetentionEnabledField = 'expireAfterDaysEnabled' | 'keepLastEnabled' | 'untaggedGraceDaysEnabled'
+type RetentionLimitField = 'expireAfterDays' | 'keepLast' | 'untaggedGraceDays'
+
+function retentionCriterionEnabled(
+  policy: RepositoryPolicyInput,
+  enabledField: RetentionEnabledField,
+  limitField: RetentionLimitField,
+) {
+  return policy[enabledField] ?? policy[limitField] !== undefined
+}
+
+function setRetentionCriterionEnabled(policy: RepositoryPolicyInput, field: RetentionEnabledField, event: globalThis.Event) {
+  policy[field] = event.target instanceof globalThis.HTMLInputElement && event.target.checked
+}
+
+function toPayload(policy: RepositoryPolicyInput): RepositoryPolicyInput {
+  if (policy.type !== 'retention' || policy.enabled) return policy
+  return {
+    ...policy,
+    expireAfterDays: undefined,
+    expireAfterDaysEnabled: undefined,
+    keepLast: undefined,
+    keepLastEnabled: undefined,
+    untaggedGraceDays: undefined,
+    untaggedGraceDaysEnabled: undefined,
+  }
+}
+
 async function save() {
   saving.value = true
   error.value = ''
   try {
     const policySet = await replaceRepositoryPolicies(props.project, props.repository.id, {
       expectedVersion: props.repository.policyVersion,
-      policies: policies.value,
+      policies: policies.value.map(toPayload),
     })
     emit('saved', policySet)
   } catch (caught) {
@@ -117,13 +158,13 @@ async function save() {
 </script>
 
 <template>
-  <Dialog labelled-by="repository-policies-title" @close="emit('close')">
+  <Dialog ref="dialogRoot" labelled-by="repository-policies-title" @close="emit('close')">
     <section class="modal policy-modal form-stack">
       <div class="flex items-start justify-between gap-4">
         <div>
           <p class="eyebrow">Repository behavior</p>
           <h2 id="repository-policies-title" class="text-lg font-semibold">Policies for {{ repository.name }}</h2>
-          <p class="mt-1 text-xs text-muted-foreground">Version {{ repository.policyVersion }}</p>
+          <p class="mt-1 text-xs text-muted-foreground">Version {{ repository.policyVersion }} · Patterns use glob syntax (e.g. prod, v*, pr-*).</p>
         </div>
         <Button variant="ghost" size="icon" aria-label="Close policies" @click="emit('close')">
           <X :size="18" />
@@ -135,14 +176,11 @@ async function save() {
       </div>
 
       <div class="policy-list">
-        <Card v-for="(policy, index) in policies" :key="index" class="policy-card">
+        <Card v-for="(policy, index) in policies" :key="index" class="policy-card" :class="{ 'policy-card-enabled': policy.enabled }">
           <div class="flex items-center justify-between gap-3">
             <strong>{{ policyTypes.find((item) => item.value === policy.type)?.label }}</strong>
             <div class="flex items-center gap-3">
-              <label class="toggle-field">
-                <input v-model="policy.enabled" type="checkbox" />
-                Enabled
-              </label>
+              <input v-model="policy.enabled" class="retention-toggle" type="checkbox" :aria-label="`Enable ${policyTypes.find((item) => item.value === policy.type)?.label} policy`" />
               <Button variant="ghost" size="icon" :aria-label="`Remove ${policy.type} policy`" @click="policies.splice(index, 1)">
                 <Trash2 :size="15" />
               </Button>
@@ -159,26 +197,47 @@ async function save() {
             />
           </label>
 
-          <div v-if="policy.type === 'retention'" class="number-grid">
-            <label class="field-label">Expire after days
-              <input class="field-control" type="number" min="1" max="3650" :value="policy.expireAfterDays ?? ''" @input="setOptionalNumber(policy, 'expireAfterDays', inputValue($event))" />
-            </label>
-            <label class="field-label">Keep last
-              <input class="field-control" type="number" min="1" max="10000" :value="policy.keepLast ?? ''" @input="setOptionalNumber(policy, 'keepLast', inputValue($event))" />
-            </label>
-            <label class="field-label">Untagged grace days
-              <input class="field-control" type="number" min="1" max="3650" :value="policy.untaggedGraceDays ?? ''" @input="setOptionalNumber(policy, 'untaggedGraceDays', inputValue($event))" />
-            </label>
+          <div v-if="policy.type === 'retention'" class="retention-criteria">
+            <article class="retention-criterion-card" :class="{ disabled: !retentionCriterionEnabled(policy, 'expireAfterDaysEnabled', 'expireAfterDays') }">
+              <div class="retention-criterion">
+                <strong>Expire after days</strong>
+                <small>Remove matching images after this age.</small>
+                <div class="retention-control">
+                  <input class="field-control" type="number" min="1" max="3650" :disabled="!retentionCriterionEnabled(policy, 'expireAfterDaysEnabled', 'expireAfterDays')" :value="policy.expireAfterDays ?? ''" @input="setOptionalNumber(policy, 'expireAfterDays', inputValue($event))" />
+                  <input class="retention-toggle" :checked="retentionCriterionEnabled(policy, 'expireAfterDaysEnabled', 'expireAfterDays')" type="checkbox" aria-label="Enable expire after days" @change="setRetentionCriterionEnabled(policy, 'expireAfterDaysEnabled', $event)" />
+                </div>
+              </div>
+            </article>
+            <article class="retention-criterion-card" :class="{ disabled: !retentionCriterionEnabled(policy, 'keepLastEnabled', 'keepLast') }">
+              <div class="retention-criterion">
+                <strong>Keep last</strong>
+                <small>Always retain this many of the newest images.</small>
+                <div class="retention-control">
+                  <input class="field-control" type="number" min="1" max="10000" :disabled="!retentionCriterionEnabled(policy, 'keepLastEnabled', 'keepLast')" :value="policy.keepLast ?? ''" @input="setOptionalNumber(policy, 'keepLast', inputValue($event))" />
+                  <input class="retention-toggle" :checked="retentionCriterionEnabled(policy, 'keepLastEnabled', 'keepLast')" type="checkbox" aria-label="Enable keep last" @change="setRetentionCriterionEnabled(policy, 'keepLastEnabled', $event)" />
+                </div>
+              </div>
+            </article>
+            <article class="retention-criterion-card" :class="{ disabled: !retentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', 'untaggedGraceDays') }">
+              <div class="retention-criterion">
+                <strong>Untagged grace days</strong>
+                <small>Clean untagged images after this grace period.</small>
+                <div class="retention-control">
+                  <input class="field-control" type="number" min="1" max="3650" :disabled="!retentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', 'untaggedGraceDays')" :value="policy.untaggedGraceDays ?? ''" @input="setOptionalNumber(policy, 'untaggedGraceDays', inputValue($event))" />
+                  <input class="retention-toggle" :checked="retentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', 'untaggedGraceDays')" type="checkbox" aria-label="Enable untagged grace days" @change="setRetentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', $event)" />
+                </div>
+              </div>
+            </article>
           </div>
 
           <div v-if="policy.type === 'tag_protection'" class="toggle-grid">
-            <label class="toggle-field"><input v-model="policy.preventDeletion" type="checkbox" /> Prevent deletion</label>
-            <label class="toggle-field"><input v-model="policy.preventOverwrite" type="checkbox" /> Prevent overwrite</label>
-            <label class="toggle-field"><input v-model="policy.excludeFromLifecycle" type="checkbox" /> Exclude from lifecycle</label>
+            <label class="toggle-field"><input v-model="policy.preventDeletion" class="retention-toggle" type="checkbox" /> Prevent deletion</label>
+            <label class="toggle-field"><input v-model="policy.preventOverwrite" class="retention-toggle" type="checkbox" /> Prevent overwrite</label>
+            <label class="toggle-field"><input v-model="policy.excludeFromLifecycle" class="retention-toggle" type="checkbox" /> Exclude from lifecycle</label>
           </div>
 
           <label v-if="policy.type === 'immutability'" class="toggle-field">
-            <input v-model="policy.preventOverwrite" type="checkbox" />
+            <input v-model="policy.preventOverwrite" class="retention-toggle" type="checkbox" />
             Prevent tag overwrite
           </label>
 
@@ -193,14 +252,14 @@ async function save() {
           </label>
 
           <label v-if="policy.type === 'manual_deletion'" class="toggle-field">
-            <input v-model="policy.requireReason" type="checkbox" />
+            <input v-model="policy.requireReason" class="retention-toggle" type="checkbox" />
             Require a deletion reason
           </label>
         </Card>
       </div>
 
       <div class="add-policy">
-        <ComboboxSelect v-model="newType" :options="policyTypes" placeholder="Select a policy type…" empty-text="No matching policy type." />
+        <Select v-model="newType" :options="policyTypes" aria-label="Select policy type" :portal-to="selectPortal" class="policy-type-select" />
         <Button variant="outline" @click="addPolicy"><Plus :size="15" /> Add policy</Button>
       </div>
 
@@ -229,9 +288,15 @@ async function save() {
   display: grid;
   gap: .85rem;
   padding: 1rem;
+  transition: border-color var(--motion-standard) ease, box-shadow var(--motion-standard) ease;
 }
 
-.number-grid,
+.policy-card-enabled {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.retention-criteria,
 .toggle-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -244,8 +309,45 @@ async function save() {
   gap: .75rem;
 }
 
+.add-policy :deep(.policy-type-select) {
+  width: 100%;
+}
+
+.retention-criterion {
+  display: grid;
+  gap: .45rem;
+}
+
+.retention-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .65rem;
+}
+
+.retention-toggle {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+.retention-criterion-card {
+  display: grid;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+  padding: .8rem;
+  transition: opacity var(--motion-standard) ease, border-color var(--motion-standard) ease;
+}
+
+.retention-criterion-card.disabled {
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  opacity: .55;
+}
+
 @media (max-width: 640px) {
-  .number-grid,
+  .retention-criteria,
   .toggle-grid {
     grid-template-columns: 1fr;
   }

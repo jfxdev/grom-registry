@@ -161,24 +161,27 @@ func evaluateLifecycle(
 			seen[manifest.Digest] = struct{}{}
 			distinct = append(distinct, manifest)
 		}
+		keepLastEnabled := retentionCriterionEnabled(policy.KeepLastEnabled, policy.KeepLast)
+		expireEnabled := retentionCriterionEnabled(policy.ExpireAfterDaysEnabled, policy.ExpireAfterDays)
 		for index, manifest := range distinct {
-			if policy.KeepLast != nil && index < *policy.KeepLast {
+			if keepLastEnabled && index < *policy.KeepLast {
 				keepReasons[manifest.Digest] = append(keepReasons[manifest.Digest], fmt.Sprintf("kept among the latest %d artifacts", *policy.KeepLast))
 				continue
 			}
-			if policy.ExpireAfterDays != nil {
+			if expireEnabled {
 				threshold := now.Add(-time.Duration(*policy.ExpireAfterDays) * 24 * time.Hour)
 				if lifecycleTime(manifest).After(threshold) {
 					keepReasons[manifest.Digest] = append(keepReasons[manifest.Digest], fmt.Sprintf("younger than %d days", *policy.ExpireAfterDays))
 					continue
 				}
 				eligibleReasons[manifest.Digest] = append(eligibleReasons[manifest.Digest], fmt.Sprintf("older than %d days", *policy.ExpireAfterDays))
-			} else {
+			} else if keepLastEnabled {
 				eligibleReasons[manifest.Digest] = append(eligibleReasons[manifest.Digest], "outside the retained latest artifacts")
 			}
 		}
 		for _, manifest := range inventory {
-			if manifest.State != constants.InventoryStateUntagged || manifest.UntaggedAt == nil || policy.UntaggedGraceDays == nil {
+			if manifest.State != constants.InventoryStateUntagged || manifest.UntaggedAt == nil ||
+				!retentionCriterionEnabled(policy.UntaggedGraceDaysEnabled, policy.UntaggedGraceDays) {
 				continue
 			}
 			threshold := now.Add(-time.Duration(*policy.UntaggedGraceDays) * 24 * time.Hour)
