@@ -259,7 +259,8 @@ async function save() {
       </div>
 
       <div class="add-policy">
-        <Select v-model="newType" :options="policyTypes" aria-label="Select policy type" :portal-to="selectPortal" class="policy-type-select" />
+        <!-- eslint-disable-next-line vue/attribute-hyphenation -- vue-tsc does not resolve kebab-case attrs to camelCase props on generic components -->
+        <Select v-model="newType" :options="policyTypes" ariaLabel="Select policy type" :portal-to="selectPortal" class="policy-type-select" />
         <Button variant="outline" @click="addPolicy"><Plus :size="15" /> Add policy</Button>
       </div>
 

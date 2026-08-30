@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { cn } from '@/shared/lib/cn'
-defineProps<{ class?: string }>()
+import type { HTMLAttributes } from 'vue'
+
+defineProps<{ class?: HTMLAttributes['class'] }>()
 </script>
 
 <template>
