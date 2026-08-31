@@ -19,7 +19,7 @@ type policyGateway struct {
 	client *Client
 }
 
-type ManifestObserver func(context.Context, string, string, string) error
+type ManifestObserver func(ctx context.Context, repository, reference, digest, actor string) error
 
 func NewGateway(
 	target *url.URL,
@@ -32,12 +32,13 @@ func NewGateway(
 		logger = slog.Default()
 	}
 	proxy := &httputil.ReverseProxy{Rewrite: rewriteProxyRequest(target)}
-	proxy.ModifyResponse = manifestObservationResponseModifier(observer, logger)
+	proxy.ModifyResponse = manifestObservationResponseModifier(tokens, observer, logger)
 	proxy.FlushInterval = -1
 	return &policyGateway{next: proxy, tokens: tokens, client: client}
 }
 
 func manifestObservationResponseModifier(
+	tokens *registryapp.TokenService,
 	observer ManifestObserver,
 	logger *slog.Logger,
 ) func(*http.Response) error {
@@ -49,8 +50,12 @@ func manifestObservationResponseModifier(
 		if !isManifestPut {
 			return nil
 		}
+		actor := ""
+		if rawToken, ok := strings.CutPrefix(response.Request.Header.Get("Authorization"), "Bearer "); ok {
+			actor, _ = tokens.Subject(rawToken)
+		}
 		if err := observer(
-			response.Request.Context(), repository, reference, response.Header.Get("Docker-Content-Digest"),
+			response.Request.Context(), repository, reference, response.Header.Get("Docker-Content-Digest"), actor,
 		); err != nil {
 			logger.ErrorContext(response.Request.Context(), "observe pushed manifest",
 				"repository", repository, "reference", reference, "error", err)

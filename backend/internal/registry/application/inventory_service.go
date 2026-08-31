@@ -74,7 +74,7 @@ func (s *InventoryService) SetProjectResolver(resolver func(context.Context, str
 	s.resolveProject = resolver
 }
 
-func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, reference, digest string) error {
+func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, reference, digest, actor string) error {
 	if s.distribution == nil || s.resolveProject == nil {
 		return fmt.Errorf("inventory service is not configured")
 	}
@@ -103,16 +103,18 @@ func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, refe
 	classification := ClassifyManifest(*metadata)
 	tag := ""
 	var pushedAt *time.Time
+	pushedBy := ""
 	if !strings.Contains(reference, ":") {
 		tag = reference
 		pushedAt = &now
+		pushedBy = actor
 	}
-	observations, _, err := collectMetadataTree(metadata, tag, pushedAt)
+	observations, _, err := collectMetadataTree(metadata, tag, pushedAt, pushedBy)
 	if err == nil {
 		if atomic, ok := s.store.(atomicInventoryStore); ok {
 			err = atomic.UpsertManifestObservationsAtomically(ctx, target.ID, observations, now)
 		} else {
-			_, err = s.upsertMetadataTree(ctx, target.ID, metadata, tag, pushedAt, now)
+			_, err = s.upsertMetadataTree(ctx, target.ID, metadata, tag, pushedAt, pushedBy, now)
 		}
 	}
 	if err != nil {
@@ -158,7 +160,7 @@ func (s *InventoryService) Reconcile(
 			return nil, fetchErr
 		}
 		classification := ClassifyManifest(*metadata)
-		observed, observedDigests, err := collectMetadataTree(metadata, tag, nil)
+		observed, observedDigests, err := collectMetadataTree(metadata, tag, nil, "")
 		if err != nil {
 			s.markStorageStale(ctx, target.ID)
 			return nil, err
@@ -207,7 +209,7 @@ func (s *InventoryService) Reconcile(
 			s.markStorageStale(ctx, target.ID)
 			return nil, fetchErr
 		}
-		observed, observedDigests, err := collectMetadataTree(metadata, "", nil)
+		observed, observedDigests, err := collectMetadataTree(metadata, "", nil, "")
 		if err != nil {
 			s.markStorageStale(ctx, target.ID)
 			return nil, err
@@ -242,7 +244,7 @@ func (s *InventoryService) Reconcile(
 				s.markStorageStale(ctx, target.ID)
 				return nil, fmt.Errorf("referrer descriptor %s has inconsistent metadata", descriptor.Digest)
 			}
-			observed, observedDigests, err := collectMetadataTree(metadata, "", nil)
+			observed, observedDigests, err := collectMetadataTree(metadata, "", nil, "")
 			if err != nil {
 				s.markStorageStale(ctx, target.ID)
 				return nil, err
@@ -303,16 +305,17 @@ func (s *InventoryService) upsertMetadataTree(
 	metadata *ManifestMetadata,
 	tag string,
 	pushedAt *time.Time,
+	pushedBy string,
 	observedAt time.Time,
 ) ([]string, error) {
 	digests := make([]string, 0, 1+len(metadata.Children))
-	observation := observationFromMetadata(metadata, tag, pushedAt)
+	observation := observationFromMetadata(metadata, tag, pushedAt, pushedBy)
 	if err := s.store.UpsertManifestObservation(ctx, repositoryID, observation, observedAt); err != nil {
 		return nil, err
 	}
 	digests = append(digests, metadata.Digest)
 	for i := range metadata.Children {
-		childDigests, err := s.upsertMetadataTree(ctx, repositoryID, &metadata.Children[i], "", nil, observedAt)
+		childDigests, err := s.upsertMetadataTree(ctx, repositoryID, &metadata.Children[i], "", nil, "", observedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -321,14 +324,14 @@ func (s *InventoryService) upsertMetadataTree(
 	return digests, nil
 }
 
-func collectMetadataTree(metadata *ManifestMetadata, tag string, pushedAt *time.Time) ([]registrydomain.ManifestObservation, []string, error) {
+func collectMetadataTree(metadata *ManifestMetadata, tag string, pushedAt *time.Time, pushedBy string) ([]registrydomain.ManifestObservation, []string, error) {
 	if metadata == nil || metadata.Digest == "" {
 		return nil, nil, fmt.Errorf("invalid manifest metadata")
 	}
-	observations := []registrydomain.ManifestObservation{observationFromMetadata(metadata, tag, pushedAt)}
+	observations := []registrydomain.ManifestObservation{observationFromMetadata(metadata, tag, pushedAt, pushedBy)}
 	digests := []string{metadata.Digest}
 	for i := range metadata.Children {
-		children, childDigests, err := collectMetadataTree(&metadata.Children[i], "", nil)
+		children, childDigests, err := collectMetadataTree(&metadata.Children[i], "", nil, "")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -338,12 +341,12 @@ func collectMetadataTree(metadata *ManifestMetadata, tag string, pushedAt *time.
 	return observations, digests, nil
 }
 
-func observationFromMetadata(metadata *ManifestMetadata, tag string, pushedAt *time.Time) registrydomain.ManifestObservation {
+func observationFromMetadata(metadata *ManifestMetadata, tag string, pushedAt *time.Time, pushedBy string) registrydomain.ManifestObservation {
 	classification := ClassifyManifest(*metadata)
 	return registrydomain.ManifestObservation{
 		Digest: metadata.Digest, MediaType: metadata.MediaType, ArtifactType: metadata.ArtifactType,
 		SubjectDigest: metadata.SubjectDigest, ManifestSize: metadata.ManifestSize,
-		Platforms: metadata.Platforms, Tag: tag, PushedAt: pushedAt,
+		Platforms: metadata.Platforms, Tag: tag, PushedAt: pushedAt, PushedBy: pushedBy,
 		Descriptors:  metadata.Descriptors,
 		ObservedKind: classification.Kind, ArtifactRelationship: classification.Relationship,
 		ClassificationSource: classification.Source, ClassificationConfidence: classification.Confidence,

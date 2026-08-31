@@ -429,6 +429,14 @@ function platformsForTag(tag: string): ManifestPlatform[] {
   return manifestForTag(tag)?.platforms ?? []
 }
 
+function lastPushedLabel(tag: string): string | null {
+  const manifest = manifestForTag(tag)
+  if (!manifest?.lastPushedAt) return null
+  const days = Math.floor((Date.now() - new Date(manifest.lastPushedAt).getTime()) / 86_400_000)
+  const when = days <= 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`
+  return manifest.lastPushedBy ? `Last pushed ${when} by ${manifest.lastPushedBy}` : `Last pushed ${when}`
+}
+
 function formatCompressedSize(bytes: number | undefined) {
   if (bytes === undefined || bytes <= 0) return '—'
   const units = ['B', 'KB', 'MB', 'GB']
@@ -840,6 +848,7 @@ function policySummary(policy: Repository['policies'][number]) {
                 <div>
                   <p class="eyebrow">Tag</p>
                   <code class="mt-1 block text-base font-semibold text-accent">{{ tag }}</code>
+                  <p v-if="lastPushedLabel(tag)" class="mt-1 text-xs text-muted-foreground">{{ lastPushedLabel(tag) }}</p>
                 </div>
                 <div class="flex shrink-0 gap-1">
                   <Button variant="ghost" size="sm" @click="copyCommand(pullCommand(selectedRepository!.name, tag), `pull:${tag}`)">

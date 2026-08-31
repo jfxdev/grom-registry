@@ -126,14 +126,17 @@ first normal boot.
 
 ### Releases and upgrades
 
-Stable tags publish images to `ghcr.io/jfxdev/grom-registry`. Use the immutable
-digest from the GitHub Release, not a mutable tag. Releases include an SBOM,
-vulnerability report, and checksums.
+Stable tags publish the application image to `ghcr.io/jfxdev/grom-registry` and
+the dedicated maintenance image to
+`ghcr.io/jfxdev/grom-registry-maintenance:vMAJOR.MINOR.PATCH`. Use immutable
+digests from the GitHub Release, not mutable tags. Releases include an SBOM,
+vulnerability report, digest reference, and checksums for both images.
 
-Before upgrading, create and download a verified recovery point. Set
-`GROM_IMAGE` to the new digest, start with `docker compose pull` and
-`docker compose up -d --no-build`, then check `/readyz` and `/api/docs`. Do not
-downgrade a database by changing only the image; restore a compatible backup.
+Before upgrading, create and download a verified recovery point. Set both
+`GROM_IMAGE` and `GROM_REGISTRY_MAINTENANCE_IMAGE` to the matching release
+image digests, start with `docker compose pull` and `docker compose up -d
+--no-build`, then check `/readyz` and `/api/docs`. Do not downgrade a database
+by changing only the image; restore a compatible backup.
 
 ## Compatibility policy
 

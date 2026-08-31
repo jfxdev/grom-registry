@@ -98,6 +98,7 @@ type ManifestInventory struct {
 	State                    string             `json:"state"`
 	FirstSeenAt              time.Time          `json:"firstSeenAt"`
 	LastPushedAt             *time.Time         `json:"lastPushedAt,omitempty"`
+	LastPushedBy             string             `json:"lastPushedBy,omitempty"`
 	LastSeenAt               time.Time          `json:"lastSeenAt"`
 	UntaggedAt               *time.Time         `json:"untaggedAt,omitempty"`
 	DeletedAt                *time.Time         `json:"deletedAt,omitempty"`
@@ -124,6 +125,7 @@ type ManifestObservation struct {
 	Platforms                []ManifestPlatform
 	Tag                      string
 	PushedAt                 *time.Time
+	PushedBy                 string
 	Descriptors              []Descriptor
 }
 

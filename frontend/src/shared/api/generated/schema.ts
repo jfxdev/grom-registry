@@ -1178,6 +1178,7 @@ export interface components {
             firstSeenAt: string;
             /** Format: date-time */
             lastPushedAt?: string | null;
+            lastPushedBy?: string;
             /** Format: date-time */
             lastSeenAt: string;
             /** Format: date-time */

@@ -52,6 +52,7 @@ type manifestModel struct {
 	State                    string     `bun:"state,notnull"`
 	FirstSeenAt              time.Time  `bun:"first_seen_at,notnull"`
 	LastPushedAt             *time.Time `bun:"last_pushed_at"`
+	LastPushedBy             string     `bun:"last_pushed_by,notnull"`
 	LastSeenAt               time.Time  `bun:"last_seen_at,notnull"`
 	UntaggedAt               *time.Time `bun:"untagged_at"`
 	DeletedAt                *time.Time `bun:"deleted_at"`

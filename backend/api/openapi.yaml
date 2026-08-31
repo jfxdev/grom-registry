@@ -2378,6 +2378,8 @@ components:
           type: string
           format: date-time
           nullable: true
+        lastPushedBy:
+          type: string
         lastSeenAt:
           type: string
           format: date-time

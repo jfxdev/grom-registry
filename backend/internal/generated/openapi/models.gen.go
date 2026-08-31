@@ -1070,6 +1070,7 @@ type ManifestInventory struct {
 	FirstSeenAt              time.Time                `json:"firstSeenAt"`
 	Id                       string                   `json:"id"`
 	LastPushedAt             *time.Time               `json:"lastPushedAt,omitempty"`
+	LastPushedBy             *string                  `json:"lastPushedBy,omitempty"`
 	LastSeenAt               time.Time                `json:"lastSeenAt"`
 
 	// ManifestSize Serialized manifest or image-index JSON size in bytes; this is metadata size, not image content size or reclaimable storage.
