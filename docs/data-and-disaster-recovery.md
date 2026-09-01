@@ -57,8 +57,8 @@ sequenceDiagram
 
 During maintenance, Grom drains writes and blocks management mutations, token
 exchange, and registry traffic that could change durable state. The SQLite
-checkpoint may leave WAL frames retained by an already-running read; those
-frames are included with the database in Grom data, so the recovery point
+checkpoint is non-blocking, so WAL frames retained by an already-running read
+are included with the database in Grom data. The recovery point therefore
 remains consistent without interrupting a read-only request. PostgreSQL uses
 the internally consistent snapshot from `pg_dump` and does not require the
 application database role to hold the administrative `pg_checkpoint` privilege.

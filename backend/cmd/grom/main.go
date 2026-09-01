@@ -88,7 +88,6 @@ func run(logger *slog.Logger) error {
 			maintenanceController,
 			func(checkpointContext context.Context) error {
 				if err := database.Checkpoint(checkpointContext, db, databaseKind); err != nil {
-					logger.Error("backup database checkpoint failed", "database", databaseKind, "error", err)
 					return err
 				}
 				if databaseKind == database.Postgres {
