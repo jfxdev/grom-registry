@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -284,7 +285,7 @@ func (s *Store) ListManifestInventory(ctx context.Context, repositoryID foundati
 	return s.manifestInventoryFromModels(ctx, repositoryID, manifests)
 }
 
-func (s *Store) ListManifestInventoryPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
+func (s *Store) ListManifestInventoryPage(ctx context.Context, repositoryID foundation.ID, search string, request foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
 	boundary, err := keysetBoundary(request)
 	if err != nil {
 		return foundation.PageResult[registrydomain.ManifestInventory]{}, err
@@ -293,6 +294,13 @@ func (s *Store) ListManifestInventoryPage(ctx context.Context, repositoryID foun
 	query := s.db.NewSelect().Model(&models).Where("repository_id = ?", repositoryID.String())
 	if boundary != nil {
 		query = query.Where("(first_seen_at < ? OR (first_seen_at = ? AND id < ?))", boundary.at, boundary.at, boundary.id)
+	}
+	if value := strings.ToLower(strings.TrimSpace(search)); value != "" {
+		like := "%" + value + "%"
+		query = query.Where(
+			"(LOWER(rm.digest) LIKE ? OR EXISTS (SELECT 1 FROM registry_tags WHERE registry_tags.manifest_id = rm.id AND registry_tags.detached_at IS NULL AND LOWER(registry_tags.name) LIKE ?))",
+			like, like,
+		)
 	}
 	if err := query.OrderExpr("first_seen_at DESC, id DESC").Limit(request.Limit + 1).Scan(ctx); err != nil {
 		return foundation.PageResult[registrydomain.ManifestInventory]{}, err

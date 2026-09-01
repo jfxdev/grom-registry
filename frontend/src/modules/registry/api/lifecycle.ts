@@ -8,10 +8,14 @@ export const registryKeys = {
     ['registry', project, repository, 'lifecycle-runs'] as const,
 }
 
-export const listInventory = (project: string, repository: string, cursor = '') =>
-  apiRequest<ManifestInventoryPage>(
-    `/api/v1/projects/${encodeURIComponent(project)}/repository-inventory?repository=${encodeURIComponent(repository)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+export const listInventory = (project: string, repository: string, query = '', cursor = '') => {
+  const params = new URLSearchParams({ repository })
+  if (query) params.set('q', query)
+  if (cursor) params.set('cursor', cursor)
+  return apiRequest<ManifestInventoryPage>(
+    `/api/v1/projects/${encodeURIComponent(project)}/repository-inventory?${params.toString()}`,
   )
+}
 
 export const reconcileInventory = (project: string, repository: string) =>
   apiRequest<ManifestInventory[]>(

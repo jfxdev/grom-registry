@@ -27,6 +27,12 @@ export const router = createRouter({
       component: () => import('@/modules/projects/pages/ProjectsPage.vue'),
     },
     {
+      path: ROUTES.repositorySearch,
+      name: 'repository-search',
+      component: () => import('@/modules/repositories/pages/RepositorySearchPage.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
       path: ROUTES.profile,
       name: 'profile',
       component: () => import('@/modules/users/pages/UserProfilePage.vue'),

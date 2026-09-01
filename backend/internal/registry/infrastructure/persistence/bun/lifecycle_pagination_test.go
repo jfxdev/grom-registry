@@ -116,7 +116,7 @@ func TestRegistryHistoryKeysetPages(t *testing.T) {
 	}
 
 	assertKeysetPage(t, func(request foundation.PageRequest) ([]string, string, error) {
-		page, err := store.ListManifestInventoryPage(ctx, repositoryID, request)
+		page, err := store.ListManifestInventoryPage(ctx, repositoryID, "", request)
 		return manifestIDs(page.Items), page.NextCursor, err
 	}, "inventory:"+repositoryID.String())
 	assertKeysetPage(t, func(request foundation.PageRequest) ([]string, string, error) {
@@ -154,7 +154,7 @@ func TestListManifestInventoryPageUsesEmptyTagsArrayForUntaggedManifest(t *testi
 	if err := store.MarkManifestDeleted(ctx, repositoryID, "sha256:untagged", now); err != nil {
 		t.Fatal(err)
 	}
-	page, err := store.ListManifestInventoryPage(ctx, repositoryID, foundation.PageRequest{Limit: 20, Scope: "inventory:untagged"})
+	page, err := store.ListManifestInventoryPage(ctx, repositoryID, "", foundation.PageRequest{Limit: 20, Scope: "inventory:untagged"})
 	if err != nil {
 		t.Fatal(err)
 	}

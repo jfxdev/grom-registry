@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   PanelLeft,
+  Search,
   UserRound,
   ScrollText,
   ShieldCheck,
@@ -52,6 +53,7 @@ const navigationSections = [
   {
     label: 'Management',
     items: [
+      { label: 'Repository search', to: ROUTES.repositorySearch, icon: Search, adminOnly: true },
       { label: 'Backup & recovery', to: ROUTES.backups, icon: DatabaseBackup, adminOnly: true },
       { label: 'Audit log', to: ROUTES.auditLog, icon: ScrollText, adminOnly: true },
       { label: 'Settings', to: ROUTES.settings, icon: Settings, adminOnly: true },
@@ -75,6 +77,11 @@ async function signOut() {
 
 function closeMenu() {
   menuOpen.value = false
+}
+
+function browseProjects() {
+  closeMenu()
+  void router.push(ROUTES.projects)
 }
 
 function closeAccountMenu(restoreFocus = false) {
@@ -191,7 +198,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="sidebar-primary-action">
-          <Button class="w-full justify-start" size="sm" @click="router.push(ROUTES.projects)">
+          <Button class="w-full justify-start" size="sm" @click="browseProjects">
             <Boxes :size="15" />
             Browse projects
           </Button>

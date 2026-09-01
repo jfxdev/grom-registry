@@ -25,6 +25,21 @@ type Repository struct {
 	UpdatedAt          time.Time                        `json:"updatedAt"`
 }
 
+// RepositorySearchResult is a lean cross-project search row: enough to
+// identify and link to a repository without the per-repository policy/usage
+// fan-out that a full Repository listing requires.
+type RepositorySearchResult struct {
+	ID          foundation.ID `json:"id"`
+	ProjectID   foundation.ID `json:"projectId"`
+	ProjectSlug string        `json:"projectSlug"`
+	ProjectName string        `json:"projectName"`
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	Status      string        `json:"status"`
+	CreatedAt   time.Time     `json:"createdAt"`
+	UpdatedAt   time.Time     `json:"updatedAt"`
+}
+
 type Policy struct {
 	ID                       foundation.ID `json:"id"`
 	RepositoryID             foundation.ID `json:"-"`

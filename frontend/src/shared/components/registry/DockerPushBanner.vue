@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { TerminalCommand } from '@/shared/components/ui/terminal-command'
 import { Upload } from '@lucide/vue'
 import { computed } from 'vue'
 
@@ -20,7 +21,7 @@ const commands = computed(() => `docker push ${imageReference.value}`)
     <div class="min-w-0 flex-1">
       <h2>Push an image</h2>
       <p>Push a tagged local image to this {{ repository === 'your-repository' ? 'project' : 'repository' }}.</p>
-      <code>{{ commands }}</code>
+      <TerminalCommand :command="commands" aria-label="Copy push command" />
     </div>
   </section>
 </template>
@@ -50,5 +51,5 @@ const commands = computed(() => `docker push ${imageReference.value}`)
 .docker-push-banner h2, .docker-push-banner p { margin: 0; }
 .docker-push-banner h2 { font-size: .88rem; font-weight: 700; }
 .docker-push-banner p { margin-top: .2rem; color: var(--muted-foreground); font-size: .76rem; line-height: 1.45; }
-.docker-push-banner code { display: block; margin-top: .65rem; overflow-x: auto; color: var(--accent); font-size: .75rem; line-height: 1.6; white-space: pre; }
+.terminal-command { margin-top: .65rem; }
 </style>

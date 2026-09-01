@@ -212,8 +212,16 @@ func (s *RepositoryService) ReconcileDiscoveredPage(ctx context.Context, project
 	return nil
 }
 
-func (s *RepositoryService) ListPage(ctx context.Context, projectID foundation.ID, request foundation.PageRequest) (foundation.PageResult[registrydomain.Repository], error) {
-	return s.store.ListRepositoriesPage(ctx, projectID, request)
+func (s *RepositoryService) ListPage(ctx context.Context, projectID foundation.ID, query string, request foundation.PageRequest) (foundation.PageResult[registrydomain.Repository], error) {
+	return s.store.ListRepositoriesPage(ctx, projectID, query, request)
+}
+
+func (s *RepositoryService) SearchAcrossProjects(ctx context.Context, query string, request foundation.PageRequest) (foundation.PageResult[registrydomain.RepositorySearchResult], error) {
+	return s.store.SearchRepositoriesAcrossProjects(ctx, query, request)
+}
+
+func (s *RepositoryService) SearchTagNames(ctx context.Context, repositoryID foundation.ID, query string, request foundation.PageRequest) (foundation.PageResult[string], error) {
+	return s.store.SearchTagNamesPage(ctx, repositoryID, query, request)
 }
 
 func (s *RepositoryService) Find(ctx context.Context, projectID foundation.ID, name string) (*registrydomain.Repository, error) {

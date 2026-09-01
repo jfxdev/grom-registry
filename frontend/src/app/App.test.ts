@@ -127,4 +127,29 @@ describe('App deployment warning', () => {
     expect(managementSection.text()).toContain('Settings')
     expect(wrapper.find('.sidebar-navigation').text()).not.toContain('Projects')
   })
+
+  it('closes the mobile sidebar before browsing projects', async () => {
+    mocks.getDeployment.mockResolvedValue({ profile: 'strict', insecureHttp: false })
+    mocks.route.meta.public = false
+    mocks.route.path = '/backups'
+    mocks.session.user = { username: 'Avery', email: 'avery@example.test', systemAdmin: true }
+
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          RouterView: { template: '<main>Backup</main>' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[aria-label="Open navigation"]').trigger('click')
+    expect(wrapper.get('#app-navigation').classes()).toContain('sidebar-open')
+
+    await wrapper.findAll('button').find((button) => button.text().includes('Browse projects'))!.trigger('click')
+
+    expect(wrapper.get('#app-navigation').classes()).not.toContain('sidebar-open')
+    expect(mocks.router.push).toHaveBeenCalledWith('/projects')
+  })
 })

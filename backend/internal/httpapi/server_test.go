@@ -742,6 +742,21 @@ func TestListServiceAccountsRequiresAdministrator(t *testing.T) {
 	}
 }
 
+func TestSearchRepositoriesRequiresAdministrator(t *testing.T) {
+	server := &Server{}
+	request := httptest.NewRequest(http.MethodGet, "http://backend/api/v1/repositories?q=api", nil)
+	request = request.WithContext(context.WithValue(request.Context(), currentUserKey{}, &identitydomain.User{
+		SystemAdmin: false,
+	}))
+	response := httptest.NewRecorder()
+
+	server.searchRepositories(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, response.Code)
+	}
+}
+
 func TestAdministrativeListQueriesRejectOverlongAndUnknownParameters(t *testing.T) {
 	admin := &identitydomain.User{SystemAdmin: true}
 	for _, test := range []struct {
@@ -753,6 +768,8 @@ func TestAdministrativeListQueriesRejectOverlongAndUnknownParameters(t *testing.
 		{name: "users rejects unknown query", handler: (&Server{}).listUsers, path: "/api/v1/users?unexpected=value"},
 		{name: "service accounts rejects overlong query", handler: (&Server{}).listServiceAccounts, path: "/api/v1/service-accounts?q=" + strings.Repeat("a", 201)},
 		{name: "service accounts rejects unknown query", handler: (&Server{}).listServiceAccounts, path: "/api/v1/service-accounts?unexpected=value"},
+		{name: "repository search rejects overlong query", handler: (&Server{}).searchRepositories, path: "/api/v1/repositories?q=" + strings.Repeat("a", 201)},
+		{name: "repository search rejects unknown query", handler: (&Server{}).searchRepositories, path: "/api/v1/repositories?unexpected=value"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
