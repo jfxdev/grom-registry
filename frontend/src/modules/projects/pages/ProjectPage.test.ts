@@ -198,6 +198,16 @@ describe('ProjectPage membership management', () => {
     expect(mocks.listRepositories).toHaveBeenCalledTimes(2)
   })
 
+  it('does not present a repository-list failure as an empty project', async () => {
+    mocks.listRepositories.mockRejectedValue(new APIError(500, 'internal_error', 'Repository reconciliation failed'))
+
+    renderPage()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not load repositories')
+    expect(screen.getByRole('alert').textContent).toContain('Repository reconciliation failed')
+    expect(screen.queryByText('No repositories yet')).toBeNull()
+  })
+
   it('uses the labelled delete button for project deletion', async () => {
     const wrapper = mountPage()
     await flushPromises()

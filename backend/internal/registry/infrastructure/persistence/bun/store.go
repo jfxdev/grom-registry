@@ -177,10 +177,19 @@ func (s *Store) ProjectHasRepositories(ctx context.Context, projectID foundation
 
 func (s *Store) UpsertDiscoveredRepository(ctx context.Context, repository *registrydomain.Repository) error {
 	model := fromRepository(repository)
-	_, err := s.db.NewInsert().Model(model).
-		On("CONFLICT (project_id, name) DO UPDATE").
-		Set("status = CASE WHEN status = ? THEN status ELSE EXCLUDED.status END", constants.RepositoryStatusArchived).
-		Set("updated_at = EXCLUDED.updated_at").Exec(ctx)
+	// Keep archived repositories archived while allowing a catalog observation to
+	// activate known repositories. Performing the update separately avoids an
+	// ambiguous target-column reference in PostgreSQL's ON CONFLICT clause.
+	if _, err := s.db.NewUpdate().Model((*repositoryModel)(nil)).
+		Set("status = ?", repository.Status).
+		Set("updated_at = ?", repository.UpdatedAt).
+		Where("project_id = ?", repository.ProjectID.String()).
+		Where("name = ?", repository.Name).
+		Where("status <> ?", constants.RepositoryStatusArchived).
+		Exec(ctx); err != nil {
+		return err
+	}
+	_, err := s.db.NewInsert().Model(model).On("CONFLICT (project_id, name) DO NOTHING").Exec(ctx)
 	return err
 }
 
