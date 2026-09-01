@@ -116,22 +116,13 @@ func migrateDatabase(
 
 func Checkpoint(ctx context.Context, db *bun.DB, kind Kind) error {
 	if kind == Postgres {
-		_, err := db.ExecContext(ctx, "CHECKPOINT")
-		if err != nil {
-			return fmt.Errorf("checkpoint postgres database: %w", err)
-		}
 		return nil
 	}
 	if kind != SQLite {
 		return fmt.Errorf("unsupported database kind")
 	}
-	var busy, logFrames, checkpointedFrames int
-	if err := db.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").
-		Scan(&busy, &logFrames, &checkpointedFrames); err != nil {
+	if _, err := db.ExecContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
 		return fmt.Errorf("checkpoint sqlite database: %w", err)
-	}
-	if busy != 0 {
-		return fmt.Errorf("checkpoint sqlite database: database remained busy")
 	}
 	return nil
 }

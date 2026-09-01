@@ -56,8 +56,13 @@ sequenceDiagram
 ~~~
 
 During maintenance, Grom drains writes and blocks management mutations, token
-exchange, and registry traffic that could change durable state. Distribution's
-upload purge remains disabled during that window.
+exchange, and registry traffic that could change durable state. The SQLite
+checkpoint is non-blocking, so WAL frames retained by an already-running read
+are included with the database in Grom data. The recovery point therefore
+remains consistent without interrupting a read-only request. PostgreSQL uses
+the internally consistent snapshot from `pg_dump` and does not require the
+application database role to hold the administrative `pg_checkpoint` privilege.
+Distribution's upload purge remains disabled during that window.
 
 The agent uses the same Grom image, has no network or published ports, reads
 source volumes only, and talks to Grom through its dedicated Unix socket. For

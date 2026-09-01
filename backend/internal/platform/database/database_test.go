@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -75,6 +76,64 @@ func TestSQLiteFileMigrationLockSerializesAndTimesOut(t *testing.T) {
 		t.Fatalf("expected lock acquisition after release: %v", err)
 	}
 	secondUnlock()
+}
+
+func TestCheckpointAllowsSQLiteReadersWhoseWALFramesWillBeArchived(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "grom.db")
+	db, kind, err := Open(ctx, "sqlite://"+dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode = WAL"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, "CREATE TABLE recovery_points (id INTEGER PRIMARY KEY)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO recovery_points (id) VALUES (1)"); err != nil {
+		t.Fatal(err)
+	}
+
+	reader, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Rollback() }()
+	var id int
+	if err := reader.QueryRowContext(ctx, "SELECT id FROM recovery_points").Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO recovery_points (id) VALUES (2)"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Checkpoint(ctx, db, kind); err != nil {
+		t.Fatalf("checkpoint with an active reader: %v", err)
+	}
+}
+
+func TestCheckpointDoesNotRequirePostgresAdministrativePrivileges(t *testing.T) {
+	if err := Checkpoint(context.Background(), nil, Postgres); err != nil {
+		t.Fatalf("postgres checkpoint preparation: %v", err)
+	}
+}
+
+func TestCheckpointReportsSQLiteExecutionFailure(t *testing.T) {
+	db, kind, err := Open(context.Background(), "sqlite://file:checkpoint-failure?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	err = Checkpoint(context.Background(), db, kind)
+	if err == nil || !strings.Contains(err.Error(), "checkpoint sqlite database") {
+		t.Fatalf("expected checkpoint failure, got %v", err)
+	}
 }
 
 func TestPostgresMigrationLockSerializesAndRecovers(t *testing.T) {
