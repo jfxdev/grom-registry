@@ -120,36 +120,44 @@ describe('AuditLogPage', () => {
   })
 
   it('passes RFC3339 time bounds derived from the calendar pickers', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'))
     const wrapper = mountPage()
-    await flushPromises()
+    try {
+      await flushPromises()
 
-    await wrapper.get('button[aria-label="Choose from date"]').trigger('click')
-    expect(document.querySelector('[aria-label="Choose a from date"]')?.closest('.table-shell')).toBeNull()
-    const fromDateButton = document.querySelector<HTMLButtonElement>('button[aria-label="Wednesday, August 19, 2026"]')
-    expect(fromDateButton).not.toBeNull()
-    fromDateButton!.click()
-    await flushPromises()
+      await wrapper.get('button[aria-label="Choose from date"]').trigger('click')
+      expect(document.querySelector('[aria-label="Choose a from date"]')?.closest('.table-shell')).toBeNull()
+      const fromDateButton = document.querySelector<HTMLButtonElement>('button[aria-label="Wednesday, August 19, 2026"]')
+      expect(fromDateButton).not.toBeNull()
+      fromDateButton!.click()
+      await flushPromises()
 
-    await wrapper.get('button[aria-label="Choose to date"]').trigger('click')
-    const toDateButton = document.querySelector<HTMLButtonElement>('button[aria-label="Thursday, August 20, 2026"]')
-    expect(toDateButton).not.toBeNull()
-    toDateButton!.click()
-    await flushPromises()
+      await wrapper.get('button[aria-label="Choose to date"]').trigger('click')
+      const toDateButton = document.querySelector<HTMLButtonElement>('button[aria-label="Thursday, August 20, 2026"]')
+      expect(toDateButton).not.toBeNull()
+      toDateButton!.click()
+      await flushPromises()
 
-    const [filters] = mocks.listAuditEvents.mock.calls.at(-1)!
-    expect(filters.from).toBe('2026-08-19T00:00:00.000Z')
-    // `to` is exclusive, so the end date advances to the next day's start.
-    expect(filters.to).toBe('2026-08-21T00:00:00.000Z')
+      const [filters] = mocks.listAuditEvents.mock.calls.at(-1)!
+      expect(filters.from).toBe('2026-08-19T00:00:00.000Z')
+      // `to` is exclusive, so the end date advances to the next day's start.
+      expect(filters.to).toBe('2026-08-21T00:00:00.000Z')
 
-    // The picker reflects the chosen dates and offers a way to clear them.
-    expect(wrapper.get('button[aria-label="Choose from date"]').text()).toContain('8/19/2026')
-    const fromDateGroup = wrapper.get('[aria-label="From date filter"]')
-    expect(fromDateGroup.attributes('role')).toBe('group')
-    const clearFromDate = wrapper.get('button[aria-label="Clear from date"]')
-    expect(clearFromDate.classes()).toContain('grom-button-variant-delete')
-    await clearFromDate.trigger('click')
-    await flushPromises()
-    expect(mocks.listAuditEvents.mock.calls.at(-1)![0].from).toBeUndefined()
+      // The picker reflects the chosen dates and offers a way to clear them.
+      expect(wrapper.get('button[aria-label="Choose from date"]').text()).toContain('8/19/2026')
+      const fromDateGroup = wrapper.get('[aria-label="From date filter"]')
+      expect(fromDateGroup.attributes('role')).toBe('group')
+      const clearFromDate = wrapper.get('button[aria-label="Clear from date"]')
+      expect(clearFromDate.classes()).toContain('grom-button-variant-delete')
+      await clearFromDate.trigger('click')
+      await flushPromises()
+      expect(mocks.listAuditEvents.mock.calls.at(-1)![0].from).toBeUndefined()
+    }
+    finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
   })
 
   it('opens a detail dialog with the full event when a row is clicked', async () => {

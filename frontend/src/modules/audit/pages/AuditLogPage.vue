@@ -130,6 +130,7 @@ function metadataDetail(event: AuditEvent): string {
                   <Calendar
                     :model-value="fromDate"
                     :default-placeholder="fromDate ?? calendarPlaceholder"
+                    :max-value="toDate"
                     @update:model-value="(value) => { fromDate = value; close() }"
                   />
                 </template>

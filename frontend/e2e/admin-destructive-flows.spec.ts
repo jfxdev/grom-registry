@@ -90,13 +90,16 @@ test('an administrator executes a reviewed retention lifecycle through the publi
   const second = await pushImage(runtime, account.username, account.secret, { project: 'lifecycle', repository: 'app', tag: 'v2', variant: 'b' })
   try {
     await openRepository(page, runtime.publicURL, 'lifecycle', 'app')
-    await page.getByRole('button', { name: 'Policies' }).click()
+    const policiesPanel = page.locator('.repo-panel').filter({ has: page.getByRole('heading', { name: 'Policies', exact: true }) })
+    await policiesPanel.getByRole('button', { name: 'Manage' }).click()
     const policies = page.getByRole('dialog', { name: 'Policies for app' })
-    await policies.getByRole('button', { name: 'Toggle options' }).click()
+    await policies.getByRole('combobox', { name: 'Select policy type' }).focus()
     await policies.getByRole('option', { name: 'Retention' }).click()
     await policies.getByRole('button', { name: 'Add policy' }).click()
-    await policies.getByLabel('Expire after days').fill('')
-    await policies.getByLabel('Keep last').fill('1')
+    const retentionPolicy = policies.locator('.policy-card').filter({ hasText: 'Retention' })
+    await retentionPolicy.getByRole('checkbox', { name: 'Enable expire after days' }).uncheck()
+    await retentionPolicy.getByRole('checkbox', { name: 'Enable untagged grace days' }).uncheck()
+    await retentionPolicy.locator('input[type="number"]').nth(1).fill('1')
     const [policyResponse] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === 'PUT' && response.url().includes('/policies')),
       policies.getByRole('button', { name: 'Save policies' }).click(),
