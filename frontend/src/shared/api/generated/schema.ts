@@ -2221,6 +2221,8 @@ export interface operations {
             /** @description Matching repositories across all projects */
             200: {
                 headers: {
+                    /** @description Always "no-store"; cross-project search results must not be cached. */
+                    "Cache-Control": "no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2966,6 +2968,7 @@ type ReadonlyArray<T> = [
     unknown[]
 ] ? Readonly<Exclude<T, undefined>> : Readonly<Exclude<T, undefined>[]>;
 export const pathsApiV1ServiceAccountsGetParametersQueryStatusValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/service-accounts"]["get"]["parameters"]["query"]["status"]> = ["active", "disabled", "all"];
+export const pathsApiV1RepositoriesGetResponses200HeadersCacheControlValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/repositories"]["get"]["responses"]["200"]["headers"]["Cache-Control"]> = ["no-store"];
 export const deploymentProfileValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Deployment"]["profile"]> = ["development", "permissive", "strict"];
 export const installationStatusDatabaseValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["database"]> = ["sqlite", "postgres"];
 export const installationStatusDistributionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["distribution"]> = ["available", "unavailable"];

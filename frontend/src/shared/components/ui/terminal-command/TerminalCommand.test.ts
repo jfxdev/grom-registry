@@ -28,9 +28,9 @@ describe('TerminalCommand', () => {
   })
 
   it('ignores a stale copy completion when the command changes mid-flight', async () => {
-    let resolveFirst: (result: string) => void = () => {}
+    let resolveFirst: () => void = () => {}
     const writeText = vi.fn()
-      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { resolveFirst = resolve }))
       .mockResolvedValueOnce(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     const wrapper = mount(TerminalCommand, {
@@ -40,7 +40,7 @@ describe('TerminalCommand', () => {
     const button = wrapper.get('button[aria-label="Copy command"]')
     await button.trigger('click')
     await wrapper.setProps({ command: 'second command' })
-    resolveFirst(undefined)
+    resolveFirst()
     await flushPromises()
 
     expect(wrapper.get('button[aria-label="Copy command"]').text()).not.toContain('Copied')
