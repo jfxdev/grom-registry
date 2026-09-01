@@ -106,7 +106,7 @@ func TestPostgresMigrationLockSerializesAndRecovers(t *testing.T) {
 		}
 	}()
 
-	_, err = migrationLock(ctx, db, kind, databaseURL, 25*time.Millisecond)
+	_, err = migrationLock(ctx, db, kind, databaseURL, time.Second)
 	if err == nil || !strings.Contains(err.Error(), "migration lock timeout") {
 		t.Fatalf("expected postgres migration lock timeout, got %v", err)
 	}
