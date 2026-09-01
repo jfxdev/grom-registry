@@ -2,7 +2,7 @@
 
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import AuditLogPage from './AuditLogPage.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -58,6 +58,10 @@ function mountPage() {
 }
 
 describe('AuditLogPage', () => {
+  beforeAll(() => {
+    HTMLElement.prototype.scrollIntoView = () => {}
+  })
+
   beforeEach(() => {
     mocks.listAuditEvents.mockReset()
     mocks.listAuditEvents.mockImplementation((filters: { action?: string } = {}, cursor = '') => {
@@ -95,7 +99,15 @@ describe('AuditLogPage', () => {
     await flushPromises()
     expect(mocks.listAuditEvents).toHaveBeenLastCalledWith(expect.any(Object), 'next-page')
 
-    await wrapper.get('select[aria-label="Filter by action"]').setValue('identity.login_succeeded')
+    const actionSearch = wrapper.get('input[aria-label="Filter by action"]')
+    await actionSearch.trigger('focus')
+    await new Promise((resolve) => window.setTimeout(resolve, 0))
+    await actionSearch.setValue('login_succeeded')
+    await flushPromises()
+    const loginSucceeded = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))
+      .find((option) => option.textContent?.includes('identity.login_succeeded'))
+    expect(loginSucceeded).toBeDefined()
+    loginSucceeded!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     await flushPromises()
 
     const [filters, cursor] = mocks.listAuditEvents.mock.calls.at(-1)!
@@ -107,18 +119,45 @@ describe('AuditLogPage', () => {
     expect(rows[0]!.text()).not.toContain('projects.project_created')
   })
 
-  it('passes RFC3339 time bounds derived from the date inputs', async () => {
+  it('passes RFC3339 time bounds derived from the calendar pickers', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'))
     const wrapper = mountPage()
-    await flushPromises()
+    try {
+      await flushPromises()
 
-    await wrapper.get('input[aria-label="From date"]').setValue('2026-08-19')
-    await wrapper.get('input[aria-label="To date"]').setValue('2026-08-20')
-    await flushPromises()
+      await wrapper.get('button[aria-label="Choose from date"]').trigger('click')
+      expect(document.querySelector('[aria-label="Choose a from date"]')?.closest('.table-shell')).toBeNull()
+      const fromDateButton = document.querySelector<HTMLButtonElement>('button[aria-label="Wednesday, August 19, 2026"]')
+      expect(fromDateButton).not.toBeNull()
+      fromDateButton!.click()
+      await flushPromises()
 
-    const [filters] = mocks.listAuditEvents.mock.calls.at(-1)!
-    expect(filters.from).toBe('2026-08-19T00:00:00.000Z')
-    // `to` is exclusive, so the end date advances to the next day's start.
-    expect(filters.to).toBe('2026-08-21T00:00:00.000Z')
+      await wrapper.get('button[aria-label="Choose to date"]').trigger('click')
+      const toDateButton = document.querySelector<HTMLButtonElement>('button[aria-label="Thursday, August 20, 2026"]')
+      expect(toDateButton).not.toBeNull()
+      toDateButton!.click()
+      await flushPromises()
+
+      const [filters] = mocks.listAuditEvents.mock.calls.at(-1)!
+      expect(filters.from).toBe('2026-08-19T00:00:00.000Z')
+      // `to` is exclusive, so the end date advances to the next day's start.
+      expect(filters.to).toBe('2026-08-21T00:00:00.000Z')
+
+      // The picker reflects the chosen dates and offers a way to clear them.
+      expect(wrapper.get('button[aria-label="Choose from date"]').text()).toContain('8/19/2026')
+      const fromDateGroup = wrapper.get('[aria-label="From date filter"]')
+      expect(fromDateGroup.attributes('role')).toBe('group')
+      const clearFromDate = wrapper.get('button[aria-label="Clear from date"]')
+      expect(clearFromDate.classes()).toContain('grom-button-variant-delete')
+      await clearFromDate.trigger('click')
+      await flushPromises()
+      expect(mocks.listAuditEvents.mock.calls.at(-1)![0].from).toBeUndefined()
+    }
+    finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
   })
 
   it('opens a detail dialog with the full event when a row is clicked', async () => {

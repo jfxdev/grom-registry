@@ -131,6 +131,7 @@ describe('ProjectPage membership management', () => {
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   beforeEach(() => {
@@ -290,6 +291,47 @@ describe('ProjectPage membership management', () => {
     expect(screen.getByRole('dialog', { name: 'Manifest details' })).toBeTruthy()
     expect(screen.getAllByText('Active')).not.toHaveLength(0)
     expect(screen.getByText('sha256:subject')).toBeTruthy()
+  })
+
+  it('summarizes policies, latest push provenance, and push instructions', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-31T12:00:00Z'))
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'push', profile: 'container_image', profileSource: 'inferred', profileConfidence: 'high',
+      profileNeedsReview: false, policyVersion: 5, createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+      policies: [
+        { id: 'retention', type: 'retention', enabled: true, tagPatterns: ['pr-*'], expireAfterDays: 30, expireAfterDaysEnabled: true, keepLast: 5, keepLastEnabled: true, untaggedGraceDays: 7, untaggedGraceDaysEnabled: true },
+        { id: 'protection', type: 'tag_protection', enabled: true, tagPatterns: ['stable'], preventDeletion: true, preventOverwrite: true, excludeFromLifecycle: true },
+        { id: 'immutable', type: 'immutability', enabled: true, tagPatterns: ['v*'], preventOverwrite: true },
+        { id: 'naming', type: 'tag_naming', enabled: true, allowedPatterns: ['latest', 'v*'] },
+        { id: 'deletion', type: 'manual_deletion', enabled: true, requireReason: true },
+      ],
+    }])
+    mocks.listTags.mockResolvedValue({ name: 'payments/api', tags: ['stable'] })
+    mocks.listInventory.mockResolvedValue([{
+      id: 'manifest-1', digest: 'sha256:stable', mediaType: '', artifactType: '', subjectDigest: '',
+      observedKind: 'container_image', artifactRelationship: 'primary', classificationSource: 'inferred', classificationConfidence: 'high',
+      manifestSize: 42, state: 'active', firstSeenAt: '2026-07-29T00:00:00Z', lastSeenAt: '2026-08-30T12:00:00Z',
+      lastPushedAt: '2026-08-30T12:00:00Z', lastPushedBy: 'release-bot', tags: ['stable'],
+    }])
+    mocks.repositoryId = 'repository-1'
+
+    renderPage()
+
+    expect(await screen.findByLabelText('Repository overview')).toBeTruthy()
+    expect(await screen.findByText('stable')).toBeTruthy()
+    expect(await screen.findByText('Last pushed 1 day ago by release-bot')).toBeTruthy()
+    expect(screen.getByText('Removes tags matching pr-* older than 30 days. Always keeps the last 5 tags matching pr-*. Cleans untagged images after 7 days.')).toBeTruthy()
+    expect(screen.getByText('Protects tags matching stable from deletion, overwrite, automatic lifecycle cleanup.')).toBeTruthy()
+    expect(screen.getByText('Blocks tag overwrite for tags matching v*.')).toBeTruthy()
+    expect(screen.getByText('Only allows tags matching latest, v*.')).toBeTruthy()
+    expect(screen.getByText('Requires a reason before manual deletion.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeTruthy()
+
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Instructions' })[0]!)
+    expect(screen.getByRole('dialog', { name: 'Push instructions' })).toBeTruthy()
+    expect(screen.getByText('Push an image')).toBeTruthy()
   })
 
   it('renders an untagged manifest when a stale response contains null tags', async () => {

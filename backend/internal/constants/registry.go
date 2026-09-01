@@ -61,7 +61,7 @@ const (
 	LifecycleDecisionEligible = "eligible"
 	LifecycleDecisionRetained = "retained"
 	LifecycleDecisionBlocked  = "blocked"
-	LifecycleEvaluatorVersion = 1
+	LifecycleEvaluatorVersion = 2
 
 	LifecyclePreviewReady     = "ready"
 	LifecyclePreviewExecuting = "executing"

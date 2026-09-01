@@ -96,8 +96,8 @@ func (s *Store) upsertManifestObservationTx(
 		ClassificationSource:     observation.ClassificationSource,
 		ClassificationConfidence: observation.ClassificationConfidence,
 		ManifestSize:             observation.ManifestSize, State: constants.InventoryStateUntagged,
-		FirstSeenAt: observedAt, LastPushedAt: observation.PushedAt, LastSeenAt: observedAt,
-		UntaggedAt: &observedAt,
+		FirstSeenAt: observedAt, LastPushedAt: observation.PushedAt, LastPushedBy: observation.PushedBy,
+		LastSeenAt: observedAt, UntaggedAt: &observedAt,
 	}
 	manifestInsert := tx.NewInsert().Model(model).
 		On("CONFLICT (repository_id, digest) DO UPDATE").
@@ -112,7 +112,8 @@ func (s *Store) upsertManifestObservationTx(
 		Set("last_seen_at = EXCLUDED.last_seen_at").
 		Set("deleted_at = NULL")
 	if observation.PushedAt != nil {
-		manifestInsert = manifestInsert.Set("last_pushed_at = EXCLUDED.last_pushed_at")
+		manifestInsert = manifestInsert.Set("last_pushed_at = EXCLUDED.last_pushed_at").
+			Set("last_pushed_by = EXCLUDED.last_pushed_by")
 	}
 	if err := manifestInsert.Returning("id").Scan(ctx, &model.ID); err != nil {
 		return err
@@ -348,7 +349,7 @@ func (s *Store) manifestInventoryFromModels(ctx context.Context, repositoryID fo
 		if platforms == nil {
 			platforms = []registrydomain.ManifestPlatform{}
 		}
-		result = append(result, registrydomain.ManifestInventory{ID: foundation.ID(m.ID), RepositoryID: repositoryID, Digest: m.Digest, MediaType: m.MediaType, ArtifactType: m.ArtifactType, SubjectDigest: m.SubjectDigest, ObservedKind: m.ObservedKind, ArtifactRelationship: m.ArtifactRelationship, ClassificationSource: m.ClassificationSource, ClassificationConfidence: m.ClassificationConfidence, ManifestSize: m.ManifestSize, Platforms: platforms, Tags: tags, State: m.State, FirstSeenAt: m.FirstSeenAt, LastPushedAt: m.LastPushedAt, LastSeenAt: m.LastSeenAt, UntaggedAt: m.UntaggedAt, DeletedAt: m.DeletedAt})
+		result = append(result, registrydomain.ManifestInventory{ID: foundation.ID(m.ID), RepositoryID: repositoryID, Digest: m.Digest, MediaType: m.MediaType, ArtifactType: m.ArtifactType, SubjectDigest: m.SubjectDigest, ObservedKind: m.ObservedKind, ArtifactRelationship: m.ArtifactRelationship, ClassificationSource: m.ClassificationSource, ClassificationConfidence: m.ClassificationConfidence, ManifestSize: m.ManifestSize, Platforms: platforms, Tags: tags, State: m.State, FirstSeenAt: m.FirstSeenAt, LastPushedAt: m.LastPushedAt, LastPushedBy: m.LastPushedBy, LastSeenAt: m.LastSeenAt, UntaggedAt: m.UntaggedAt, DeletedAt: m.DeletedAt})
 	}
 	return result, nil
 }

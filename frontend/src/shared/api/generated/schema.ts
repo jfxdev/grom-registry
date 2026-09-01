@@ -1020,8 +1020,14 @@ export interface components {
             /** @default false */
             excludeFromLifecycle: boolean;
             expireAfterDays?: number;
+            /** @description Whether expiration by age is active. When omitted, existing policies infer it from expireAfterDays. */
+            expireAfterDaysEnabled?: boolean;
             keepLast?: number;
+            /** @description Whether retaining the newest artifacts is active. When omitted, existing policies infer it from keepLast. */
+            keepLastEnabled?: boolean;
             untaggedGraceDays?: number;
+            /** @description Whether untagged artifact cleanup is active. When omitted, existing policies infer it from untaggedGraceDays. */
+            untaggedGraceDaysEnabled?: boolean;
             allowedPatterns?: string[];
             /** @default false */
             requireReason: boolean;
@@ -1172,6 +1178,7 @@ export interface components {
             firstSeenAt: string;
             /** Format: date-time */
             lastPushedAt?: string | null;
+            lastPushedBy?: string;
             /** Format: date-time */
             lastSeenAt: string;
             /** Format: date-time */

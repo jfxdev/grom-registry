@@ -14,6 +14,8 @@ const dialog = ref<{
 } | null>(null)
 const previousFocusedElement = ref<globalThis.HTMLElement | null>(null)
 
+defineExpose({ element: dialog })
+
 function requestClose() {
   emit('close')
 }

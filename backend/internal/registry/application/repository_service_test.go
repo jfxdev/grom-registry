@@ -108,6 +108,29 @@ func TestEvaluateDeletionDeterminesReasonRequirementBeforeProtection(t *testing.
 	}
 }
 
+func TestValidateRetentionPolicyRequiresOnlyEnabledCriteria(t *testing.T) {
+	three := 3
+	policy := registrydomain.Policy{
+		Type: constants.RepositoryPolicyRetention, Enabled: true,
+		KeepLast: &three, KeepLastEnabled: boolPointer(true),
+		ExpireAfterDaysEnabled: boolPointer(false), UntaggedGraceDaysEnabled: boolPointer(false),
+	}
+	if err := validatePolicy(&policy); err != nil {
+		t.Fatalf("expected keep-last-only policy to be valid: %v", err)
+	}
+
+	policy.KeepLast = nil
+	if err := validatePolicy(&policy); err == nil {
+		t.Fatal("expected an enabled criterion without a limit to be rejected")
+	}
+
+	policy.Enabled = false
+	policy.KeepLastEnabled = boolPointer(false)
+	if err := validatePolicy(&policy); err != nil {
+		t.Fatalf("expected a disabled retention policy without active criteria to be valid: %v", err)
+	}
+}
+
 func TestArchiveUnarchiveThenRemoveEmptyRepository(t *testing.T) {
 	projectID := foundation.ID("project")
 	repositoryID := foundation.ID("repository")

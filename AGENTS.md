@@ -110,9 +110,10 @@ checkout, verifies the final image declares the non-root `grom` user, and
 checks health, readiness, API documentation, and the registry bearer challenge
 through an isolated public Compose stack.
 `.github/workflows/release.yml` runs only for an existing stable
-`vMAJOR.MINOR.PATCH` tag, publishes the exact image to GHCR,
-and creates a GitHub Release with its digest reference, SPDX SBOM, Trivy report,
-and checksums. It uses the repository `GITHUB_TOKEN`; do not replace it with a
+`vMAJOR.MINOR.PATCH` tag, publishes the application image and the dedicated
+`grom-registry-maintenance:vMAJOR.MINOR.PATCH` image to GHCR, and creates a
+GitHub Release with both digest references, SPDX SBOMs, Trivy reports, and
+checksums. It uses the repository `GITHUB_TOKEN`; do not replace it with a
 long-lived registry credential or make a mutable image tag the canonical
 deployment reference.
 `OpenAPI Compatibility` uses a commit-pinned `oasdiff` action to compare a

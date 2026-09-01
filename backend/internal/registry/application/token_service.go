@@ -171,6 +171,14 @@ func (s *TokenService) HasAccess(rawToken, repository, action string) bool {
 	return claimsHasAccess(&claims, repository, action)
 }
 
+func (s *TokenService) Subject(rawToken string) (string, bool) {
+	var claims RegistryClaims
+	if err := s.signer.Verify(rawToken, &claims, s.issuer, s.service); err != nil {
+		return "", false
+	}
+	return claims.Subject, true
+}
+
 func claimsHasAccess(claims *RegistryClaims, repository, action string) bool {
 	for _, access := range claims.Access {
 		if access.Type == "repository" && access.Name == repository && containsAction(access.Actions, action) {

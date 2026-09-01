@@ -20,6 +20,7 @@ defineProps<{
   modelValue?: DateValue
   defaultPlaceholder: DateValue
   minValue?: DateValue
+  maxValue?: DateValue
 }>()
 
 defineEmits<{ 'update:modelValue': [value: DateValue | undefined] }>()
@@ -32,6 +33,7 @@ defineEmits<{ 'update:modelValue': [value: DateValue | undefined] }>()
     :model-value="modelValue"
     :default-placeholder="defaultPlaceholder"
     :min-value="minValue"
+    :max-value="maxValue"
     fixed-weeks
     initial-focus
     @update:model-value="$emit('update:modelValue', $event)"

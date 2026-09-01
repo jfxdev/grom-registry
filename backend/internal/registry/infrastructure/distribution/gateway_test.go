@@ -42,9 +42,9 @@ func TestGatewayPreservesPublicForwardingHeaders(t *testing.T) {
 func TestGatewayLogsManifestObservationFailureWithoutChangingResponse(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
-	modifyResponse := manifestObservationResponseModifier(func(_ context.Context, repository, reference, digest string) error {
-		if repository != "project/repository" || reference != "sha256:request" || digest != "sha256:observed" {
-			t.Fatalf("unexpected observation context: %q %q %q", repository, reference, digest)
+	modifyResponse := manifestObservationResponseModifier(nil, func(_ context.Context, repository, reference, digest, actor string) error {
+		if repository != "project/repository" || reference != "sha256:request" || digest != "sha256:observed" || actor != "" {
+			t.Fatalf("unexpected observation context: %q %q %q %q", repository, reference, digest, actor)
 		}
 		return errors.New("inventory unavailable")
 	}, logger)

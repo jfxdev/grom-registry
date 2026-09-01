@@ -21,16 +21,18 @@ test('an administrator completes the first-push journey through the public UI', 
     await expect(projectAccounting).toContainText(/\b\d+(?:[.,]\d+)?\s(?:B|KB|MB|GB)\b/)
     expect(parseDisplayedUsageBytes(await projectAccounting.textContent())).toBeGreaterThan(0)
     await page.getByRole('button', { name: /app/ }).click()
-    const repositoryAccounting = page.locator('.repository-detail p').filter({ hasText: 'Accounted registry usage:' })
-    await expect(repositoryAccounting).toContainText('Accounted registry usage:')
+    const repositoryOverview = page.locator('[aria-label="Repository overview"]')
+    const repositoryAccounting = repositoryOverview.locator('.overview-card').filter({ hasText: 'Accounted usage' })
+    await expect(repositoryAccounting).toContainText('Accounted usage')
     await expect(repositoryAccounting).not.toContainText('Accounting pending')
     await expect(repositoryAccounting).not.toContainText('Accounting unavailable')
     await expect(repositoryAccounting).not.toContainText('stale')
-    await expect(repositoryAccounting).toContainText(/\b\d+(?:[.,]\d+)?\s(?:B|KB|MB|GB)\b/)
+    await expect(repositoryAccounting).toContainText(/\d+(?:[.,]\d+)?\s(?:B|KB|MB|GB)/)
     expect(parseDisplayedUsageBytes(await repositoryAccounting.textContent())).toBeGreaterThan(0)
     await expect(page.getByText('v1', { exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Manifest inventory' })).toBeVisible()
-    await page.locator('.operation-history [role="button"]').first().click()
+    const manifestInventory = page.locator('.accordion').filter({ hasText: 'Manifest inventory' })
+    await expect(manifestInventory).toBeVisible()
+    await manifestInventory.getByRole('button').filter({ hasText: digest }).click()
     const manifestDialog = page.getByRole('dialog', { name: 'Manifest details' })
     await expect(manifestDialog).toContainText('v1')
     await expect(manifestDialog).toContainText(digest)
@@ -41,7 +43,7 @@ test('an administrator completes the first-push journey through the public UI', 
 
 function parseDisplayedUsageBytes(text: string | null): number {
   if (!text) throw new Error('accounting text was not rendered')
-  const match = text.match(/\b(\d+(?:[.,]\d+)?)\s(B|KB|MB|GB)\b/)
+  const match = text.match(/(\d+(?:[.,]\d+)?)\s(B|KB|MB|GB)/)
   if (!match) throw new Error(`accounting text has no byte value: ${text}`)
   const multipliers: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3 }
   return Number(match[1].replace(',', '.')) * multipliers[match[2]]

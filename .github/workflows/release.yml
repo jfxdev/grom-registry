@@ -22,6 +22,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  MAINTENANCE_IMAGE_NAME: ${{ github.repository }}-maintenance
 
 jobs:
   release:
@@ -165,6 +166,23 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - name: Build and publish registry maintenance image
+        id: maintenance-image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          target: registry-maintenance
+          push: true
+          build-args: GROM_VERSION=${{ steps.release.outputs.version }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.MAINTENANCE_IMAGE_NAME }}:${{ steps.release.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+          provenance: mode=max
+          sbom: true
+
       - name: Prepare release assets
         shell: bash
         run: mkdir -p release-assets
@@ -179,6 +197,16 @@ jobs:
           ignore-unfixed: true
           exit-code: "0"
 
+      - name: Scan published registry maintenance image
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.MAINTENANCE_IMAGE_NAME }}@${{ steps.maintenance-image.outputs.digest }}
+          format: table
+          output: release-assets/grom-registry-maintenance-${{ steps.release.outputs.version }}.trivy.txt
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
       - name: Generate SPDX SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
@@ -188,20 +216,35 @@ jobs:
           upload-artifact: false
           upload-release-assets: false
 
+      - name: Generate registry maintenance SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.MAINTENANCE_IMAGE_NAME }}@${{ steps.maintenance-image.outputs.digest }}
+          format: spdx-json
+          output-file: release-assets/grom-registry-maintenance-${{ steps.release.outputs.version }}.sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
       - name: Create checksums
         shell: bash
         env:
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          MAINTENANCE_IMAGE_DIGEST: ${{ steps.maintenance-image.outputs.digest }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           image_ref="${REGISTRY}/${IMAGE_NAME}@${IMAGE_DIGEST}"
+          maintenance_image_ref="${REGISTRY}/${MAINTENANCE_IMAGE_NAME}@${MAINTENANCE_IMAGE_DIGEST}"
           printf '%s\n' "${image_ref}" > "release-assets/grom-${VERSION}.image-digest.txt"
+          printf '%s\n' "${maintenance_image_ref}" > "release-assets/grom-registry-maintenance-${VERSION}.image-digest.txt"
           (
             cd release-assets
             sha256sum "grom-${VERSION}.image-digest.txt" \
               "grom-${VERSION}.sbom.spdx.json" \
-              "grom-${VERSION}.trivy.txt" > checksums.sha256
+              "grom-${VERSION}.trivy.txt" \
+              "grom-registry-maintenance-${VERSION}.image-digest.txt" \
+              "grom-registry-maintenance-${VERSION}.sbom.spdx.json" \
+              "grom-registry-maintenance-${VERSION}.trivy.txt" > checksums.sha256
           )
 
       - name: Upload release assets and publish draft

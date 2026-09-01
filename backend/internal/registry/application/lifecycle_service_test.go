@@ -258,6 +258,89 @@ func TestEvaluateLifecycleRequiresRetentionPolicy(t *testing.T) {
 	}
 }
 
+func TestEvaluateLifecycleHonorsIndependentRetentionCriteria(t *testing.T) {
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	seven, thirty, three, two := 7, 30, 3, 2
+	policies := []registrydomain.Policy{
+		{
+			Type: constants.RepositoryPolicyRetention, Enabled: true, TagPatterns: []string{"dev-*"},
+			ExpireAfterDays: &seven, ExpireAfterDaysEnabled: boolPointer(true),
+			KeepLast: &three, KeepLastEnabled: boolPointer(false),
+			UntaggedGraceDays: &two, UntaggedGraceDaysEnabled: boolPointer(false),
+		},
+		{
+			Type: constants.RepositoryPolicyRetention, Enabled: true, TagPatterns: []string{"prd-*"},
+			ExpireAfterDays: &thirty, ExpireAfterDaysEnabled: boolPointer(false),
+			KeepLast: &three, KeepLastEnabled: boolPointer(true),
+			UntaggedGraceDays: &two, UntaggedGraceDaysEnabled: boolPointer(false),
+		},
+	}
+	at := func(days int) *time.Time {
+		value := now.Add(-time.Duration(days) * 24 * time.Hour)
+		return &value
+	}
+	inventory := []registrydomain.ManifestInventory{
+		{ID: foundation.NewID(), Digest: "sha256:dev-old", Tags: []string{"dev-old"}, State: constants.InventoryStateActive, FirstSeenAt: *at(8), LastPushedAt: at(8)},
+		{ID: foundation.NewID(), Digest: "sha256:dev-new", Tags: []string{"dev-new"}, State: constants.InventoryStateActive, FirstSeenAt: *at(6), LastPushedAt: at(6)},
+		{ID: foundation.NewID(), Digest: "sha256:prd-1", Tags: []string{"prd-1"}, State: constants.InventoryStateActive, FirstSeenAt: *at(40), LastPushedAt: at(40)},
+		{ID: foundation.NewID(), Digest: "sha256:prd-2", Tags: []string{"prd-2"}, State: constants.InventoryStateActive, FirstSeenAt: *at(30), LastPushedAt: at(30)},
+		{ID: foundation.NewID(), Digest: "sha256:prd-3", Tags: []string{"prd-3"}, State: constants.InventoryStateActive, FirstSeenAt: *at(20), LastPushedAt: at(20)},
+		{ID: foundation.NewID(), Digest: "sha256:prd-4", Tags: []string{"prd-4"}, State: constants.InventoryStateActive, FirstSeenAt: *at(10), LastPushedAt: at(10)},
+	}
+
+	items, err := evaluateLifecycle(policies, inventory, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisions := make(map[string]string, len(items))
+	for _, item := range items {
+		decisions[item.Digest] = item.Decision
+	}
+	expected := map[string]string{
+		"sha256:dev-old": constants.LifecycleDecisionEligible,
+		"sha256:dev-new": constants.LifecycleDecisionRetained,
+		"sha256:prd-1":   constants.LifecycleDecisionEligible,
+		"sha256:prd-2":   constants.LifecycleDecisionRetained,
+		"sha256:prd-3":   constants.LifecycleDecisionRetained,
+		"sha256:prd-4":   constants.LifecycleDecisionRetained,
+	}
+	for digest, want := range expected {
+		if got := decisions[digest]; got != want {
+			t.Errorf("%s: want %s, got %s", digest, want, got)
+		}
+	}
+}
+
+func TestEvaluateLifecycleDoesNotSelectTaggedArtifactsForUntaggedOnlyCriterion(t *testing.T) {
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	two := 2
+	policies := []registrydomain.Policy{{
+		Type: constants.RepositoryPolicyRetention, Enabled: true,
+		UntaggedGraceDays: &two, UntaggedGraceDaysEnabled: boolPointer(true),
+		ExpireAfterDaysEnabled: boolPointer(false), KeepLastEnabled: boolPointer(false),
+	}}
+	old := now.Add(-3 * 24 * time.Hour)
+	inventory := []registrydomain.ManifestInventory{
+		{ID: foundation.NewID(), Digest: "sha256:tagged", Tags: []string{"stable"}, State: constants.InventoryStateActive, FirstSeenAt: old, LastPushedAt: &old},
+		{ID: foundation.NewID(), Digest: "sha256:untagged", State: constants.InventoryStateUntagged, FirstSeenAt: old, UntaggedAt: &old},
+	}
+
+	items, err := evaluateLifecycle(policies, inventory, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisions := map[string]string{}
+	for _, item := range items {
+		decisions[item.Digest] = item.Decision
+	}
+	if decisions["sha256:tagged"] != constants.LifecycleDecisionRetained {
+		t.Fatalf("tagged artifact = %s, want retained", decisions["sha256:tagged"])
+	}
+	if decisions["sha256:untagged"] != constants.LifecycleDecisionEligible {
+		t.Fatalf("untagged artifact = %s, want eligible", decisions["sha256:untagged"])
+	}
+}
+
 func TestEvaluateLifecycleIgnoresProtectionWithoutTagPatterns(t *testing.T) {
 	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
 	expireAfterDays := 1
