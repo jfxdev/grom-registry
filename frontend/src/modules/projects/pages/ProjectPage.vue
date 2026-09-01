@@ -627,52 +627,52 @@ function policySummary(policy: Repository['policies'][number]) {
         </div>
       </div>
       <template v-else>
-      <div v-if="repositories.isError.value" class="mt-5 rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm" role="alert">
-        <p class="font-medium text-foreground">Could not refresh repositories</p>
-        <p class="mt-1 text-muted-foreground">{{ repositoriesError }}</p>
-        <Button class="mt-3" variant="outline" size="sm" @click="repositories.refetch()">Try again</Button>
-      </div>
-      <div v-if="!pageItems(repositories.data.value).length && repositorySearchQuery.trim()" class="empty-state mt-5">
-        <div>
-          <Search class="mx-auto mb-3 text-accent" :size="28" />
-          <p class="font-medium text-foreground">No matching repositories</p>
-          <p class="mt-2 text-sm">Try a different name or description.</p>
+        <div v-if="repositories.isError.value" class="mt-5 rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm" role="alert">
+          <p class="font-medium text-foreground">Could not refresh repositories</p>
+          <p class="mt-1 text-muted-foreground">{{ repositoriesError }}</p>
+          <Button class="mt-3" variant="outline" size="sm" @click="repositories.refetch()">Try again</Button>
         </div>
-      </div>
-      <div v-else-if="!pageItems(repositories.data.value).length" class="empty-state mt-5">
-        <div>
-          <Box class="mx-auto mb-3 text-accent" :size="28" />
-          <p class="font-medium text-foreground">No repositories yet</p>
-          <p class="mt-2 text-sm">A Writer or Admin can create one automatically with the first push.</p>
+        <div v-if="!pageItems(repositories.data.value).length && repositorySearchQuery.trim()" class="empty-state mt-5">
+          <div>
+            <Search class="mx-auto mb-3 text-accent" :size="28" />
+            <p class="font-medium text-foreground">No matching repositories</p>
+            <p class="mt-2 text-sm">Try a different name or description.</p>
+          </div>
         </div>
-      </div>
-      <div v-else class="table-shell mt-5">
-        <button v-for="repository in pageItems(repositories.data.value)" :key="repository.id" class="data-row w-full text-left" @click="openRepository(repository)">
-          <div class="flex items-center gap-3">
-            <div class="avatar"><Box :size="15" /></div>
-            <div><p class="text-sm font-semibold">{{ repository.name }}</p><p class="mt-1 font-mono text-xs text-muted-foreground">{{ slug }}/{{ repository.name }}</p></div>
+        <div v-else-if="!pageItems(repositories.data.value).length" class="empty-state mt-5">
+          <div>
+            <Box class="mx-auto mb-3 text-accent" :size="28" />
+            <p class="font-medium text-foreground">No repositories yet</p>
+            <p class="mt-2 text-sm">A Writer or Admin can create one automatically with the first push.</p>
           </div>
-          <div class="flex items-center justify-end gap-2">
-            <Badge :tone="repository.profileNeedsReview ? 'danger' : repository.profile === 'unknown' ? 'neutral' : 'success'">
-              {{ profileLabel(repository.profile) }}
-            </Badge>
-            <p class="text-xs text-muted-foreground">
-              {{ repository.policies.length }} policies · {{ repository.status }}
-              <template v-if="repository.creationSource === 'push'"> · created by push</template>
-            </p>
-            <p class="text-xs text-muted-foreground">{{ accountedUsageLabel(repository.accountedUsage) }} accounted<span v-if="repository.accountedUsage?.status === 'stale'"> · stale</span></p>
-          </div>
-          <span class="flex items-center gap-2 text-accent"><Settings2 :size="14" /> →</span>
-        </button>
-      </div>
-      <PaginationControls
-        :page="repositoryPagination.page.value"
-        :has-previous="repositoryPagination.hasPrevious.value"
-        :has-next="Boolean(repositories.data.value?.nextCursor)"
-        :disabled="repositories.isFetching.value"
-        @previous="repositoryPagination.previous()"
-        @next="repositoryPagination.next(repositories.data.value?.nextCursor)"
-      />
+        </div>
+        <div v-else class="table-shell mt-5">
+          <button v-for="repository in pageItems(repositories.data.value)" :key="repository.id" class="data-row w-full text-left" @click="openRepository(repository)">
+            <div class="flex items-center gap-3">
+              <div class="avatar"><Box :size="15" /></div>
+              <div><p class="text-sm font-semibold">{{ repository.name }}</p><p class="mt-1 font-mono text-xs text-muted-foreground">{{ slug }}/{{ repository.name }}</p></div>
+            </div>
+            <div class="flex items-center justify-end gap-2">
+              <Badge :tone="repository.profileNeedsReview ? 'danger' : repository.profile === 'unknown' ? 'neutral' : 'success'">
+                {{ profileLabel(repository.profile) }}
+              </Badge>
+              <p class="text-xs text-muted-foreground">
+                {{ repository.policies.length }} policies · {{ repository.status }}
+                <template v-if="repository.creationSource === 'push'"> · created by push</template>
+              </p>
+              <p class="text-xs text-muted-foreground">{{ accountedUsageLabel(repository.accountedUsage) }} accounted<span v-if="repository.accountedUsage?.status === 'stale'"> · stale</span></p>
+            </div>
+            <span class="flex items-center gap-2 text-accent"><Settings2 :size="14" /> →</span>
+          </button>
+        </div>
+        <PaginationControls
+          :page="repositoryPagination.page.value"
+          :has-previous="repositoryPagination.hasPrevious.value"
+          :has-next="Boolean(repositories.data.value?.nextCursor)"
+          :disabled="repositories.isFetching.value"
+          @previous="repositoryPagination.previous()"
+          @next="repositoryPagination.next(repositories.data.value?.nextCursor)"
+        />
       </template>
     </section>
 
