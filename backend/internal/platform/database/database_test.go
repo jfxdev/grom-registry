@@ -121,6 +121,21 @@ func TestCheckpointDoesNotRequirePostgresAdministrativePrivileges(t *testing.T) 
 	}
 }
 
+func TestCheckpointReportsSQLiteExecutionFailure(t *testing.T) {
+	db, kind, err := Open(context.Background(), "sqlite://file:checkpoint-failure?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	err = Checkpoint(context.Background(), db, kind)
+	if err == nil || !strings.Contains(err.Error(), "checkpoint sqlite database") {
+		t.Fatalf("expected checkpoint failure, got %v", err)
+	}
+}
+
 func TestPostgresMigrationLockSerializesAndRecovers(t *testing.T) {
 	databaseURL := os.Getenv("GROM_TEST_POSTGRES_URL")
 	if databaseURL == "" {
