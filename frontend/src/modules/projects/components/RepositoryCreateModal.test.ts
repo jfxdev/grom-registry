@@ -36,6 +36,25 @@ const preset = {
   },
 }
 
+const retentionPreset = {
+  key: 'clean-temporary-builds',
+  name: 'Clean temporary builds',
+  category: 'Lifecycle',
+  description: 'Remove transient images after a short retention window.',
+  outcome: 'Temporary tags remain bounded.',
+  policy: {
+    type: 'retention' as const,
+    enabled: true,
+    tagPatterns: ['pr-*'],
+    expireAfterDays: 14,
+    expireAfterDaysEnabled: true,
+    keepLast: 5,
+    keepLastEnabled: true,
+    untaggedGraceDays: 2,
+    untaggedGraceDaysEnabled: true,
+  },
+}
+
 describe('RepositoryCreateModal', () => {
   beforeEach(() => {
     mocks.createRepository.mockReset()
@@ -78,5 +97,45 @@ describe('RepositoryCreateModal', () => {
     await wrapper.get('dialog').trigger('cancel')
 
     expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it('keeps independent retention values while disabling their criteria', async () => {
+    mocks.listPolicyPresets.mockResolvedValue([retentionPreset])
+    mocks.createRepository.mockResolvedValue({})
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const wrapper = mount(RepositoryCreateModal, {
+      props: { project: 'payments' },
+      global: { plugins: [[VueQueryPlugin, { queryClient }]] },
+    })
+    await flushPromises()
+
+    await wrapper.get('button[aria-controls="policy-clean-temporary-builds"]').trigger('click')
+    await wrapper.get('input[aria-label="Select Clean temporary builds"]').setValue(true)
+    await wrapper.get('input[aria-label="Enable keep last"]').setValue(false)
+    await wrapper.get('input[aria-label="Enable untagged grace days"]').setValue(false)
+
+    const values = wrapper.findAll('input[type="number"]')
+    expect(values).toHaveLength(3)
+    expect(values[0]!.attributes('disabled')).toBeUndefined()
+    expect(values[1]!.attributes('disabled')).toBeDefined()
+    expect(values[2]!.attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('Expire after 14 days')
+    expect(wrapper.text()).not.toContain('Keep 5 latest')
+
+    await wrapper.get('input[placeholder="backend or services/api"]').setValue('worker')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(mocks.createRepository).toHaveBeenCalledWith('payments', expect.objectContaining({
+      name: 'worker',
+      policies: [expect.objectContaining({
+        expireAfterDays: 14,
+        expireAfterDaysEnabled: true,
+        keepLast: 5,
+        keepLastEnabled: false,
+        untaggedGraceDays: 2,
+        untaggedGraceDaysEnabled: false,
+      })],
+    }))
   })
 })
