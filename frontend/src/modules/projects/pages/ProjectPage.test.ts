@@ -355,8 +355,6 @@ describe('ProjectPage membership management', () => {
     expect(await screen.findByText('Deletion history')).toBeTruthy()
     expect(await screen.findByText(/No reason/)).toBeTruthy()
     const inventory = screen.getByRole('button', { name: /Manifest inventory/ })
-    expect(inventory.getAttribute('aria-expanded')).toBe('false')
-    await fireEvent.click(inventory)
     expect(inventory.getAttribute('aria-expanded')).toBe('true')
     await fireEvent.click(await screen.findByRole('button', { name: /sha256:abc/ }))
     expect(screen.getByRole('dialog', { name: 'Manifest details' })).toBeTruthy()
@@ -391,7 +389,7 @@ describe('ProjectPage membership management', () => {
     renderPage()
 
     expect(await screen.findByLabelText('Repository overview')).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Manifest inventory/ }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByRole('button', { name: /Manifest inventory/ }).getAttribute('aria-expanded')).toBe('true')
     expect(await screen.findByText('stable')).toBeTruthy()
     expect(await screen.findByText('Last pushed 1 day ago by release-bot')).toBeTruthy()
     expect(screen.getByText('Removes tags matching pr-* older than 30 days. Always keeps the last 5 tags matching pr-*. Cleans untagged images after 7 days.')).toBeTruthy()

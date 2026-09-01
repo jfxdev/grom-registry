@@ -951,7 +951,7 @@ function policySummary(policy: Repository['policies'][number]) {
         </div>
       </section>
 
-      <Accordion title="Manifest inventory" :description="inventoryDescription">
+      <Accordion title="Manifest inventory" :description="inventoryDescription" default-open>
         <p v-if="inventory.isLoading.value" class="text-xs text-muted-foreground">Loading manifest inventory…</p>
         <p v-else-if="!inventoryItems.length" class="text-xs text-muted-foreground">
           {{ tagSearchQuery.trim() ? 'No manifests match this filter.' : 'No observed manifests yet.' }}
