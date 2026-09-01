@@ -198,6 +198,45 @@ describe('ProjectPage membership management', () => {
     expect(mocks.listRepositories).toHaveBeenCalledTimes(2)
   })
 
+  it('does not present a repository-list failure as an empty project', async () => {
+    mocks.listRepositories.mockRejectedValue(new APIError(500, 'internal_error', 'Repository reconciliation failed'))
+
+    renderPage()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not load repositories')
+    expect(screen.getByRole('alert').textContent).toContain('Repository reconciliation failed')
+    expect(screen.queryByText('No repositories yet')).toBeNull()
+  })
+
+  it('keeps loaded repositories visible when a refetch fails', async () => {
+    mocks.listRepositories
+      .mockResolvedValueOnce([{
+        id: 'repository-1',
+        projectId: 'project-1',
+        name: 'api',
+        description: '',
+        status: 'active',
+        creationSource: 'manual',
+        profile: 'unknown',
+        profileSource: 'none',
+        profileConfidence: 'none',
+        profileNeedsReview: false,
+        policies: [],
+      }])
+      .mockRejectedValueOnce(new APIError(500, 'internal_error', 'Repository reconciliation failed'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('api')
+    await buttonWithText(wrapper, 'New repository').trigger('click')
+    await buttonWithText(wrapper, 'Repository created').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('api')
+    expect(wrapper.get('[role="alert"]').text()).toContain('Could not refresh repositories')
+    expect(wrapper.get('[role="alert"]').text()).toContain('Repository reconciliation failed')
+  })
+
   it('uses the labelled delete button for project deletion', async () => {
     const wrapper = mountPage()
     await flushPromises()

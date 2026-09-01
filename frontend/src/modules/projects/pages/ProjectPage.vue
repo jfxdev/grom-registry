@@ -121,6 +121,9 @@ function openProjectDeletion() {
 
 const project = useQuery({ queryKey: computed(() => projectKeys.detail(slug.value)), queryFn: () => getProject(slug.value) })
 const repositories = useQuery({ queryKey: computed(() => [...projectKeys.repositories(slug.value), repositoryPagination.cursor.value]), queryFn: () => listRepositories(slug.value, repositoryPagination.cursor.value) })
+const repositoriesError = computed(() =>
+  repositories.error.value instanceof APIError ? repositories.error.value.message : 'Could not load repositories. Please try again.',
+)
 const members = useQuery({ queryKey: computed(() => [...projectKeys.members(slug.value), memberSearch.value.trim(), memberPagination.cursor.value]), queryFn: () => listMembers(slug.value, memberPagination.cursor.value, memberSearch.value.trim()), enabled: computed(() => session.user?.systemViewer !== true) })
 const accounts = useQuery({ queryKey: serviceAccountKeys.list(), queryFn: () => listServiceAccounts(), enabled: computed(() => session.user?.systemViewer !== true) })
 const canManage = computed(() =>
@@ -586,6 +589,20 @@ function policySummary(policy: Repository['policies'][number]) {
     </header>
 
     <section v-if="!repositoryId">
+      <div v-if="repositories.isLoadingError.value" class="empty-state mt-5" role="alert">
+        <div>
+          <Box class="mx-auto mb-3 text-destructive" :size="28" />
+          <p class="font-medium text-foreground">Could not load repositories</p>
+          <p class="mt-2 text-sm">{{ repositoriesError }}</p>
+          <Button class="mt-4" variant="outline" size="sm" @click="repositories.refetch()">Try again</Button>
+        </div>
+      </div>
+      <template v-else>
+      <div v-if="repositories.isError.value" class="mt-5 rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm" role="alert">
+        <p class="font-medium text-foreground">Could not refresh repositories</p>
+        <p class="mt-1 text-muted-foreground">{{ repositoriesError }}</p>
+        <Button class="mt-3" variant="outline" size="sm" @click="repositories.refetch()">Try again</Button>
+      </div>
       <div v-if="!pageItems(repositories.data.value).length" class="empty-state mt-5">
         <div>
           <Box class="mx-auto mb-3 text-accent" :size="28" />
@@ -620,6 +637,7 @@ function policySummary(policy: Repository['policies'][number]) {
         @previous="repositoryPagination.previous()"
         @next="repositoryPagination.next(repositories.data.value?.nextCursor)"
       />
+      </template>
     </section>
 
     <Dialog
