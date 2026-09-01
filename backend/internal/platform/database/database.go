@@ -116,22 +116,26 @@ func migrateDatabase(
 
 func Checkpoint(ctx context.Context, db *bun.DB, kind Kind) error {
 	if kind == Postgres {
-		_, err := db.ExecContext(ctx, "CHECKPOINT")
-		if err != nil {
-			return fmt.Errorf("checkpoint postgres database: %w", err)
-		}
+		// pg_dump creates its own consistent snapshot while backup maintenance
+		// prevents Grom writes. An explicit CHECKPOINT would additionally require
+		// the administrative pg_checkpoint privilege, which application roles
+		// should not need merely to create a backup.
 		return nil
 	}
 	if kind != SQLite {
 		return fmt.Errorf("unsupported database kind")
 	}
 	var busy, logFrames, checkpointedFrames int
-	if err := db.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").
+	// Backup archives the database directory, including any remaining WAL and
+	// shared-memory files, after maintenance has stopped all writes. A passive
+	// checkpoint is therefore consistent even when an existing read transaction
+	// retains old WAL frames; forcing a truncate would reject that safe backup.
+	if err := db.QueryRowContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)").
 		Scan(&busy, &logFrames, &checkpointedFrames); err != nil {
 		return fmt.Errorf("checkpoint sqlite database: %w", err)
 	}
 	if busy != 0 {
-		return fmt.Errorf("checkpoint sqlite database: database remained busy")
+		return fmt.Errorf("checkpoint sqlite database: another checkpoint is active")
 	}
 	return nil
 }
