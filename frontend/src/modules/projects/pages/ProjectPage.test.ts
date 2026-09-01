@@ -466,7 +466,10 @@ describe('ProjectPage membership management', () => {
     await fireEvent.update(filter, 'sha256:older')
     await waitFor(() => expect(mocks.listTags).toHaveBeenLastCalledWith('payments', 'api', 'sha256:older', ''))
     await waitFor(() => expect(Array.from(tagsPanel.querySelectorAll('.space-y-3 > section')).map((card) => card.querySelector('code')?.textContent)).toEqual([]))
-    await fireEvent.click(screen.getByRole('button', { name: /Manifest inventory/ }))
+    const inventoryToggle = screen.getByRole('button', { name: /Manifest inventory/ })
+    if (inventoryToggle.getAttribute('aria-expanded') !== 'true') {
+      await fireEvent.click(inventoryToggle)
+    }
     expect(screen.queryByText('sha256:newer')).toBeNull()
     expect(screen.getAllByText('sha256:older')).not.toHaveLength(0)
   })

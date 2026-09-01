@@ -24,6 +24,25 @@ describe('TerminalCommand', () => {
     await flushPromises()
 
     expect(writeText).toHaveBeenCalledWith(command)
-    expect(wrapper.get('button[aria-label="Copy example command"]').text()).toContain('Copied')
+    expect(wrapper.get('button[aria-label="Copied"]').text()).toContain('Copied')
+  })
+
+  it('ignores a stale copy completion when the command changes mid-flight', async () => {
+    let resolveFirst: (result: string) => void = () => {}
+    const writeText = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
+      .mockResolvedValueOnce(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const wrapper = mount(TerminalCommand, {
+      props: { command: 'first command', ariaLabel: 'Copy command' },
+    })
+
+    const button = wrapper.get('button[aria-label="Copy command"]')
+    await button.trigger('click')
+    await wrapper.setProps({ command: 'second command' })
+    resolveFirst(undefined)
+    await flushPromises()
+
+    expect(wrapper.get('button[aria-label="Copy command"]').text()).not.toContain('Copied')
   })
 })

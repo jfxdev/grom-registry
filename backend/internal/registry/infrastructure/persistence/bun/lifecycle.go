@@ -296,9 +296,9 @@ func (s *Store) ListManifestInventoryPage(ctx context.Context, repositoryID foun
 		query = query.Where("(first_seen_at < ? OR (first_seen_at = ? AND id < ?))", boundary.at, boundary.at, boundary.id)
 	}
 	if value := strings.ToLower(strings.TrimSpace(search)); value != "" {
-		like := "%" + value + "%"
+		like := likeContains(value)
 		query = query.Where(
-			"(LOWER(rm.digest) LIKE ? OR EXISTS (SELECT 1 FROM registry_tags WHERE registry_tags.manifest_id = rm.id AND registry_tags.detached_at IS NULL AND LOWER(registry_tags.name) LIKE ?))",
+			"(LOWER(rm.digest) LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM registry_tags WHERE registry_tags.manifest_id = rm.id AND registry_tags.detached_at IS NULL AND LOWER(registry_tags.name) LIKE ? ESCAPE '\\'))",
 			like, like,
 		)
 	}

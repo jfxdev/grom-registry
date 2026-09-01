@@ -26,7 +26,7 @@ func (s *Store) SearchTagNamesPage(ctx context.Context, repositoryID foundation.
 		Where("repository_id = ?", repositoryID.String()).
 		Where("detached_at IS NULL")
 	if value := strings.ToLower(strings.TrimSpace(search)); value != "" {
-		query = query.Where("LOWER(name) LIKE ?", "%"+value+"%")
+		query = query.Where("LOWER(name) LIKE ? ESCAPE '\\'", likeContains(value))
 	}
 	if name != "" {
 		query = query.Where("name > ?", name)

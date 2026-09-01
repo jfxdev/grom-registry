@@ -47,3 +47,42 @@ func TestListRepositoriesPageFiltersByNameAndDescription(t *testing.T) {
 		}
 	})
 }
+
+func TestListRepositoriesPageEscapesLikeMetacharacters(t *testing.T) {
+	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
+		ctx := context.Background()
+		store := New(db)
+		now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+		projectID, _ := seedProjectWithRepository(t, ctx, db, store, now)
+
+		if err := store.CreateRepository(ctx, &registrydomain.Repository{
+			ID: foundation.NewID(), ProjectID: projectID, Name: "worker", Description: "50%_off code path C:\\temp",
+			Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual,
+			Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.CreateRepository(ctx, &registrydomain.Repository{
+			ID: foundation.NewID(), ProjectID: projectID, Name: "zoff", Description: "unrelated",
+			Status: constants.RepositoryStatusActive, CreationSource: constants.RepositoryCreationManual,
+			Policies: []registrydomain.Policy{}, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		percent, err := store.ListRepositoriesPage(ctx, projectID, "50%", foundation.PageRequest{Limit: 10, Scope: "repositories:test:q=50%"})
+		if err != nil || len(percent.Items) != 1 || percent.Items[0].Name != "worker" {
+			t.Fatalf("literal %% search: items=%#v err=%v", percent.Items, err)
+		}
+
+		underscore, err := store.ListRepositoriesPage(ctx, projectID, "_off", foundation.PageRequest{Limit: 10, Scope: "repositories:test:q=_off"})
+		if err != nil || len(underscore.Items) != 1 || underscore.Items[0].Name != "worker" {
+			t.Fatalf("literal _ search must not match zoff via wildcard: items=%#v err=%v", underscore.Items, err)
+		}
+
+		backslash, err := store.ListRepositoriesPage(ctx, projectID, "C:\\temp", foundation.PageRequest{Limit: 10, Scope: "repositories:test:q=C:\\temp"})
+		if err != nil || len(backslash.Items) != 1 || backslash.Items[0].Name != "worker" {
+			t.Fatalf("literal backslash search: items=%#v err=%v", backslash.Items, err)
+		}
+	})
+}

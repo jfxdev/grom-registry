@@ -680,6 +680,13 @@ paths:
       responses:
         "200":
           description: Matching repositories across all projects
+          headers:
+            Cache-Control:
+              required: true
+              description: Always "no-store"; cross-project search results must not be cached.
+              schema:
+                type: string
+                enum: [no-store]
           content:
             application/json:
               schema:

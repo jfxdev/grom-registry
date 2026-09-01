@@ -40,8 +40,8 @@ func (s *Store) SearchRepositoriesAcrossProjects(ctx context.Context, search str
 		TableExpr("registry_repositories AS rr").
 		Join("JOIN projects AS p ON p.id = rr.project_id")
 	if value := strings.ToLower(strings.TrimSpace(search)); value != "" {
-		like := "%" + value + "%"
-		query = query.Where("(LOWER(rr.name) LIKE ? OR LOWER(rr.description) LIKE ?)", like, like)
+		like := likeContains(value)
+		query = query.Where("(LOWER(rr.name) LIKE ? ESCAPE '\\' OR LOWER(rr.description) LIKE ? ESCAPE '\\')", like, like)
 	}
 	if name != "" {
 		query = query.Where("(rr.name > ? OR (rr.name = ? AND rr.project_id > ?))", name, name, projectID)

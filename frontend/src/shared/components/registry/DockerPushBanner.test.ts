@@ -28,6 +28,6 @@ describe('DockerPushBanner', () => {
     await flushPromises()
 
     expect(writeText).toHaveBeenCalledWith('docker push registry.example.test/docker/base-images/forgejo:tag')
-    expect(wrapper.get('button[aria-label="Copy push command"]').text()).toContain('Copied')
+    expect(wrapper.get('button[aria-label="Copied"]').text()).toContain('Copied')
   })
 })

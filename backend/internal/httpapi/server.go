@@ -1274,6 +1274,7 @@ func (s *Server) searchRepositories(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, results)
 }
 

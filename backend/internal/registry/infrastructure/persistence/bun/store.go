@@ -17,6 +17,15 @@ type Store struct {
 	db *bun.DB
 }
 
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// likeContains builds a LIKE pattern that matches value as a literal
+// substring, escaping %, _ and \ so callers can't inject wildcards.
+// Pair with `LIKE ? ESCAPE '\'` in the query.
+func likeContains(value string) string {
+	return "%" + likeEscaper.Replace(value) + "%"
+}
+
 func New(db *bun.DB) *Store {
 	return &Store{db: db}
 }
@@ -100,8 +109,8 @@ func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.I
 		query = query.Where("name > ?", name)
 	}
 	if value := strings.ToLower(strings.TrimSpace(search)); value != "" {
-		like := "%" + value + "%"
-		query = query.Where("(LOWER(name) LIKE ? OR LOWER(description) LIKE ?)", like, like)
+		like := likeContains(value)
+		query = query.Where("(LOWER(name) LIKE ? ESCAPE '\\' OR LOWER(description) LIKE ? ESCAPE '\\')", like, like)
 	}
 	if err := query.OrderExpr("name ASC, id ASC").Limit(request.Limit + 1).Scan(ctx); err != nil {
 		return foundation.PageResult[registrydomain.Repository]{}, err

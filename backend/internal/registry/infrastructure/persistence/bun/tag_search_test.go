@@ -46,6 +46,39 @@ func TestSearchTagNamesPageFiltersByNameAndExcludesDetached(t *testing.T) {
 	})
 }
 
+func TestSearchTagNamesPageEscapesLikeMetacharacters(t *testing.T) {
+	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
+		ctx := context.Background()
+		store := New(db)
+		now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+		_, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
+
+		for _, tag := range []string{"50%_off", "zoff", "back\\slash"} {
+			observation := registrydomain.ManifestObservation{
+				Digest: "sha256:manifest-" + tag, ManifestSize: 10, Tag: tag,
+			}
+			if err := store.UpsertManifestObservation(ctx, repositoryID, observation, now); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		percent, err := store.SearchTagNamesPage(ctx, repositoryID, "50%", foundation.PageRequest{Limit: 10, Scope: "repository-tags:test:api:q=50%"})
+		if err != nil || len(percent.Items) != 1 || percent.Items[0] != "50%_off" {
+			t.Fatalf("literal %% search: items=%#v err=%v", percent.Items, err)
+		}
+
+		underscore, err := store.SearchTagNamesPage(ctx, repositoryID, "_off", foundation.PageRequest{Limit: 10, Scope: "repository-tags:test:api:q=_off"})
+		if err != nil || len(underscore.Items) != 1 || underscore.Items[0] != "50%_off" {
+			t.Fatalf("literal _ search must not match zoff via wildcard: items=%#v err=%v", underscore.Items, err)
+		}
+
+		backslash, err := store.SearchTagNamesPage(ctx, repositoryID, "back\\slash", foundation.PageRequest{Limit: 10, Scope: "repository-tags:test:api:q=back\\slash"})
+		if err != nil || len(backslash.Items) != 1 || backslash.Items[0] != "back\\slash" {
+			t.Fatalf("literal backslash search: items=%#v err=%v", backslash.Items, err)
+		}
+	})
+}
+
 func TestSearchTagNamesPagePaginatesWithKeysetCursor(t *testing.T) {
 	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
 		ctx := context.Background()

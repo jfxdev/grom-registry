@@ -2,7 +2,7 @@
 import { Button } from '@/shared/components/ui/button'
 import { writeClipboardText } from '@/shared/lib/clipboard'
 import { Check, Copy } from '@lucide/vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   command: string
@@ -17,15 +17,22 @@ const props = withDefaults(defineProps<{
 
 const copied = ref(false)
 const copyError = ref('')
+const copyButtonLabel = computed(() => (copied.value ? props.copiedLabel : props.ariaLabel))
+
+let latestCopyRequest = 0
 
 watch(() => props.command, () => {
+  latestCopyRequest += 1
   copied.value = false
   copyError.value = ''
 })
 
 async function copyCommand() {
+  const requestId = (latestCopyRequest += 1)
+  const command = props.command
   copyError.value = ''
-  const result = await writeClipboardText(props.command)
+  const result = await writeClipboardText(command)
+  if (requestId !== latestCopyRequest) return
   if (result === 'copied') {
     copied.value = true
     return
@@ -39,7 +46,7 @@ async function copyCommand() {
   <section class="terminal-command" aria-label="Terminal command">
     <header class="terminal-command-header">
       <span class="terminal-command-title"><span class="terminal-command-prompt" aria-hidden="true">$_</span> Terminal</span>
-      <Button variant="ghost" size="sm" type="button" :aria-label="ariaLabel" @click="copyCommand">
+      <Button variant="ghost" size="sm" type="button" :aria-label="copyButtonLabel" @click="copyCommand">
         <Check v-if="copied" :size="14" />
         <Copy v-else :size="14" />
         {{ copied ? copiedLabel : copyLabel }}
@@ -87,6 +94,11 @@ async function copyCommand() {
 .terminal-command-prompt,
 .terminal-command-prefix {
   color: var(--accent);
+}
+
+.terminal-command-prefix {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .terminal-command pre {
