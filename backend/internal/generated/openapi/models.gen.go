@@ -1284,6 +1284,25 @@ type RepositoryPolicyType string
 // RepositoryProfile defines model for RepositoryProfile.
 type RepositoryProfile string
 
+// RepositorySearchResult defines model for RepositorySearchResult.
+type RepositorySearchResult struct {
+	CreatedAt   time.Time          `json:"createdAt"`
+	Description string             `json:"description"`
+	Id          openapi_types.UUID `json:"id"`
+	Name        string             `json:"name"`
+	ProjectId   openapi_types.UUID `json:"projectId"`
+	ProjectName string             `json:"projectName"`
+	ProjectSlug string             `json:"projectSlug"`
+	Status      RepositoryStatus   `json:"status"`
+	UpdatedAt   time.Time          `json:"updatedAt"`
+}
+
+// RepositorySearchResultPage defines model for RepositorySearchResultPage.
+type RepositorySearchResultPage struct {
+	Items      []RepositorySearchResult `json:"items"`
+	NextCursor *string                  `json:"nextCursor,omitempty"`
+}
+
 // RepositorySelection defines model for RepositorySelection.
 type RepositorySelection struct {
 	Repository string `json:"repository"`
@@ -1463,6 +1482,9 @@ type ListProjectRepositoriesParams struct {
 	// Cursor Opaque cursor returned by the previous page
 	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Q Case-insensitive search across repository name and description.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
 }
 
 // ListRepositoryInventoryParams defines parameters for ListRepositoryInventory.
@@ -1471,6 +1493,9 @@ type ListRepositoryInventoryParams struct {
 	Cursor     *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit      *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
 	Repository string     `form:"repository" json:"repository"`
+
+	// Q Case-insensitive search across tag names and manifest digests.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
 }
 
 // ListRepositoryTagsParams defines parameters for ListRepositoryTags.
@@ -1481,6 +1506,19 @@ type ListRepositoryTagsParams struct {
 
 	// Repository Repository path relative to the project, including optional nested segments
 	Repository string `form:"repository" json:"repository"`
+
+	// Q Case-insensitive tag name search. When present, results come from the last-reconciled inventory snapshot rather than a live registry call, so very recent pushes or deletes may briefly lag; omit q for a live, dangling-tag-safe listing.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+}
+
+// SearchRepositoriesParams defines parameters for SearchRepositories.
+type SearchRepositoriesParams struct {
+	// Cursor Opaque cursor returned by the previous page
+	Cursor *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *PageLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Q Case-insensitive search across repository name and description.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
 }
 
 // ListServiceAccountsParams defines parameters for ListServiceAccounts.
