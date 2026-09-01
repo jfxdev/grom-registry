@@ -208,6 +208,35 @@ describe('ProjectPage membership management', () => {
     expect(screen.queryByText('No repositories yet')).toBeNull()
   })
 
+  it('keeps loaded repositories visible when a refetch fails', async () => {
+    mocks.listRepositories
+      .mockResolvedValueOnce([{
+        id: 'repository-1',
+        projectId: 'project-1',
+        name: 'api',
+        description: '',
+        status: 'active',
+        creationSource: 'manual',
+        profile: 'unknown',
+        profileSource: 'none',
+        profileConfidence: 'none',
+        profileNeedsReview: false,
+        policies: [],
+      }])
+      .mockRejectedValueOnce(new APIError(500, 'internal_error', 'Repository reconciliation failed'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('api')
+    await buttonWithText(wrapper, 'New repository').trigger('click')
+    await buttonWithText(wrapper, 'Repository created').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('api')
+    expect(wrapper.get('[role="alert"]').text()).toContain('Could not refresh repositories')
+    expect(wrapper.get('[role="alert"]').text()).toContain('Repository reconciliation failed')
+  })
+
   it('uses the labelled delete button for project deletion', async () => {
     const wrapper = mountPage()
     await flushPromises()
