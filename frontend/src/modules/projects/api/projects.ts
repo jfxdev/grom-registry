@@ -53,8 +53,13 @@ export const deleteMember = (slug: string, kind: PrincipalKind, id: string) =>
   apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}/members/${kind}/${id}`, {
     method: 'DELETE',
   })
-export const listRepositories = (slug: string, cursor = '') =>
-  apiRequest<RepositoryPage>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
+export const listRepositories = (slug: string, query = '', cursor = '') => {
+  const params = new URLSearchParams()
+  if (query) params.set('q', query)
+  if (cursor) params.set('cursor', cursor)
+  const suffix = params.toString()
+  return apiRequest<RepositoryPage>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories${suffix ? `?${suffix}` : ''}`)
+}
 export const getRepository = (slug: string, repositoryId: string) =>
   apiRequest<Repository>(`/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}`)
 export const createRepository = (slug: string, input: CreateRepositoryRequest) =>
@@ -89,8 +94,12 @@ export const replaceRepositoryPolicies = (
     `/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}/policies`,
     { method: 'PUT', body: JSON.stringify(input) },
   )
-export const listTags = (slug: string, repository: string, cursor = '') =>
-  apiRequest<TagPage>(`/api/v1/projects/${encodeURIComponent(slug)}/repository-tags?repository=${encodeURIComponent(repository)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+export const listTags = (slug: string, repository: string, query = '', cursor = '') => {
+  const params = new URLSearchParams({ repository })
+  if (query) params.set('q', query)
+  if (cursor) params.set('cursor', cursor)
+  return apiRequest<TagPage>(`/api/v1/projects/${encodeURIComponent(slug)}/repository-tags?${params.toString()}`)
+}
 export const previewArtifactDeletion = (slug: string, input: ArtifactDeletionRequest) =>
   apiRequest<ArtifactDeletionPreview>(`/api/v1/projects/${encodeURIComponent(slug)}/artifact-deletion-previews`, {
     method: 'POST',

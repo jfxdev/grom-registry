@@ -208,6 +208,34 @@ describe('ProjectPage membership management', () => {
     expect(screen.queryByText('No repositories yet')).toBeNull()
   })
 
+  it('searches repositories on the server', async () => {
+    mocks.listRepositories.mockImplementation((_slug: string, query: string) => Promise.resolve(query === 'work' ? [{
+      id: 'repository-2', projectId: 'project-1', name: 'worker', description: '', status: 'active',
+      creationSource: 'manual', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }] : []))
+    renderPage()
+
+    await fireEvent.update(await screen.findByRole('searchbox', { name: 'Search repositories' }), 'work')
+
+    await waitFor(() => expect(mocks.listRepositories).toHaveBeenLastCalledWith('payments', 'work', ''))
+    expect(await screen.findByText('worker')).toBeTruthy()
+  })
+
+  it('shows a no-matches empty state when a repository search finds nothing', async () => {
+    mocks.listRepositories.mockImplementation((_slug: string, query: string) => Promise.resolve(query ? [] : [{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'manual', profile: 'unknown', profileSource: 'none', profileConfidence: 'none',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }]))
+    renderPage()
+    await screen.findByText('api')
+
+    await fireEvent.update(screen.getByRole('searchbox', { name: 'Search repositories' }), 'nothing-like-this')
+
+    expect(await screen.findByText('No matching repositories')).toBeTruthy()
+  })
+
   it('keeps loaded repositories visible when a refetch fails', async () => {
     mocks.listRepositories
       .mockResolvedValueOnce([{
@@ -326,6 +354,8 @@ describe('ProjectPage membership management', () => {
     expect(screen.getByRole('columnheader', { name: 'Compressed size' })).toBeTruthy()
     expect(await screen.findByText('Deletion history')).toBeTruthy()
     expect(await screen.findByText(/No reason/)).toBeTruthy()
+    const inventory = screen.getByRole('button', { name: /Manifest inventory/ })
+    expect(inventory.getAttribute('aria-expanded')).toBe('true')
     await fireEvent.click(await screen.findByRole('button', { name: /sha256:abc/ }))
     expect(screen.getByRole('dialog', { name: 'Manifest details' })).toBeTruthy()
     expect(screen.getAllByText('Active')).not.toHaveLength(0)
@@ -359,6 +389,7 @@ describe('ProjectPage membership management', () => {
     renderPage()
 
     expect(await screen.findByLabelText('Repository overview')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Manifest inventory/ }).getAttribute('aria-expanded')).toBe('true')
     expect(await screen.findByText('stable')).toBeTruthy()
     expect(await screen.findByText('Last pushed 1 day ago by release-bot')).toBeTruthy()
     expect(screen.getByText('Removes tags matching pr-* older than 30 days. Always keeps the last 5 tags matching pr-*. Cleans untagged images after 7 days.')).toBeTruthy()
@@ -367,6 +398,8 @@ describe('ProjectPage membership management', () => {
     expect(screen.getByText('Only allows tags matching latest, v*.')).toBeTruthy()
     expect(screen.getByText('Requires a reason before manual deletion.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Manage' })).toBeTruthy()
+    expect(screen.getByLabelText('Accounting').textContent).toContain('Logical OCI content attributed to this repository.')
+    expect(screen.getByLabelText('Accounting').textContent).toContain('Counts live descriptors once within this repository')
 
     await fireEvent.click(screen.getAllByRole('button', { name: 'Instructions' })[0]!)
     expect(screen.getByRole('dialog', { name: 'Push instructions' })).toBeTruthy()
@@ -389,6 +422,56 @@ describe('ProjectPage membership management', () => {
     renderPage()
 
     expect(await screen.findByText(/Historical record.*42 B manifest metadata/)).toBeTruthy()
+  })
+
+  it('orders repository tags from the most recently pushed to the oldest, and searches tags and manifests on the server', async () => {
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'push', profile: 'container_image', profileSource: 'inferred', profileConfidence: 'high',
+      profileNeedsReview: false, policyVersion: 0, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    const newerManifest = {
+      id: 'manifest-newer', digest: 'sha256:newer', mediaType: '', artifactType: '', subjectDigest: '',
+      observedKind: 'container_image', artifactRelationship: 'primary', classificationSource: 'inferred', classificationConfidence: 'high',
+      manifestSize: 42, state: 'active', firstSeenAt: '2026-07-29T00:00:00Z', lastSeenAt: '2026-08-30T12:00:00Z',
+      lastPushedAt: '2026-08-30T12:00:00Z', tags: ['newer'],
+    }
+    const olderManifest = {
+      id: 'manifest-older', digest: 'sha256:older', mediaType: '', artifactType: '', subjectDigest: '',
+      observedKind: 'container_image', artifactRelationship: 'primary', classificationSource: 'inferred', classificationConfidence: 'high',
+      manifestSize: 42, state: 'active', firstSeenAt: '2026-07-29T00:00:00Z', lastSeenAt: '2026-08-01T12:00:00Z',
+      lastPushedAt: '2026-08-01T12:00:00Z', tags: ['older'],
+    }
+    mocks.listTags.mockImplementation((_slug: string, _repository: string, query: string) => {
+      const q = query.toLowerCase()
+      return Promise.resolve({ name: 'payments/api', tags: ['older', 'newer'].filter((tag) => !q || tag.includes(q)) })
+    })
+    mocks.listInventory.mockImplementation((_slug: string, _repository: string, query: string) => {
+      const q = query.toLowerCase()
+      return Promise.resolve([newerManifest, olderManifest].filter((manifest) => !q || manifest.digest.toLowerCase().includes(q) || manifest.tags.some((tag) => tag.includes(q))))
+    })
+    mocks.repositoryId = 'repository-1'
+
+    renderPage()
+
+    await screen.findByText('newer')
+    const tagsPanel = screen.getByRole('heading', { name: 'Tags' }).closest('.repo-panel')!
+    expect(Array.from(tagsPanel.querySelectorAll('.space-y-3 > section')).map((card) => card.querySelector('code')?.textContent)).toEqual(['newer', 'older'])
+
+    const filter = screen.getByRole('searchbox', { name: 'Filter tags and digests' })
+    await fireEvent.update(filter, 'newer')
+    await waitFor(() => expect(mocks.listTags).toHaveBeenLastCalledWith('payments', 'api', 'newer', ''))
+    await waitFor(() => expect(Array.from(tagsPanel.querySelectorAll('.space-y-3 > section')).map((card) => card.querySelector('code')?.textContent)).toEqual(['newer']))
+
+    await fireEvent.update(filter, 'sha256:older')
+    await waitFor(() => expect(mocks.listTags).toHaveBeenLastCalledWith('payments', 'api', 'sha256:older', ''))
+    await waitFor(() => expect(Array.from(tagsPanel.querySelectorAll('.space-y-3 > section')).map((card) => card.querySelector('code')?.textContent)).toEqual([]))
+    const inventoryToggle = screen.getByRole('button', { name: /Manifest inventory/ })
+    if (inventoryToggle.getAttribute('aria-expanded') !== 'true') {
+      await fireEvent.click(inventoryToggle)
+    }
+    expect(screen.queryByText('sha256:newer')).toBeNull()
+    expect(screen.getAllByText('sha256:older')).not.toHaveLength(0)
   })
 
   it('loads a routed repository that is outside the current list page', async () => {

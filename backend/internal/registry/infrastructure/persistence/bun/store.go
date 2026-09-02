@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -14,6 +15,15 @@ import (
 
 type Store struct {
 	db *bun.DB
+}
+
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// likeContains builds a LIKE pattern that matches value as a literal
+// substring, escaping %, _ and \ so callers can't inject wildcards.
+// Pair with `LIKE ? ESCAPE '\'` in the query.
+func likeContains(value string) string {
+	return "%" + likeEscaper.Replace(value) + "%"
 }
 
 func New(db *bun.DB) *Store {
@@ -84,7 +94,7 @@ func (s *Store) ListRepositories(ctx context.Context, projectID foundation.ID) (
 	return result, nil
 }
 
-func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.ID, request foundation.PageRequest) (foundation.PageResult[registrydomain.Repository], error) {
+func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.ID, search string, request foundation.PageRequest) (foundation.PageResult[registrydomain.Repository], error) {
 	name := ""
 	if request.Cursor != "" {
 		cursor, err := foundation.DecodePageCursor(request.Cursor, request.Scope)
@@ -97,6 +107,10 @@ func (s *Store) ListRepositoriesPage(ctx context.Context, projectID foundation.I
 	query := s.db.NewSelect().Model(&models).Where("project_id = ?", projectID.String())
 	if name != "" {
 		query = query.Where("name > ?", name)
+	}
+	if value := strings.ToLower(strings.TrimSpace(search)); value != "" {
+		like := likeContains(value)
+		query = query.Where("(LOWER(name) LIKE ? ESCAPE '\\' OR LOWER(description) LIKE ? ESCAPE '\\')", like, like)
 	}
 	if err := query.OrderExpr("name ASC, id ASC").Limit(request.Limit + 1).Scan(ctx); err != nil {
 		return foundation.PageResult[registrydomain.Repository]{}, err

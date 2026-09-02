@@ -69,3 +69,30 @@ func TestReconcileBacksOffMissingManifestProbesAndRetriesLater(t *testing.T) {
 		t.Fatalf("eligible missing manifest was not reprobed and fetched: resolve=%d fetch=%d", distribution.resolveCalls, distribution.fetchCalls)
 	}
 }
+
+func TestListPageSearchesInventoryForTheResolvedRepository(t *testing.T) {
+	projectID := foundation.NewID()
+	repository := &registrydomain.Repository{ID: foundation.NewID(), ProjectID: projectID, Name: "api"}
+	store := &deletionTestStore{
+		repository: repository,
+		inventory:  []registrydomain.ManifestInventory{{RepositoryID: repository.ID, Digest: "sha256:aaaa"}},
+	}
+	service := NewInventoryService(store)
+
+	page, err := service.ListPage(context.Background(), projectID, "api", "aaaa", foundation.PageRequest{Limit: 10})
+	if err != nil {
+		t.Fatalf("list page: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Digest != "sha256:aaaa" {
+		t.Fatalf("page = %#v", page)
+	}
+}
+
+func TestListPagePropagatesUnknownRepositoryError(t *testing.T) {
+	store := &deletionTestStore{repository: &registrydomain.Repository{ID: foundation.NewID(), ProjectID: foundation.NewID(), Name: "other"}}
+	service := NewInventoryService(store)
+
+	if _, err := service.ListPage(context.Background(), foundation.NewID(), "missing", "", foundation.PageRequest{Limit: 10}); err == nil {
+		t.Fatal("expected an error for an unknown repository")
+	}
+}

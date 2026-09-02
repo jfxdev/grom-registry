@@ -408,6 +408,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search repositories across every project the caller can administer.
+         * @description Installation-administrator-only. Scoped to system administrators because it deliberately crosses project boundaries; a caller who is only a project member never reaches this endpoint, so there is no per-repository existence to hide.
+         */
+        get: operations["searchRepositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project}/repositories": {
         parameters: {
             query?: never;
@@ -849,6 +869,25 @@ export interface components {
         };
         RepositoryPage: {
             items: components["schemas"]["Repository"][];
+            nextCursor?: string;
+        };
+        RepositorySearchResult: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            projectSlug: string;
+            projectName: string;
+            name: string;
+            description: string;
+            status: components["schemas"]["RepositoryStatus"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        RepositorySearchResultPage: {
+            items: components["schemas"]["RepositorySearchResult"][];
             nextCursor?: string;
         };
         TagPage: {
@@ -2164,12 +2203,43 @@ export interface operations {
             };
         };
     };
+    searchRepositories: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Case-insensitive search across repository name and description. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching repositories across all projects */
+            200: {
+                headers: {
+                    /** @description Always "no-store"; cross-project search results must not be cached. */
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositorySearchResultPage"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
     listProjectRepositories: {
         parameters: {
             query?: {
                 /** @description Opaque cursor returned by the previous page */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["PageLimit"];
+                /** @description Case-insensitive search across repository name and description. */
+                q?: string;
             };
             header?: never;
             path: {
@@ -2412,6 +2482,8 @@ export interface operations {
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Repository path relative to the project, including optional nested segments */
                 repository: string;
+                /** @description Case-insensitive tag name search. When present, results come from the last-reconciled inventory snapshot rather than a live registry call, so very recent pushes or deletes may briefly lag; omit q for a live, dangling-tag-safe listing. */
+                q?: string;
             };
             header?: never;
             path: {
@@ -2539,6 +2611,8 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["PageLimit"];
                 repository: string;
+                /** @description Case-insensitive search across tag names and manifest digests. */
+                q?: string;
             };
             header?: never;
             path: {
@@ -2894,6 +2968,7 @@ type ReadonlyArray<T> = [
     unknown[]
 ] ? Readonly<Exclude<T, undefined>> : Readonly<Exclude<T, undefined>[]>;
 export const pathsApiV1ServiceAccountsGetParametersQueryStatusValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/service-accounts"]["get"]["parameters"]["query"]["status"]> = ["active", "disabled", "all"];
+export const pathsApiV1RepositoriesGetResponses200HeadersCacheControlValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/repositories"]["get"]["responses"]["200"]["headers"]["Cache-Control"]> = ["no-store"];
 export const deploymentProfileValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Deployment"]["profile"]> = ["development", "permissive", "strict"];
 export const installationStatusDatabaseValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["database"]> = ["sqlite", "postgres"];
 export const installationStatusDistributionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["distribution"]> = ["available", "unavailable"];

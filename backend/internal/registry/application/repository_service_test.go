@@ -241,3 +241,83 @@ func TestListCreatesRepositoryDiscoveredFromCatalog(t *testing.T) {
 		t.Fatalf("repositories = %#v", repositories)
 	}
 }
+
+type repositoryPageStore struct {
+	registrydomain.Store
+	lastQuery string
+	page      foundation.PageResult[registrydomain.Repository]
+}
+
+func (s *repositoryPageStore) ListRepositoriesPage(_ context.Context, _ foundation.ID, query string, _ foundation.PageRequest) (foundation.PageResult[registrydomain.Repository], error) {
+	s.lastQuery = query
+	return s.page, nil
+}
+
+func TestListPagePassesSearchQueryThrough(t *testing.T) {
+	store := &repositoryPageStore{page: foundation.PageResult[registrydomain.Repository]{Items: []registrydomain.Repository{{Name: "api"}}}}
+
+	page, err := NewRepositoryService(store).ListPage(context.Background(), foundation.ID("project"), "ap", foundation.PageRequest{Limit: 10})
+	if err != nil {
+		t.Fatalf("list page: %v", err)
+	}
+	if store.lastQuery != "ap" {
+		t.Fatalf("query = %q, want %q", store.lastQuery, "ap")
+	}
+	if len(page.Items) != 1 || page.Items[0].Name != "api" {
+		t.Fatalf("page = %#v", page)
+	}
+}
+
+type repositorySearchAcrossProjectsStore struct {
+	registrydomain.Store
+	lastQuery string
+	page      foundation.PageResult[registrydomain.RepositorySearchResult]
+}
+
+func (s *repositorySearchAcrossProjectsStore) SearchRepositoriesAcrossProjects(_ context.Context, query string, _ foundation.PageRequest) (foundation.PageResult[registrydomain.RepositorySearchResult], error) {
+	s.lastQuery = query
+	return s.page, nil
+}
+
+func TestSearchAcrossProjectsPassesSearchQueryThrough(t *testing.T) {
+	store := &repositorySearchAcrossProjectsStore{page: foundation.PageResult[registrydomain.RepositorySearchResult]{Items: []registrydomain.RepositorySearchResult{{Name: "api"}}}}
+
+	page, err := NewRepositoryService(store).SearchAcrossProjects(context.Background(), "ap", foundation.PageRequest{Limit: 10})
+	if err != nil {
+		t.Fatalf("search across projects: %v", err)
+	}
+	if store.lastQuery != "ap" {
+		t.Fatalf("query = %q, want %q", store.lastQuery, "ap")
+	}
+	if len(page.Items) != 1 || page.Items[0].Name != "api" {
+		t.Fatalf("page = %#v", page)
+	}
+}
+
+type tagSearchStore struct {
+	registrydomain.Store
+	lastRepositoryID foundation.ID
+	lastQuery        string
+	page             foundation.PageResult[string]
+}
+
+func (s *tagSearchStore) SearchTagNamesPage(_ context.Context, repositoryID foundation.ID, query string, _ foundation.PageRequest) (foundation.PageResult[string], error) {
+	s.lastRepositoryID = repositoryID
+	s.lastQuery = query
+	return s.page, nil
+}
+
+func TestSearchTagNamesPassesRepositoryAndQueryThrough(t *testing.T) {
+	store := &tagSearchStore{page: foundation.PageResult[string]{Items: []string{"v1.0.0"}}}
+
+	page, err := NewRepositoryService(store).SearchTagNames(context.Background(), foundation.ID("repository-1"), "v1", foundation.PageRequest{Limit: 10})
+	if err != nil {
+		t.Fatalf("search tag names: %v", err)
+	}
+	if store.lastRepositoryID != foundation.ID("repository-1") || store.lastQuery != "v1" {
+		t.Fatalf("unexpected store call: repository=%q query=%q", store.lastRepositoryID, store.lastQuery)
+	}
+	if len(page.Items) != 1 || page.Items[0] != "v1.0.0" {
+		t.Fatalf("page = %#v", page)
+	}
+}

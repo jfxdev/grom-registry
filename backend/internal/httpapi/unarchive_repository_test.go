@@ -84,6 +84,54 @@ func TestUnarchiveRepositoryReturnsNotFoundForMissingRecord(t *testing.T) {
 	}
 }
 
+func TestListRepositoriesRejectsUnknownQueryParameter(t *testing.T) {
+	server := newUnarchiveTestServer(&unarchiveRepositoryStore{})
+	request := withUserAndParams(
+		httptest.NewRequest(http.MethodGet, "http://grom/api/v1/projects/payments/repositories?unexpected=value", nil),
+		&identitydomain.User{ID: foundation.NewID(), SystemAdmin: true},
+		map[string]string{"project": "payments"},
+	)
+
+	response := httptest.NewRecorder()
+	server.listRepositories(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestListTagsRejectsUnknownQueryParameter(t *testing.T) {
+	server := newUnarchiveTestServer(&unarchiveRepositoryStore{})
+	request := withUserAndParams(
+		httptest.NewRequest(http.MethodGet, "http://grom/api/v1/projects/payments/repository-tags?repository=api&unexpected=value", nil),
+		&identitydomain.User{ID: foundation.NewID(), SystemAdmin: true},
+		map[string]string{"project": "payments"},
+	)
+
+	response := httptest.NewRecorder()
+	server.listTags(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestListRepositoryInventoryRejectsUnknownQueryParameter(t *testing.T) {
+	server := newUnarchiveTestServer(&unarchiveRepositoryStore{})
+	request := withUserAndParams(
+		httptest.NewRequest(http.MethodGet, "http://grom/api/v1/projects/payments/repository-inventory?repository=api&unexpected=value", nil),
+		&identitydomain.User{ID: foundation.NewID(), SystemAdmin: true},
+		map[string]string{"project": "payments"},
+	)
+
+	response := httptest.NewRecorder()
+	server.listRepositoryInventory(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestListMembershipsRejectsUnknownQueryParameter(t *testing.T) {
 	server := &Server{}
 	admin := &identitydomain.User{ID: foundation.NewID(), SystemAdmin: true}

@@ -22,7 +22,7 @@ type deletionTestStore struct {
 	completeErr error
 }
 
-func (s *deletionTestStore) ListManifestInventoryPage(_ context.Context, _ foundation.ID, _ foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
+func (s *deletionTestStore) ListManifestInventoryPage(_ context.Context, _ foundation.ID, _ string, _ foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
 	return foundation.PageResult[registrydomain.ManifestInventory]{Items: s.inventory}, nil
 }
 

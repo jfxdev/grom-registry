@@ -655,6 +655,44 @@ paths:
       responses:
         "204":
           description: Membership removed
+  /api/v1/repositories:
+    get:
+      tags: [Registry]
+      operationId: searchRepositories
+      summary: Search repositories across every project the caller can administer.
+      description: >-
+        Installation-administrator-only. Scoped to system administrators
+        because it deliberately crosses project boundaries; a caller who is
+        only a project member never reaches this endpoint, so there is no
+        per-repository existence to hide.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive search across repository name and description.
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        "200":
+          description: Matching repositories across all projects
+          headers:
+            Cache-Control:
+              required: true
+              description: Always "no-store"; cross-project search results must not be cached.
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositorySearchResultPage"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/projects/{project}/repositories:
     get:
       tags: [Registry]
@@ -665,6 +703,13 @@ paths:
         - $ref: "#/components/parameters/Project"
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/PageLimit"
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive search across repository name and description.
+          schema:
+            type: string
+            maxLength: 200
       responses:
         "200":
           description: Project repositories
@@ -860,6 +905,17 @@ paths:
           description: Repository path relative to the project, including optional nested segments
           schema:
             type: string
+        - name: q
+          in: query
+          required: false
+          description: >-
+            Case-insensitive tag name search. When present, results come from
+            the last-reconciled inventory snapshot rather than a live
+            registry call, so very recent pushes or deletes may briefly lag;
+            omit q for a live, dangling-tag-safe listing.
+          schema:
+            type: string
+            maxLength: 200
       responses:
         "200":
           description: Repository tags
@@ -963,6 +1019,13 @@ paths:
           required: true
           schema:
             type: string
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive search across tag names and manifest digests.
+          schema:
+            type: string
+            maxLength: 200
       responses:
         "200":
           description: Last known manifest inventory
@@ -1700,6 +1763,42 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Repository"
+        nextCursor:
+          type: string
+    RepositorySearchResult:
+      type: object
+      required: [id, projectId, projectSlug, projectName, name, description, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        projectSlug:
+          type: string
+        projectName:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/RepositoryStatus"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    RepositorySearchResultPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositorySearchResult"
         nextCursor:
           type: string
     TagPage:

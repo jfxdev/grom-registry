@@ -108,6 +108,8 @@ const deletionPagination = useCursorPagination()
 const lifecyclePagination = useCursorPagination()
 const activeRepositoryOperations = ref(0)
 const repositoryOperationActive = computed(() => activeRepositoryOperations.value > 0)
+const repositorySearchQuery = ref('')
+const tagSearchQuery = ref('')
 
 function openProjectSettings(event: globalThis.MouseEvent) {
   projectSettingsTrigger.value = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
@@ -120,7 +122,10 @@ function openProjectDeletion() {
 }
 
 const project = useQuery({ queryKey: computed(() => projectKeys.detail(slug.value)), queryFn: () => getProject(slug.value) })
-const repositories = useQuery({ queryKey: computed(() => [...projectKeys.repositories(slug.value), repositoryPagination.cursor.value]), queryFn: () => listRepositories(slug.value, repositoryPagination.cursor.value) })
+const repositories = useQuery({
+  queryKey: computed(() => [...projectKeys.repositories(slug.value), repositorySearchQuery.value.trim(), repositoryPagination.cursor.value]),
+  queryFn: () => listRepositories(slug.value, repositorySearchQuery.value.trim(), repositoryPagination.cursor.value),
+})
 const repositoriesError = computed(() =>
   repositories.error.value instanceof APIError ? repositories.error.value.message : 'Could not load repositories. Please try again.',
 )
@@ -143,8 +148,8 @@ const routedRepository = useQuery({
   enabled: computed(() => Boolean(repositoryId.value) && repositories.isSuccess.value && !pageItems(repositories.data.value).some((repository) => repository.id === repositoryId.value)),
 })
 const tags = useQuery({
-  queryKey: computed(() => [...projectKeys.tags(slug.value, selectedRepository.value?.name ?? ''), tagPagination.cursor.value]),
-  queryFn: () => listTags(slug.value, selectedRepository.value!.name, tagPagination.cursor.value),
+  queryKey: computed(() => [...projectKeys.tags(slug.value, selectedRepository.value?.name ?? ''), tagSearchQuery.value.trim(), tagPagination.cursor.value]),
+  queryFn: () => listTags(slug.value, selectedRepository.value!.name, tagSearchQuery.value.trim(), tagPagination.cursor.value),
   enabled: computed(() => selectedRepository.value !== null),
   refetchInterval: computed(() => repositoryOperationActive.value ? 5_000 : false),
   refetchOnWindowFocus: computed(() => repositoryOperationActive.value),
@@ -160,18 +165,23 @@ const lifecycleHistory = useQuery({
   enabled: computed(() => canManage.value && selectedRepository.value !== null),
 })
 const inventory = useQuery({
-  queryKey: computed(() => [...registryKeys.inventory(slug.value, selectedRepository.value?.name ?? ''), inventoryPagination.cursor.value]),
-  queryFn: () => listInventory(slug.value, selectedRepository.value!.name, inventoryPagination.cursor.value),
+  queryKey: computed(() => [...registryKeys.inventory(slug.value, selectedRepository.value?.name ?? ''), tagSearchQuery.value.trim(), inventoryPagination.cursor.value]),
+  queryFn: () => listInventory(slug.value, selectedRepository.value!.name, tagSearchQuery.value.trim(), inventoryPagination.cursor.value),
   enabled: computed(() => selectedRepository.value !== null),
   refetchInterval: computed(() => repositoryOperationActive.value ? 5_000 : false),
   refetchOnWindowFocus: computed(() => repositoryOperationActive.value),
 })
 
+const inventoryItems = computed(() => pageItems(inventory.data.value))
 const currentInventoryItems = computed(() =>
-  pageItems(inventory.data.value).filter((manifest) => manifest.state === 'active' || manifest.state === 'untagged'),
+  inventoryItems.value.filter((manifest) => manifest.state === 'active' || manifest.state === 'untagged'),
 )
 const historicalInventoryItems = computed(() =>
-  pageItems(inventory.data.value).filter((manifest) => manifest.state === 'missing' || manifest.state === 'deleted'),
+  inventoryItems.value.filter((manifest) => manifest.state === 'missing' || manifest.state === 'deleted'),
+)
+const inventoryDescription = computed(() => tagSearchQuery.value.trim()
+  ? `${inventoryItems.value.length} matching manifests`
+  : `${inventoryItems.value.length} observed manifests`,
 )
 const memberGroups = computed(() => {
   const items = pageItems(members.data.value)
@@ -190,6 +200,7 @@ watch([repositoryId, () => repositories.data.value, () => routedRepository.data.
 }, { immediate: true })
 
 watch(repositoryId, () => {
+  tagSearchQuery.value = ''
   tagPagination.reset()
   inventoryPagination.reset()
   deletionPagination.reset()
@@ -197,6 +208,11 @@ watch(repositoryId, () => {
 })
 
 watch(memberSearch, () => memberPagination.reset())
+watch(repositorySearchQuery, () => repositoryPagination.reset())
+watch(tagSearchQuery, () => {
+  tagPagination.reset()
+  inventoryPagination.reset()
+})
 
 async function openRepository(repository: Repository) {
   await router.push({ name: 'repository-detail', params: { project: slug.value, repositoryId: repository.id } })
@@ -418,7 +434,7 @@ function manifestPresence(manifest: ManifestInventory) {
 
 const manifestsByTag = computed(() => {
   const lookup = new Map<string, ManifestInventory>()
-  for (const manifest of pageItems(inventory.data.value)) {
+  for (const manifest of inventoryItems.value) {
     for (const tag of manifestTags(manifest)) lookup.set(tag, manifest)
   }
   return lookup
@@ -427,6 +443,15 @@ const manifestsByTag = computed(() => {
 function manifestForTag(tag: string) {
   return manifestsByTag.value.get(tag)
 }
+
+const tagsByNewestPush = computed(() => [...pageItems(tags.data.value)].sort((left, right) => {
+  const leftPushedAt = manifestForTag(left)?.lastPushedAt
+  const rightPushedAt = manifestForTag(right)?.lastPushedAt
+  const leftTimestamp = leftPushedAt ? new Date(leftPushedAt).getTime() : 0
+  const rightTimestamp = rightPushedAt ? new Date(rightPushedAt).getTime() : 0
+  if (leftTimestamp !== rightTimestamp) return rightTimestamp - leftTimestamp
+  return left.localeCompare(right)
+}))
 
 function platformsForTag(tag: string): ManifestPlatform[] {
   return manifestForTag(tag)?.platforms ?? []
@@ -589,6 +614,10 @@ function policySummary(policy: Repository['policies'][number]) {
     </header>
 
     <section v-if="!repositoryId">
+      <label class="list-search">
+        <Search :size="16" aria-hidden="true" />
+        <Input v-model="repositorySearchQuery" type="search" placeholder="Search repositories" aria-label="Search repositories" />
+      </label>
       <div v-if="repositories.isLoadingError.value" class="empty-state mt-5" role="alert">
         <div>
           <Box class="mx-auto mb-3 text-destructive" :size="28" />
@@ -598,45 +627,52 @@ function policySummary(policy: Repository['policies'][number]) {
         </div>
       </div>
       <template v-else>
-      <div v-if="repositories.isError.value" class="mt-5 rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm" role="alert">
-        <p class="font-medium text-foreground">Could not refresh repositories</p>
-        <p class="mt-1 text-muted-foreground">{{ repositoriesError }}</p>
-        <Button class="mt-3" variant="outline" size="sm" @click="repositories.refetch()">Try again</Button>
-      </div>
-      <div v-if="!pageItems(repositories.data.value).length" class="empty-state mt-5">
-        <div>
-          <Box class="mx-auto mb-3 text-accent" :size="28" />
-          <p class="font-medium text-foreground">No repositories yet</p>
-          <p class="mt-2 text-sm">A Writer or Admin can create one automatically with the first push.</p>
+        <div v-if="repositories.isError.value" class="mt-5 rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm" role="alert">
+          <p class="font-medium text-foreground">Could not refresh repositories</p>
+          <p class="mt-1 text-muted-foreground">{{ repositoriesError }}</p>
+          <Button class="mt-3" variant="outline" size="sm" @click="repositories.refetch()">Try again</Button>
         </div>
-      </div>
-      <div v-else class="table-shell mt-5">
-        <button v-for="repository in pageItems(repositories.data.value)" :key="repository.id" class="data-row w-full text-left" @click="openRepository(repository)">
-          <div class="flex items-center gap-3">
-            <div class="avatar"><Box :size="15" /></div>
-            <div><p class="text-sm font-semibold">{{ repository.name }}</p><p class="mt-1 font-mono text-xs text-muted-foreground">{{ slug }}/{{ repository.name }}</p></div>
+        <div v-if="!pageItems(repositories.data.value).length && repositorySearchQuery.trim()" class="empty-state mt-5">
+          <div>
+            <Search class="mx-auto mb-3 text-accent" :size="28" />
+            <p class="font-medium text-foreground">No matching repositories</p>
+            <p class="mt-2 text-sm">Try a different name or description.</p>
           </div>
-          <div class="flex items-center justify-end gap-2">
-            <Badge :tone="repository.profileNeedsReview ? 'danger' : repository.profile === 'unknown' ? 'neutral' : 'success'">
-              {{ profileLabel(repository.profile) }}
-            </Badge>
-            <p class="text-xs text-muted-foreground">
-              {{ repository.policies.length }} policies · {{ repository.status }}
-              <template v-if="repository.creationSource === 'push'"> · created by push</template>
-            </p>
-            <p class="text-xs text-muted-foreground">{{ accountedUsageLabel(repository.accountedUsage) }} accounted<span v-if="repository.accountedUsage?.status === 'stale'"> · stale</span></p>
+        </div>
+        <div v-else-if="!pageItems(repositories.data.value).length" class="empty-state mt-5">
+          <div>
+            <Box class="mx-auto mb-3 text-accent" :size="28" />
+            <p class="font-medium text-foreground">No repositories yet</p>
+            <p class="mt-2 text-sm">A Writer or Admin can create one automatically with the first push.</p>
           </div>
-          <span class="flex items-center gap-2 text-accent"><Settings2 :size="14" /> →</span>
-        </button>
-      </div>
-      <PaginationControls
-        :page="repositoryPagination.page.value"
-        :has-previous="repositoryPagination.hasPrevious.value"
-        :has-next="Boolean(repositories.data.value?.nextCursor)"
-        :disabled="repositories.isFetching.value"
-        @previous="repositoryPagination.previous()"
-        @next="repositoryPagination.next(repositories.data.value?.nextCursor)"
-      />
+        </div>
+        <div v-else class="table-shell mt-5">
+          <button v-for="repository in pageItems(repositories.data.value)" :key="repository.id" class="data-row w-full text-left" @click="openRepository(repository)">
+            <div class="flex items-center gap-3">
+              <div class="avatar"><Box :size="15" /></div>
+              <div><p class="text-sm font-semibold">{{ repository.name }}</p><p class="mt-1 font-mono text-xs text-muted-foreground">{{ slug }}/{{ repository.name }}</p></div>
+            </div>
+            <div class="flex items-center justify-end gap-2">
+              <Badge :tone="repository.profileNeedsReview ? 'danger' : repository.profile === 'unknown' ? 'neutral' : 'success'">
+                {{ profileLabel(repository.profile) }}
+              </Badge>
+              <p class="text-xs text-muted-foreground">
+                {{ repository.policies.length }} policies · {{ repository.status }}
+                <template v-if="repository.creationSource === 'push'"> · created by push</template>
+              </p>
+              <p class="text-xs text-muted-foreground">{{ accountedUsageLabel(repository.accountedUsage) }} accounted<span v-if="repository.accountedUsage?.status === 'stale'"> · stale</span></p>
+            </div>
+            <span class="flex items-center gap-2 text-accent"><Settings2 :size="14" /> →</span>
+          </button>
+        </div>
+        <PaginationControls
+          :page="repositoryPagination.page.value"
+          :has-previous="repositoryPagination.hasPrevious.value"
+          :has-next="Boolean(repositories.data.value?.nextCursor)"
+          :disabled="repositories.isFetching.value"
+          @previous="repositoryPagination.previous()"
+          @next="repositoryPagination.next(repositories.data.value?.nextCursor)"
+        />
       </template>
     </section>
 
@@ -830,18 +866,6 @@ function policySummary(policy: Repository['policies'][number]) {
           </div>
         </Card>
         <Card class="overview-card">
-          <div class="overview-icon"><HardDrive :size="18" /></div>
-          <div>
-            <p class="overview-label">Accounted usage</p>
-            <p class="overview-value">{{ accountedUsageLabel(selectedRepository.accountedUsage) }}</p>
-            <p class="overview-detail">
-              <template v-if="selectedRepository.accountedUsage?.reconciledAt">Last reconciled {{ new Date(selectedRepository.accountedUsage.reconciledAt!).toLocaleString() }}</template>
-              <template v-else>Logical descriptor usage, not reclaimable physical storage.</template>
-              <template v-if="selectedRepository.accountedUsage?.status === 'stale'"> · stale</template>
-            </p>
-          </div>
-        </Card>
-        <Card class="overview-card">
           <div class="overview-icon"><Tags :size="18" /></div>
           <div>
             <p class="overview-label">Policies</p>
@@ -851,6 +875,11 @@ function policySummary(policy: Repository['policies'][number]) {
         </Card>
       </section>
 
+      <label class="repository-search">
+        <Search :size="16" aria-hidden="true" />
+        <Input v-model="tagSearchQuery" type="search" placeholder="Filter tags or digests" aria-label="Filter tags and digests" />
+      </label>
+
       <section class="repo-panel">
         <div class="panel-heading">
           <div>
@@ -859,9 +888,11 @@ function policySummary(policy: Repository['policies'][number]) {
           </div>
         </div>
         <div class="repo-panel-body">
-          <div v-if="!pageItems(tags.data.value).length" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No tags available.</div>
+          <div v-if="!tagsByNewestPush.length" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            {{ tagSearchQuery.trim() ? 'No tags match this filter.' : 'No tags available.' }}
+          </div>
           <div v-else class="space-y-3">
-            <Card v-for="tag in pageItems(tags.data.value)" :key="tag" class="overflow-hidden">
+            <Card v-for="tag in tagsByNewestPush" :key="tag" class="overflow-hidden">
               <div class="flex items-start justify-between gap-3 border-b px-4 py-3">
                 <div>
                   <p class="eyebrow">Tag</p>
@@ -920,9 +951,11 @@ function policySummary(policy: Repository['policies'][number]) {
         </div>
       </section>
 
-      <Accordion title="Manifest inventory" :description="`${pageItems(inventory.data.value).length} observed manifests`" default-open>
+      <Accordion title="Manifest inventory" :description="inventoryDescription" default-open>
         <p v-if="inventory.isLoading.value" class="text-xs text-muted-foreground">Loading manifest inventory…</p>
-        <p v-else-if="!pageItems(inventory.data.value).length" class="text-xs text-muted-foreground">No observed manifests yet.</p>
+        <p v-else-if="!inventoryItems.length" class="text-xs text-muted-foreground">
+          {{ tagSearchQuery.trim() ? 'No manifests match this filter.' : 'No observed manifests yet.' }}
+        </p>
         <template v-if="currentInventoryItems.length">
           <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current in Distribution</p>
           <Card v-for="manifest in currentInventoryItems" :key="manifest.id" class="cursor-pointer p-3" role="button" tabindex="0" @click="selectedManifest = manifest" @keydown.enter="selectedManifest = manifest">
@@ -971,6 +1004,30 @@ function policySummary(policy: Repository['policies'][number]) {
               <p class="mt-1 text-xs text-muted-foreground">{{ policySummary(policy) }}</p>
             </li>
           </ul>
+        </div>
+      </section>
+
+      <section class="repo-panel" aria-labelledby="repository-accounting-title">
+        <div class="panel-heading">
+          <div>
+            <h2 id="repository-accounting-title">Accounting</h2>
+            <p>Logical OCI content attributed to this repository.</p>
+          </div>
+        </div>
+        <div class="repo-panel-body">
+          <div class="accounting-summary">
+            <div class="overview-icon"><HardDrive :size="18" /></div>
+            <div>
+              <p class="overview-label">Accounted usage</p>
+              <p class="overview-value">{{ accountedUsageLabel(selectedRepository.accountedUsage) }}</p>
+              <p class="overview-detail">
+                <template v-if="selectedRepository.accountedUsage?.reconciledAt">Last reconciled {{ new Date(selectedRepository.accountedUsage.reconciledAt!).toLocaleString() }}</template>
+                <template v-else>Awaiting the first completed inventory accounting.</template>
+                <template v-if="selectedRepository.accountedUsage?.status === 'stale'"> · stale</template>
+              </p>
+            </div>
+          </div>
+          <p class="accounting-note">Counts live descriptors once within this repository; it is not reclaimable physical storage.</p>
         </div>
       </section>
 
@@ -1456,7 +1513,7 @@ function policySummary(policy: Repository['policies'][number]) {
 
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: .85rem;
 }
 
@@ -1481,6 +1538,33 @@ function policySummary(policy: Repository['policies'][number]) {
 .overview-label { color: var(--muted-foreground); font-size: .72rem; font-weight: 600; }
 .overview-value { margin-top: .3rem; font-size: 1.1rem; font-weight: 680; }
 .overview-detail { margin-top: .5rem; color: var(--muted-foreground); font-size: .76rem; line-height: 1.4; }
+
+.repository-search,
+.list-search {
+  position: relative;
+  display: block;
+  width: min(100%, 28rem);
+}
+
+.list-search {
+  margin-bottom: .85rem;
+}
+
+.repository-search > svg,
+.list-search > svg {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: .75rem;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.repository-search :deep(.grom-input),
+.list-search :deep(.grom-input) {
+  padding-left: 2.3rem;
+}
 
 .repo-panel {
   overflow: hidden;
@@ -1523,6 +1607,19 @@ function policySummary(policy: Repository['policies'][number]) {
 .policy-summary-item-enabled {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.accounting-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.accounting-note {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: .76rem;
+  line-height: 1.45;
 }
 
 @media (max-width: 900px) {

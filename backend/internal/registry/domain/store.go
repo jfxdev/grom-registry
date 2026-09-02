@@ -11,7 +11,9 @@ type Store interface {
 	CreateRepository(ctx context.Context, repository *Repository) error
 	EnsureRepository(ctx context.Context, repository *Repository) (*Repository, bool, error)
 	ListRepositories(ctx context.Context, projectID foundation.ID) ([]Repository, error)
-	ListRepositoriesPage(ctx context.Context, projectID foundation.ID, request foundation.PageRequest) (foundation.PageResult[Repository], error)
+	ListRepositoriesPage(ctx context.Context, projectID foundation.ID, query string, request foundation.PageRequest) (foundation.PageResult[Repository], error)
+	SearchRepositoriesAcrossProjects(ctx context.Context, query string, request foundation.PageRequest) (foundation.PageResult[RepositorySearchResult], error)
+	SearchTagNamesPage(ctx context.Context, repositoryID foundation.ID, query string, request foundation.PageRequest) (foundation.PageResult[string], error)
 	FindRepository(ctx context.Context, projectID foundation.ID, name string) (*Repository, error)
 	FindRepositoryByID(ctx context.Context, repositoryID foundation.ID) (*Repository, error)
 	RepositoryExists(ctx context.Context, projectID foundation.ID, name string) (bool, error)
@@ -25,7 +27,7 @@ type Store interface {
 	UpsertManifestObservation(ctx context.Context, repositoryID foundation.ID, observation ManifestObservation, observedAt time.Time) error
 	CompleteInventoryReconciliation(ctx context.Context, repositoryID foundation.ID, seenTags, seenDigests []string, observedAt time.Time) error
 	ListManifestInventory(ctx context.Context, repositoryID foundation.ID) ([]ManifestInventory, error)
-	ListManifestInventoryPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest) (foundation.PageResult[ManifestInventory], error)
+	ListManifestInventoryPage(ctx context.Context, repositoryID foundation.ID, query string, request foundation.PageRequest) (foundation.PageResult[ManifestInventory], error)
 	MarkManifestDeleted(ctx context.Context, repositoryID foundation.ID, digest string, deletedAt time.Time) error
 	CreateArtifactDeletion(ctx context.Context, deletion *ArtifactDeletion) error
 	CompleteArtifactDeletion(ctx context.Context, deletionID foundation.ID, status, message string, completedAt time.Time) error

@@ -190,6 +190,8 @@ func (s *Server) routes() chi.Router {
 			protected.Post("/service-accounts/{id}/tokens", s.createServiceAccountToken)
 			protected.Delete("/service-accounts/{id}/tokens/{tokenId}", s.revokeServiceAccountToken)
 
+			protected.Get("/repositories", s.searchRepositories)
+
 			protected.Get("/projects", s.listProjects)
 			protected.Post("/projects", s.createProject)
 			protected.Get("/projects/{project}", s.getProject)
@@ -1194,7 +1196,12 @@ func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
 		return
 	}
-	scope := "repositories:" + project.Slug
+	if !validListQuery(r, "cursor", "limit", "q") {
+		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
+		return
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	scope := "repositories:" + project.Slug + ":q=" + strings.ToLower(query)
 	request, _, pageErr := pageRequest(r, scope)
 	if pageErr != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
@@ -1227,7 +1234,7 @@ func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	repositories, err := s.repositories.ListPage(r.Context(), project.ID, request)
+	repositories, err := s.repositories.ListPage(r.Context(), project.ID, query, request)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
@@ -1243,6 +1250,32 @@ func (s *Server) listRepositories(w http.ResponseWriter, r *http.Request) {
 		repositories.NextCursor, _ = foundation.EncodePageCursor(cursor)
 	}
 	writeJSON(w, http.StatusOK, repositories)
+}
+
+// searchRepositories is an installation-administrator-only endpoint: unlike
+// listRepositories it is not scoped to a caller-visible project, so it is
+// gated on system-admin status rather than per-project membership.
+func (s *Server) searchRepositories(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	if !validListQuery(r, "cursor", "limit", "q") {
+		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
+		return
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	request, _, pageErr := pageRequest(r, "repositories-search:q="+strings.ToLower(query))
+	if pageErr != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+		return
+	}
+	results, err := s.repositories.SearchAcrossProjects(r.Context(), query, request)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, results)
 }
 
 func validListQuery(r *http.Request, allowed ...string) bool {
@@ -1605,17 +1638,22 @@ func (s *Server) listRepositoryInventory(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	if !validListQuery(r, "cursor", "limit", "repository", "q") {
+		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
+		return
+	}
 	repository := r.URL.Query().Get("repository")
 	if repository == "" {
 		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository is required")
 		return
 	}
-	request, _, err := pageRequest(r, "repository-inventory:"+project.Slug+":"+repository)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	request, _, err := pageRequest(r, "repository-inventory:"+project.Slug+":"+repository+":q="+strings.ToLower(query))
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
 		return
 	}
-	items, err := s.inventory.ListPage(r.Context(), project.ID, repository, request)
+	items, err := s.inventory.ListPage(r.Context(), project.ID, repository, query, request)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "inventory_unavailable", err.Error())
 		return
@@ -1767,9 +1805,34 @@ func (s *Server) listTags(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
 		return
 	}
+	if !validListQuery(r, "cursor", "limit", "repository", "q") {
+		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
+		return
+	}
 	repository := r.URL.Query().Get("repository")
 	if repository == "" || strings.HasPrefix(repository, "/") || strings.Contains(repository, "..") {
 		writeError(w, r, http.StatusBadRequest, "invalid_repository", "Repository path is invalid")
+		return
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query != "" {
+		scope := "repository-tags:" + project.Slug + ":" + repository + ":q=" + strings.ToLower(query)
+		request, _, pageErr := pageRequest(r, scope)
+		if pageErr != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
+			return
+		}
+		target, findErr := s.repositories.Find(r.Context(), project.ID, repository)
+		if findErr != nil {
+			writeJSON(w, http.StatusOK, foundation.PageResult[string]{})
+			return
+		}
+		result, searchErr := s.repositories.SearchTagNames(r.Context(), target.ID, query, request)
+		if searchErr != nil {
+			s.internalError(w, r, searchErr)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
 	scope := "repository-tags:" + project.Slug + ":" + repository
