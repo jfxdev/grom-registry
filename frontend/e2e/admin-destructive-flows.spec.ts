@@ -203,6 +203,8 @@ test('an administrator disables a live user session and deletes a recovery point
   try {
     await expect(userPage.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
     await page.reload()
+    await page.getByRole('button', { name: `Manage user ${username}` }).click()
+    await page.getByRole('button', { name: /Danger zone/ }).click()
     const disableUser = page.getByRole('button', { name: `Disable user ${username}` })
     await expect(disableUser).toBeVisible()
     await disableUser.click()
@@ -214,6 +216,21 @@ test('an administrator disables a live user session and deletes a recovery point
     await userPage.goto(`${runtime.publicURL}/projects`)
     await expect(userPage).toHaveURL(/signin/)
     await expect(page.getByLabel('Inactive user')).toBeVisible()
+
+    await page.getByRole('button', { name: `Manage user ${username}` }).click()
+    const reactivateUser = page.getByRole('button', { name: `Reactivate user ${username}` })
+    await reactivateUser.click()
+    const [reactivateResponse] = await Promise.all([
+      page.waitForResponse((response) => response.request().method() === 'POST' && /\/reactivate$/.test(response.url())),
+      page.getByRole('form', { name: `Reactivate ${username}?` }).getByRole('button', { name: 'Reactivate user' }).click(),
+    ])
+    expect(reactivateResponse.status()).toBe(200)
+    await expect(page.getByLabel('Active user')).toBeVisible()
+
+    await userPage.getByLabel('Email').fill('disabled-e2e@grom.local')
+    await userPage.getByRole('textbox', { name: 'Password' }).fill('disabled-e2e-password')
+    await userPage.getByRole('button', { name: 'Sign in' }).click()
+    await expect(userPage.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
   } finally {
     await userPage.context().close()
   }
