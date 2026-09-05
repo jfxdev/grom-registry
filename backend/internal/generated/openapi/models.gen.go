@@ -127,6 +127,8 @@ const (
 	IdentityUserPasswordResetLinkCreated AuditAction = "identity.user_password_reset_link_created"
 	IdentityUserPromotedToSystemAdmin    AuditAction = "identity.user_promoted_to_system_admin"
 	IdentityUserPromotedToSystemViewer   AuditAction = "identity.user_promoted_to_system_viewer"
+	IdentityUserReactivated              AuditAction = "identity.user_reactivated"
+	IdentityUserUpdated                  AuditAction = "identity.user_updated"
 	PlatformBackupCreated                AuditAction = "platform.backup_created"
 	PlatformBackupDeleteRequested        AuditAction = "platform.backup_delete_requested"
 	PlatformBackupDeleted                AuditAction = "platform.backup_deleted"
@@ -186,6 +188,10 @@ func (e AuditAction) Valid() bool {
 	case IdentityUserPromotedToSystemAdmin:
 		return true
 	case IdentityUserPromotedToSystemViewer:
+		return true
+	case IdentityUserReactivated:
+		return true
+	case IdentityUserUpdated:
 		return true
 	case PlatformBackupCreated:
 		return true
@@ -1349,6 +1355,12 @@ type TagPage struct {
 	NextCursor *string  `json:"nextCursor,omitempty"`
 }
 
+// UpdateUserRequest defines model for UpdateUserRequest.
+type UpdateUserRequest struct {
+	Email    *openapi_types.Email `json:"email,omitempty"`
+	Username *string              `json:"username,omitempty"`
+}
+
 // User defines model for User.
 type User struct {
 	CreatedAt    time.Time           `json:"createdAt"`
@@ -1607,3 +1619,6 @@ type CreateSessionJSONRequestBody = LoginRequest
 
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = CreateUserRequest
+
+// UpdateUserJSONRequestBody defines body for UpdateUser for application/json ContentType.
+type UpdateUserJSONRequestBody = UpdateUserRequest

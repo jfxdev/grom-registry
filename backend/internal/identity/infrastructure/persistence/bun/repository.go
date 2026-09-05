@@ -86,6 +86,15 @@ func (r *Repository) FindUserByID(ctx context.Context, id foundation.ID) (*ident
 	return toUser(model), nil
 }
 
+func (r *Repository) FindUserByIDIncludingDisabled(ctx context.Context, id foundation.ID) (*identity.User, error) {
+	model := new(userModel)
+	err := r.db.NewSelect().Model(model).Where("id = ?", id.String()).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return toUser(model), nil
+}
+
 func (r *Repository) ListUsers(ctx context.Context) ([]identity.User, error) {
 	var models []userModel
 	if err := r.db.NewSelect().Model(&models).OrderExpr("created_at ASC").Scan(ctx); err != nil {
@@ -156,6 +165,41 @@ func (r *Repository) DisableUser(ctx context.Context, id foundation.ID) error {
 		_, err = tx.NewDelete().Model((*sessionModel)(nil)).Where("user_id = ?", id.String()).Exec(ctx)
 		return err
 	})
+}
+
+func (r *Repository) ReactivateUser(ctx context.Context, id foundation.ID) error {
+	result, err := r.db.NewUpdate().Model((*userModel)(nil)).
+		Set("disabled_at = NULL").
+		Where("id = ?", id.String()).
+		Where("disabled_at IS NOT NULL").
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (r *Repository) UpdateUser(ctx context.Context, id foundation.ID, email, username *string) error {
+	query := r.db.NewUpdate().Model((*userModel)(nil)).Where("id = ?", id.String())
+	if email != nil {
+		query = query.Set("email = ?", *email)
+	}
+	if username != nil {
+		query = query.Set("username = ?", *username)
+	}
+	result, err := query.Exec(ctx)
+	if err != nil {
+		return userConflictError(err)
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (r *Repository) UpdateUserPassword(ctx context.Context, id foundation.ID, passwordHash string) error {

@@ -4,15 +4,16 @@ import { useSessionStore } from '@/modules/auth/store/session'
 import type { User } from '@/shared/api/models'
 import { ActionButton, Button, DeleteButton } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
+import { DangerZone } from '@/shared/components/ui/danger-zone'
 import { DropdownMenu } from '@/shared/components/ui/dropdown-menu'
 import { Input } from '@/shared/components/ui/input'
 import { PaginationControls } from '@/shared/components/ui/pagination'
 import { writeClipboardText } from '@/shared/lib/clipboard'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Check, CircleCheck, CircleOff, Copy, Eye, KeyRound, Plus, Search, ShieldAlert, UserRound, X } from '@lucide/vue'
+import { Check, CircleCheck, CircleOff, Copy, Eye, KeyRound, Pencil, Plus, Search, ShieldAlert, UserRound, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
-import { createUser, createUserPasswordResetLink, disableUser, listUsers, promoteUserToSystemAdmin, promoteUserToSystemViewer, userKeys } from '../api/users'
+import { createUser, createUserPasswordResetLink, disableUser, listUsers, promoteUserToSystemAdmin, promoteUserToSystemViewer, reactivateUser, updateUser, userKeys } from '../api/users'
 
 const queryClient = useQueryClient()
 const session = useSessionStore()
@@ -38,6 +39,17 @@ const promoteTarget = ref<User | null>(null)
 const promoteError = ref('')
 const viewerTarget = ref<User | null>(null)
 const viewerError = ref('')
+const editTarget = ref<User | null>(null)
+const editEmail = ref('')
+const editUsername = ref('')
+const editError = ref('')
+const editConfirming = ref(false)
+const editHasChanges = computed(() => {
+  if (!editTarget.value) return false
+  return editEmail.value.trim() !== editTarget.value.email || editUsername.value.trim() !== editTarget.value.username
+})
+const reactivateTarget = ref<User | null>(null)
+const reactivateError = ref('')
 const currentPageUserCount = computed(() => pageItems(users.data.value).length)
 const filteredUsers = computed(() => pageItems(users.data.value))
 
@@ -76,6 +88,7 @@ const disable = useMutation({
   onSuccess: async () => {
     await queryClient.invalidateQueries({ queryKey: userKeys.all })
     disableTarget.value = null
+    editTarget.value = null
   },
   onError: (caught) => {
     disableError.value = caught instanceof APIError ? caught.message : 'Could not disable the user'
@@ -87,6 +100,7 @@ const promote = useMutation({
   onSuccess: async () => {
     await queryClient.invalidateQueries({ queryKey: userKeys.all })
     promoteTarget.value = null
+    editTarget.value = null
   },
   onError: (caught) => {
     promoteError.value = caught instanceof APIError ? caught.message : 'Could not promote the user'
@@ -98,9 +112,35 @@ const promoteViewer = useMutation({
   onSuccess: async () => {
     await queryClient.invalidateQueries({ queryKey: userKeys.all })
     viewerTarget.value = null
+    editTarget.value = null
   },
   onError: (caught) => {
     viewerError.value = caught instanceof APIError ? caught.message : 'Could not promote the user to viewer'
+  },
+})
+
+const editUser = useMutation({
+  mutationFn: (input: { email?: string; username?: string }) => updateUser(editTarget.value!.id, input),
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: userKeys.all })
+    editTarget.value = null
+    editConfirming.value = false
+  },
+  onError: (caught) => {
+    editError.value = editUserError(caught)
+    editConfirming.value = false
+  },
+})
+
+const reactivate = useMutation({
+  mutationFn: (userId: string) => reactivateUser(userId),
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: userKeys.all })
+    reactivateTarget.value = null
+    editTarget.value = null
+  },
+  onError: (caught) => {
+    reactivateError.value = caught instanceof APIError ? caught.message : 'Could not reactivate the user'
   },
 })
 
@@ -172,6 +212,58 @@ function createUserError(caught: unknown) {
     return 'This email address is already in use.'
   }
   return 'Could not create user. Please try again.'
+}
+
+function openEdit(user: User) {
+  editTarget.value = user
+  editEmail.value = user.email
+  editUsername.value = user.username
+  editError.value = ''
+  editConfirming.value = false
+}
+
+function closeEdit() {
+  if (!editUser.isPending.value) {
+    editTarget.value = null
+    editConfirming.value = false
+  }
+  editError.value = ''
+}
+
+function submitEdit() {
+  if (!editHasChanges.value) return
+  editError.value = ''
+  editConfirming.value = true
+}
+
+function confirmEdit() {
+  if (!editTarget.value) return
+  editUser.mutate({
+    email: editEmail.value.trim() !== editTarget.value.email ? editEmail.value.trim() : undefined,
+    username: editUsername.value.trim() !== editTarget.value.username ? editUsername.value.trim() : undefined,
+  })
+}
+
+function editUserError(caught: unknown) {
+  if (!(caught instanceof APIError)) return 'Could not update user'
+
+  if (caught.code === 'username_taken') {
+    return 'This username is already in use.'
+  }
+  if (caught.code === 'email_taken') {
+    return 'This email address is already in use.'
+  }
+  return 'Could not update user. Please try again.'
+}
+
+function openReactivate(user: User) {
+  reactivateTarget.value = user
+  reactivateError.value = ''
+}
+
+function closeReactivate() {
+  if (!reactivate.isPending.value) reactivateTarget.value = null
+  reactivateError.value = ''
 }
 
 async function copyResetLink() {
@@ -272,15 +364,8 @@ async function copyRegistrationLink() {
             <CircleCheck v-else :size="17" aria-hidden="true" />
           </span>
           <div class="user-actions">
-            <DropdownMenu v-if="!user.disabledAt && !user.systemAdmin" label="Set role" v-bind="{ ariaLabel: `Change role for ${user.username}` }">
-              <template #icon><ShieldAlert :size="15" /></template>
-              <template #default="{ close }">
-                <button v-if="!user.systemViewer" type="button" class="dropdown-menu-item" role="menuitem" @click="close(); chooseRole(user, 'viewer')"><Eye :size="15" /> Viewer</button>
-                <button type="button" class="dropdown-menu-item" role="menuitem" @click="close(); chooseRole(user, 'administrator')"><ShieldAlert :size="15" /> Administrator</button>
-              </template>
-            </DropdownMenu>
+            <Button size="sm" variant="outline" :aria-label="`Manage user ${user.username}`" @click="openEdit(user)"><Pencil :size="15" /> Manage</Button>
             <Button v-if="!user.disabledAt" size="sm" variant="outline" @click="openReset(user)"><KeyRound :size="15" /> Reset password</Button>
-            <DeleteButton v-if="!user.disabledAt" size="sm" :disabled="user.id === session.user?.id" :aria-label="`Disable user ${user.username}`" @click="openDisable(user)" />
           </div>
         </div>
       </template>
@@ -296,11 +381,67 @@ async function copyRegistrationLink() {
       </div>
     </div>
 
+    <div v-if="editTarget" class="modal-backdrop" @click.self="closeEdit">
+      <form v-if="!editConfirming" class="modal form-stack" aria-labelledby="edit-user-title" @submit.prevent="submitEdit">
+        <div class="flex items-start justify-between"><div><h2 id="edit-user-title" class="text-lg font-semibold">Manage {{ editTarget.username }}</h2><p class="mt-1 text-sm text-muted-foreground">Update this user's details, role, or access.</p></div><Button variant="ghost" size="icon" aria-label="Close manage user" @click="closeEdit"><X :size="18" /></Button></div>
+        <label class="field-label">Email<Input v-model="editEmail" type="email" required /></label>
+        <label class="field-label">Username<Input v-model="editUsername" required /></label>
+        <p v-if="editError" class="error-text" role="alert">{{ editError }}</p>
+
+        <div v-if="editTarget.disabledAt" class="manage-section">
+          <p class="manage-section-title">Access</p>
+          <Button size="sm" :aria-label="`Reactivate user ${editTarget.username}`" @click="openReactivate(editTarget)"><CircleCheck :size="15" /> Reactivate</Button>
+        </div>
+
+        <div v-if="!editTarget.disabledAt && !editTarget.systemAdmin" class="manage-section">
+          <p class="manage-section-title">Role</p>
+          <DropdownMenu :label="roleLabel(editTarget)" v-bind="{ ariaLabel: `Change role for ${editTarget.username}` }">
+            <template #icon><Eye v-if="editTarget.systemViewer" :size="15" /><UserRound v-else :size="15" /></template>
+            <template #default="{ close }">
+              <button v-if="!editTarget.systemViewer" type="button" class="dropdown-menu-item" role="menuitem" @click="close(); chooseRole(editTarget, 'viewer')"><Eye :size="15" /> Viewer</button>
+              <button type="button" class="dropdown-menu-item" role="menuitem" @click="close(); chooseRole(editTarget, 'administrator')"><ShieldAlert :size="15" /> Administrator</button>
+            </template>
+          </DropdownMenu>
+        </div>
+
+        <DangerZone
+          v-if="!editTarget.disabledAt"
+          title="Danger zone"
+          description="Deactivating blocks sign-in and revokes active sessions."
+        >
+          <div class="manage-section-actions">
+            <Button size="sm" variant="outline" :disabled="editTarget.id === session.user?.id" :aria-label="`Deactivate user ${editTarget.username}`" @click="openDisable(editTarget)"><CircleOff :size="15" /> Deactivate</Button>
+            <DeleteButton size="sm" :disabled="editTarget.id === session.user?.id" :aria-label="`Disable user ${editTarget.username}`" @click="openDisable(editTarget)" />
+          </div>
+        </DangerZone>
+
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" :disabled="editUser.isPending.value" @click="closeEdit">Cancel</Button><Button type="submit" :disabled="!editHasChanges">Save changes</Button></div>
+      </form>
+
+      <form v-else class="modal form-stack" aria-labelledby="edit-user-title" @submit.prevent="confirmEdit">
+        <div class="flex items-start justify-between"><div><h2 id="edit-user-title" class="text-lg font-semibold">Confirm changes to {{ editTarget.username }}</h2><p class="mt-1 text-sm text-muted-foreground">Review before saving.</p></div><Button variant="ghost" size="icon" aria-label="Close manage user" @click="closeEdit"><X :size="18" /></Button></div>
+        <ul class="confirm-diff">
+          <li v-if="editEmail.trim() !== editTarget.email"><span>Email</span><strong>{{ editTarget.email }} → {{ editEmail.trim() }}</strong></li>
+          <li v-if="editUsername.trim() !== editTarget.username"><span>Username</span><strong>{{ editTarget.username }} → {{ editUsername.trim() }}</strong></li>
+        </ul>
+        <p v-if="editError" class="error-text" role="alert">{{ editError }}</p>
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" :disabled="editUser.isPending.value" @click="editConfirming = false">Back</Button><Button type="submit" :loading="editUser.isPending.value">Confirm changes</Button></div>
+      </form>
+    </div>
+
     <div v-if="disableTarget" class="modal-backdrop" @click.self="closeDisable">
       <form class="modal form-stack" aria-labelledby="disable-user-title" @submit.prevent="disable.mutate(disableTarget!.id)">
         <div class="flex items-start justify-between"><div><h2 id="disable-user-title" class="text-lg font-semibold">Disable {{ disableTarget.username }}</h2><p class="mt-1 text-sm text-muted-foreground">This revokes the user’s active sessions and blocks future sign-in.</p></div><Button variant="ghost" size="icon" aria-label="Close disable user" @click="closeDisable"><X :size="18" /></Button></div>
         <p v-if="disableError" class="error-text" role="alert">{{ disableError }}</p>
         <div class="flex justify-end gap-2"><Button variant="ghost" type="button" :disabled="disable.isPending.value" @click="closeDisable">Cancel</Button><Button type="submit" variant="danger" :loading="disable.isPending.value">Disable user</Button></div>
+      </form>
+    </div>
+
+    <div v-if="reactivateTarget" class="modal-backdrop" @click.self="closeReactivate">
+      <form class="modal form-stack" aria-labelledby="reactivate-user-title" @submit.prevent="reactivate.mutate(reactivateTarget!.id)">
+        <div class="flex items-start justify-between"><div><h2 id="reactivate-user-title" class="text-lg font-semibold">Reactivate {{ reactivateTarget.username }}?</h2><p class="mt-1 text-sm text-muted-foreground">This restores the account's ability to sign in.</p></div><Button variant="ghost" size="icon" aria-label="Close reactivate user" @click="closeReactivate"><X :size="18" /></Button></div>
+        <p v-if="reactivateError" class="error-text" role="alert">{{ reactivateError }}</p>
+        <div class="flex justify-end gap-2"><Button variant="ghost" type="button" :disabled="reactivate.isPending.value" @click="closeReactivate">Cancel</Button><Button type="submit" :loading="reactivate.isPending.value">Reactivate user</Button></div>
       </form>
     </div>
 
@@ -522,6 +663,50 @@ async function copyRegistrationLink() {
   .user-created { grid-column: 1; }
   .user-status { grid-column: 2; grid-row: 1; }
   .user-actions { grid-column: 1 / span 2; grid-row: auto; }
+}
+
+.manage-section {
+  display: grid;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.manage-section-title {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.manage-section-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.confirm-diff {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 0.8rem;
+  list-style: none;
+}
+
+.confirm-diff li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+}
+
+.confirm-diff span {
+  color: var(--muted-foreground);
 }
 
 .reveal-modal {

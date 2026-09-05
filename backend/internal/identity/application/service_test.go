@@ -89,6 +89,149 @@ func TestPromoteUserToSystemAdmin(t *testing.T) {
 	}
 }
 
+type reactivateUserRepository struct {
+	identity.Repository
+	user             *identity.User
+	reactivated      foundation.ID
+	reactivateCalled bool
+}
+
+func (r *reactivateUserRepository) FindUserByIDIncludingDisabled(_ context.Context, id foundation.ID) (*identity.User, error) {
+	if r.user == nil || r.user.ID != id {
+		return nil, sql.ErrNoRows
+	}
+	return r.user, nil
+}
+
+func (r *reactivateUserRepository) ReactivateUser(_ context.Context, id foundation.ID) error {
+	r.reactivateCalled = true
+	r.reactivated = id
+	return nil
+}
+
+func TestReactivateUserClearsDisabledAt(t *testing.T) {
+	now := time.Now().UTC()
+	user := &identity.User{ID: foundation.NewID(), DisabledAt: &now}
+	repository := &reactivateUserRepository{user: user}
+
+	reactivated, err := New(repository, time.Hour).ReactivateUser(context.Background(), user.ID)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reactivated.DisabledAt != nil {
+		t.Fatalf("expected DisabledAt to be cleared, got %#v", reactivated.DisabledAt)
+	}
+	if !repository.reactivateCalled || repository.reactivated != user.ID {
+		t.Fatalf("expected repository ReactivateUser to be called with %s", user.ID)
+	}
+}
+
+func TestReactivateUserIsIdempotentForActiveUser(t *testing.T) {
+	user := &identity.User{ID: foundation.NewID()}
+	repository := &reactivateUserRepository{user: user}
+
+	reactivated, err := New(repository, time.Hour).ReactivateUser(context.Background(), user.ID)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reactivated.DisabledAt != nil {
+		t.Fatalf("expected already-active user to remain active, got %#v", reactivated.DisabledAt)
+	}
+	if repository.reactivateCalled {
+		t.Fatal("expected no repository write for an already-active user")
+	}
+}
+
+func TestReactivateUserPropagatesNotFound(t *testing.T) {
+	repository := &reactivateUserRepository{}
+
+	_, err := New(repository, time.Hour).ReactivateUser(context.Background(), foundation.NewID())
+
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected sql.ErrNoRows, got %v", err)
+	}
+}
+
+type updateUserRepository struct {
+	identity.Repository
+	user            *identity.User
+	updateErr       error
+	updatedEmail    *string
+	updatedUsername *string
+}
+
+func (r *updateUserRepository) FindUserByIDIncludingDisabled(_ context.Context, id foundation.ID) (*identity.User, error) {
+	if r.user == nil || r.user.ID != id {
+		return nil, sql.ErrNoRows
+	}
+	return r.user, nil
+}
+
+func (r *updateUserRepository) UpdateUser(_ context.Context, _ foundation.ID, email, username *string) error {
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	r.updatedEmail = email
+	r.updatedUsername = username
+	return nil
+}
+
+func TestUpdateUserPersistsChangedFields(t *testing.T) {
+	user := &identity.User{ID: foundation.NewID(), Email: "old@example.com", Username: "old"}
+	repository := &updateUserRepository{user: user}
+	newEmail := "New@Example.com"
+	newUsername := "newname"
+
+	updated, err := New(repository, time.Hour).UpdateUser(context.Background(), user.ID, &newEmail, &newUsername)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Email != "new@example.com" || updated.Username != "newname" {
+		t.Fatalf("expected normalized updated fields, got %#v", updated)
+	}
+	if repository.updatedEmail == nil || *repository.updatedEmail != "new@example.com" {
+		t.Fatalf("expected repository to receive normalized email, got %#v", repository.updatedEmail)
+	}
+}
+
+func TestUpdateUserRejectsBlankFields(t *testing.T) {
+	user := &identity.User{ID: foundation.NewID(), Email: "old@example.com", Username: "old"}
+	repository := &updateUserRepository{user: user}
+	blank := "   "
+
+	_, err := New(repository, time.Hour).UpdateUser(context.Background(), user.ID, &blank, nil)
+
+	if !errors.Is(err, ErrInvalidUserInput) {
+		t.Fatalf("expected ErrInvalidUserInput, got %v", err)
+	}
+}
+
+func TestUpdateUserRejectsWhenNoFieldsProvided(t *testing.T) {
+	user := &identity.User{ID: foundation.NewID(), Email: "old@example.com", Username: "old"}
+	repository := &updateUserRepository{user: user}
+
+	_, err := New(repository, time.Hour).UpdateUser(context.Background(), user.ID, nil, nil)
+
+	if !errors.Is(err, ErrInvalidUserInput) {
+		t.Fatalf("expected ErrInvalidUserInput, got %v", err)
+	}
+}
+
+func TestUpdateUserPropagatesConflictErrors(t *testing.T) {
+	user := &identity.User{ID: foundation.NewID(), Email: "old@example.com", Username: "old"}
+	repository := &updateUserRepository{user: user, updateErr: identity.ErrUsernameAlreadyExists}
+	newUsername := "taken"
+
+	_, err := New(repository, time.Hour).UpdateUser(context.Background(), user.ID, nil, &newUsername)
+
+	if !errors.Is(err, identity.ErrUsernameAlreadyExists) {
+		t.Fatalf("expected ErrUsernameAlreadyExists, got %v", err)
+	}
+}
+
 func (*missingUserRepository) FindUserByEmail(context.Context, string) (*identity.User, error) {
 	return nil, sql.ErrNoRows
 }

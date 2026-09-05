@@ -283,6 +283,38 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/users/{id}:
+    patch:
+      tags: [Identity]
+      operationId: updateUser
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The requested email or username is already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     delete:
       tags: [Identity]
       operationId: disableUser
@@ -303,6 +335,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/users/{id}/reactivate:
+    post:
+      tags: [Identity]
+      operationId: reactivateUser
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: User reactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/users/{id}/administrator:
     put:
       tags: [Identity]
@@ -1618,6 +1669,8 @@ components:
         - identity.user_promoted_to_system_admin
         - identity.user_promoted_to_system_viewer
         - identity.user_disabled
+        - identity.user_updated
+        - identity.user_reactivated
         - identity.service_account_created
         - identity.service_account_disabled
         - identity.access_key_created
@@ -1845,6 +1898,17 @@ components:
       type: object
       additionalProperties: false
       required: [email, username]
+      properties:
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+          pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
       properties:
         email:
           type: string

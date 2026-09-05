@@ -226,6 +226,55 @@ func (s *Service) DisableUser(ctx context.Context, id foundation.ID) error {
 	return s.repository.DisableUser(ctx, id)
 }
 
+func (s *Service) ReactivateUser(ctx context.Context, id foundation.ID) (*identity.User, error) {
+	user, err := s.repository.FindUserByIDIncludingDisabled(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if user.DisabledAt == nil {
+		return user, nil
+	}
+	if err := s.repository.ReactivateUser(ctx, id); err != nil {
+		return nil, err
+	}
+	user.DisabledAt = nil
+	return user, nil
+}
+
+func (s *Service) UpdateUser(ctx context.Context, id foundation.ID, email, username *string) (*identity.User, error) {
+	user, err := s.repository.FindUserByIDIncludingDisabled(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if email != nil {
+		trimmed := strings.ToLower(strings.TrimSpace(*email))
+		if trimmed == "" {
+			return nil, ErrInvalidUserInput
+		}
+		email = &trimmed
+	}
+	if username != nil {
+		trimmed := strings.TrimSpace(*username)
+		if trimmed == "" {
+			return nil, ErrInvalidUserInput
+		}
+		username = &trimmed
+	}
+	if email == nil && username == nil {
+		return nil, ErrInvalidUserInput
+	}
+	if err := s.repository.UpdateUser(ctx, id, email, username); err != nil {
+		return nil, err
+	}
+	if email != nil {
+		user.Email = *email
+	}
+	if username != nil {
+		user.Username = *username
+	}
+	return user, nil
+}
+
 func (s *Service) ChangePassword(ctx context.Context, userID foundation.ID, currentPassword, newPassword string) error {
 	if len(newPassword) < constants.MinimumPasswordLength {
 		return fmt.Errorf("new password must contain at least %d characters", constants.MinimumPasswordLength)
