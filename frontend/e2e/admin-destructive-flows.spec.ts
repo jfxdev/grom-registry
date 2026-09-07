@@ -225,7 +225,7 @@ test('an administrator disables a live user session and deletes a recovery point
       page.getByRole('form', { name: `Reactivate ${username}?` }).getByRole('button', { name: 'Reactivate user', exact: true }).click(),
     ])
     expect(reactivateResponse.status()).toBe(200)
-    await expect(page.getByLabel('Active user')).toBeVisible()
+    await expect(page.getByLabel('Active user', { exact: true })).toBeVisible()
 
     await userPage.getByLabel('Email').fill('disabled-e2e@grom.local')
     await userPage.getByRole('textbox', { name: 'Password' }).fill('disabled-e2e-password')

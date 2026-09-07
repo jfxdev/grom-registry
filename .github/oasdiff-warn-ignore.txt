@@ -1,1 +1,0 @@
-added the new `identity\.[a-z_]+` enum value to the `items/items/action` response property for the response status `200`

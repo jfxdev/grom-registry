@@ -3,9 +3,12 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -540,7 +543,42 @@ func TestPostgresMigrationsAndBootstrap(t *testing.T) {
 		t.Skip("GROM_TEST_POSTGRES_URL is not configured")
 	}
 	ctx := context.Background()
-	db, kind, err := database.Open(ctx, databaseURL)
+	// BootstrapAdmin only acts on an empty users table, and other packages share
+	// this same Postgres instance and leave rows behind. Run this test in its own
+	// schema instead of truncating the shared "public" tables, which would race
+	// concurrently running packages' fixtures. search_path is a startup parameter
+	// pgdriver forwards to Postgres for every connection it opens (see
+	// https://www.postgresql.org/docs/current/protocol-message-formats.html,
+	// StartupMessage), so every pooled connection resolves unqualified table
+	// names to the private schema, unlike a session-scoped `SET search_path`
+	// which only affects whichever single connection happens to run it.
+	setupDB, kind, err := database.Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := setupDB.Close(); err != nil {
+			t.Errorf("close PostgreSQL setup connection: %v", err)
+		}
+	})
+	if kind != database.Postgres {
+		t.Fatalf("expected postgres kind, got %s", kind)
+	}
+	schema := "test_bootstrap_" + strings.ReplaceAll(foundation.NewID().String(), "-", "_")
+	if _, err := setupDB.ExecContext(ctx, `CREATE SCHEMA "`+schema+`"`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := setupDB.ExecContext(context.Background(), `DROP SCHEMA IF EXISTS "`+schema+`" CASCADE`); err != nil {
+			t.Errorf("drop schema %s: %v", schema, err)
+		}
+	})
+
+	scopedURL, err := withSearchPath(databaseURL, schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, _, err := database.Open(ctx, scopedURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -549,16 +587,7 @@ func TestPostgresMigrationsAndBootstrap(t *testing.T) {
 			t.Errorf("close PostgreSQL database: %v", err)
 		}
 	})
-	if kind != database.Postgres {
-		t.Fatalf("expected postgres kind, got %s", kind)
-	}
 	if err := database.Migrate(ctx, db, kind, 5*time.Second, slog.Default()); err != nil {
-		t.Fatal(err)
-	}
-	// BootstrapAdmin only acts on an empty users table; other tests in this
-	// suite share the same Postgres instance and leave rows behind, so clear
-	// it first rather than relying on this test running against a pristine DB.
-	if _, err := db.ExecContext(ctx, "TRUNCATE TABLE users CASCADE"); err != nil {
 		t.Fatal(err)
 	}
 	service := identityapp.New(identitystore.New(db), time.Hour)
@@ -570,4 +599,20 @@ func TestPostgresMigrationsAndBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	runRepositoryPersistenceFlow(t, ctx, db, service, admin)
+}
+
+// withSearchPath adds a search_path query parameter to a Postgres connection
+// URL. pgdriver forwards unrecognized query parameters as raw Postgres
+// startup-message parameters, so this applies to every connection the
+// resulting pool opens (unlike a session-scoped `SET search_path`, which only
+// affects whichever single pooled connection happens to run it).
+func withSearchPath(databaseURL, schema string) (string, error) {
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		return "", fmt.Errorf("parse database URL: %w", err)
+	}
+	query := parsed.Query()
+	query.Set("search_path", schema)
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
 }
