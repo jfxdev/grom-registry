@@ -151,6 +151,20 @@ func (r *fakeRepository) UpdateUser(_ context.Context, id foundation.ID, email, 
 	if !ok {
 		return sql.ErrNoRows
 	}
+	if email != nil && *email != user.Email {
+		for otherID, existing := range r.users {
+			if otherID != id && existing.Email == *email {
+				return identity.ErrEmailAlreadyExists
+			}
+		}
+	}
+	if username != nil && *username != user.Username {
+		for otherID, existing := range r.users {
+			if otherID != id && existing.Username == *username {
+				return identity.ErrUsernameAlreadyExists
+			}
+		}
+	}
 	if email != nil {
 		user.Email = *email
 	}

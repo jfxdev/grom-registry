@@ -222,7 +222,7 @@ test('an administrator disables a live user session and deletes a recovery point
     await reactivateUser.click()
     const [reactivateResponse] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === 'POST' && /\/reactivate$/.test(response.url())),
-      page.getByRole('form', { name: `Reactivate ${username}?` }).getByRole('button', { name: 'Reactivate user' }).click(),
+      page.getByRole('form', { name: `Reactivate ${username}?` }).getByRole('button', { name: 'Reactivate user', exact: true }).click(),
     ])
     expect(reactivateResponse.status()).toBe(200)
     await expect(page.getByLabel('Active user')).toBeVisible()

@@ -243,23 +243,26 @@ func assertAdministrativePagesFilterAndAdvanceWithKeysets(t *testing.T, ctx cont
 	userTwoID := foundation.NewID()
 	activeID := foundation.NewID()
 	disabledID := foundation.NewID()
+	// A unique query token keeps this assertion immune to unrelated
+	// "...@example.com" rows left behind by other tests sharing this Postgres instance.
+	querySuffix := foundation.NewID().String()
 	t.Cleanup(func() {
 		_, _ = db.NewDelete().Model((*userModel)(nil)).Where("id IN (?)", bun.List([]string{userOneID.String(), userTwoID.String()})).Exec(context.Background())
 		_, _ = db.NewDelete().Model((*serviceAccountModel)(nil)).Where("id IN (?)", bun.List([]string{activeID.String(), disabledID.String()})).Exec(context.Background())
 	})
 	for i, user := range []identity.User{
-		{ID: userOneID, Email: userOneID.String() + "@example.com", Username: "alex-" + userOneID.String(), PasswordHash: "hash", CreatedAt: base},
-		{ID: userTwoID, Email: userTwoID.String() + "@example.com", Username: "sam-" + userTwoID.String(), PasswordHash: "hash", CreatedAt: base.Add(time.Minute)},
+		{ID: userOneID, Email: userOneID.String() + "-" + querySuffix + "@example.com", Username: "alex-" + userOneID.String(), PasswordHash: "hash", CreatedAt: base},
+		{ID: userTwoID, Email: userTwoID.String() + "-" + querySuffix + "@example.com", Username: "sam-" + userTwoID.String(), PasswordHash: "hash", CreatedAt: base.Add(time.Minute)},
 	} {
 		if err := repository.CreateUser(ctx, &user); err != nil {
 			t.Fatalf("user %d: %v", i, err)
 		}
 	}
-	first, err := repository.ListUsersPage(ctx, "example", foundation.PageRequest{Limit: 1, Scope: "users:q=example"})
+	first, err := repository.ListUsersPage(ctx, querySuffix, foundation.PageRequest{Limit: 1, Scope: "users:q=" + querySuffix})
 	if err != nil || len(first.Items) != 1 || first.Items[0].ID != userTwoID || first.NextCursor == "" {
 		t.Fatalf("first user page: %#v, %v", first, err)
 	}
-	second, err := repository.ListUsersPage(ctx, "example", foundation.PageRequest{Limit: 1, Scope: "users:q=example", Cursor: first.NextCursor})
+	second, err := repository.ListUsersPage(ctx, querySuffix, foundation.PageRequest{Limit: 1, Scope: "users:q=" + querySuffix, Cursor: first.NextCursor})
 	if err != nil || len(second.Items) != 1 || second.Items[0].ID != userOneID {
 		t.Fatalf("second user page: %#v, %v", second, err)
 	}

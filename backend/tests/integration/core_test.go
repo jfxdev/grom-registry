@@ -555,6 +555,12 @@ func TestPostgresMigrationsAndBootstrap(t *testing.T) {
 	if err := database.Migrate(ctx, db, kind, 5*time.Second, slog.Default()); err != nil {
 		t.Fatal(err)
 	}
+	// BootstrapAdmin only acts on an empty users table; other tests in this
+	// suite share the same Postgres instance and leave rows behind, so clear
+	// it first rather than relying on this test running against a pristine DB.
+	if _, err := db.ExecContext(ctx, "TRUNCATE TABLE users CASCADE"); err != nil {
+		t.Fatal(err)
+	}
 	service := identityapp.New(identitystore.New(db), time.Hour)
 	if err := service.BootstrapAdmin(ctx, "postgres-admin@example.com", "postgres-admin", "secret-password"); err != nil {
 		t.Fatal(err)

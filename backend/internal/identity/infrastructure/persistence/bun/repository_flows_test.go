@@ -242,6 +242,9 @@ func TestFindServiceAccountByUsername(t *testing.T) {
 		repository := New(db)
 		id := foundation.NewID()
 		account := &identity.ServiceAccount{ID: id, Name: "CI", Username: "ci-" + id.String(), CreatedAt: time.Now().UTC()}
+		t.Cleanup(func() {
+			_, _ = db.NewDelete().Model((*serviceAccountModel)(nil)).Where("id = ?", id.String()).Exec(context.Background())
+		})
 		if err := repository.CreateServiceAccount(ctx, account); err != nil {
 			t.Fatal(err)
 		}
@@ -318,6 +321,10 @@ func TestServiceAccountAPITokenListingAndRevocation(t *testing.T) {
 		repository := New(db)
 		id := foundation.NewID()
 		account := &identity.ServiceAccount{ID: id, Name: "CI", Username: "ci-" + id.String(), CreatedAt: time.Now().UTC()}
+		t.Cleanup(func() {
+			_, _ = db.NewDelete().Model((*apiTokenModel)(nil)).Where("principal_id = ?", id.String()).Exec(context.Background())
+			_, _ = db.NewDelete().Model((*serviceAccountModel)(nil)).Where("id = ?", id.String()).Exec(context.Background())
+		})
 		if err := repository.CreateServiceAccount(ctx, account); err != nil {
 			t.Fatal(err)
 		}
