@@ -213,6 +213,22 @@ export interface paths {
         delete: operations["disableUser"];
         options?: never;
         head?: never;
+        patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/api/v1/users/{id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reactivateUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -819,7 +835,7 @@ export interface components {
             nextCursor?: string;
         };
         /** @enum {string} */
-        AuditAction: "identity.login_succeeded" | "identity.login_failed" | "identity.registry_auth_failed" | "identity.user_created" | "identity.user_promoted_to_system_admin" | "identity.user_promoted_to_system_viewer" | "identity.user_disabled" | "identity.service_account_created" | "identity.service_account_disabled" | "identity.access_key_created" | "identity.access_key_revoked" | "identity.user_password_changed" | "identity.user_password_reset_link_created" | "identity.user_password_reset_completed" | "projects.project_created" | "projects.project_delete_requested" | "projects.project_deleted" | "projects.membership_upserted" | "projects.membership_removed" | "registry.repository_created_from_push" | "registry.repository_policies_updated" | "registry.repository_archived" | "registry.repository_unarchived" | "registry.repository_removed" | "registry.artifact_deletion_started" | "registry.artifact_deletion_completed" | "registry.artifact_deletion_failed" | "registry.lifecycle_preview_created" | "registry.lifecycle_run_started" | "registry.lifecycle_item_deleted" | "registry.lifecycle_item_skipped" | "registry.lifecycle_item_failed" | "registry.lifecycle_run_completed" | "registry.lifecycle_run_failed" | "platform.restore_completed" | "platform.backup_created" | "platform.backup_delete_requested" | "platform.backup_deleted" | "platform.garbage_collection_started" | "platform.garbage_collection_completed" | "platform.garbage_collection_failed";
+        AuditAction: "identity.login_succeeded" | "identity.login_failed" | "identity.registry_auth_failed" | "identity.user_created" | "identity.user_promoted_to_system_admin" | "identity.user_promoted_to_system_viewer" | "identity.user_disabled" | "identity.user_updated" | "identity.user_reactivated" | "identity.service_account_created" | "identity.service_account_disabled" | "identity.access_key_created" | "identity.access_key_revoked" | "identity.user_password_changed" | "identity.user_password_reset_link_created" | "identity.user_password_reset_completed" | "projects.project_created" | "projects.project_delete_requested" | "projects.project_deleted" | "projects.membership_upserted" | "projects.membership_removed" | "registry.repository_created_from_push" | "registry.repository_policies_updated" | "registry.repository_archived" | "registry.repository_unarchived" | "registry.repository_removed" | "registry.artifact_deletion_started" | "registry.artifact_deletion_completed" | "registry.artifact_deletion_failed" | "registry.lifecycle_preview_created" | "registry.lifecycle_run_started" | "registry.lifecycle_item_deleted" | "registry.lifecycle_item_skipped" | "registry.lifecycle_item_failed" | "registry.lifecycle_run_completed" | "registry.lifecycle_run_failed" | "platform.restore_completed" | "platform.backup_created" | "platform.backup_delete_requested" | "platform.backup_deleted" | "platform.garbage_collection_started" | "platform.garbage_collection_completed" | "platform.garbage_collection_failed";
         /** @enum {string} */
         AuditResourceKind: "authentication" | "user" | "service_account" | "project" | "membership" | "registry_repository" | "artifact_deletion" | "lifecycle_run" | "backup" | "garbage_collection";
         AuditEvent: {
@@ -910,6 +926,11 @@ export interface components {
             /** Format: email */
             email: string;
             username: string;
+        };
+        UpdateUserRequest: {
+            /** Format: email */
+            email?: string;
+            username?: string;
         };
         CreateUserResponse: {
             user: components["schemas"]["User"];
@@ -1748,6 +1769,68 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The requested email or username is already in use */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    reactivateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User reactivated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     promoteUserToSystemAdmin: {
@@ -2974,7 +3057,7 @@ export const installationStatusDatabaseValues: ReadonlyArray<FlattenedDeepRequir
 export const installationStatusDistributionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["distribution"]> = ["available", "unavailable"];
 export const backupStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupStatus"]> = ["starting", "quiescing", "creating", "complete", "failed"];
 export const backupOverviewPageSizeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupOverview"]["pageSize"]> = [5];
-export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["identity.login_succeeded", "identity.login_failed", "identity.registry_auth_failed", "identity.user_created", "identity.user_promoted_to_system_admin", "identity.user_promoted_to_system_viewer", "identity.user_disabled", "identity.service_account_created", "identity.service_account_disabled", "identity.access_key_created", "identity.access_key_revoked", "identity.user_password_changed", "identity.user_password_reset_link_created", "identity.user_password_reset_completed", "projects.project_created", "projects.project_delete_requested", "projects.project_deleted", "projects.membership_upserted", "projects.membership_removed", "registry.repository_created_from_push", "registry.repository_policies_updated", "registry.repository_archived", "registry.repository_unarchived", "registry.repository_removed", "registry.artifact_deletion_started", "registry.artifact_deletion_completed", "registry.artifact_deletion_failed", "registry.lifecycle_preview_created", "registry.lifecycle_run_started", "registry.lifecycle_item_deleted", "registry.lifecycle_item_skipped", "registry.lifecycle_item_failed", "registry.lifecycle_run_completed", "registry.lifecycle_run_failed", "platform.restore_completed", "platform.backup_created", "platform.backup_delete_requested", "platform.backup_deleted", "platform.garbage_collection_started", "platform.garbage_collection_completed", "platform.garbage_collection_failed"];
+export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["identity.login_succeeded", "identity.login_failed", "identity.registry_auth_failed", "identity.user_created", "identity.user_promoted_to_system_admin", "identity.user_promoted_to_system_viewer", "identity.user_disabled", "identity.user_updated", "identity.user_reactivated", "identity.service_account_created", "identity.service_account_disabled", "identity.access_key_created", "identity.access_key_revoked", "identity.user_password_changed", "identity.user_password_reset_link_created", "identity.user_password_reset_completed", "projects.project_created", "projects.project_delete_requested", "projects.project_deleted", "projects.membership_upserted", "projects.membership_removed", "registry.repository_created_from_push", "registry.repository_policies_updated", "registry.repository_archived", "registry.repository_unarchived", "registry.repository_removed", "registry.artifact_deletion_started", "registry.artifact_deletion_completed", "registry.artifact_deletion_failed", "registry.lifecycle_preview_created", "registry.lifecycle_run_started", "registry.lifecycle_item_deleted", "registry.lifecycle_item_skipped", "registry.lifecycle_item_failed", "registry.lifecycle_run_completed", "registry.lifecycle_run_failed", "platform.restore_completed", "platform.backup_created", "platform.backup_delete_requested", "platform.backup_deleted", "platform.garbage_collection_started", "platform.garbage_collection_completed", "platform.garbage_collection_failed"];
 export const auditResourceKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditResourceKind"]> = ["authentication", "user", "service_account", "project", "membership", "registry_repository", "artifact_deletion", "lifecycle_run", "backup", "garbage_collection"];
 export const principalKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PrincipalKind"]> = ["user", "service_account"];
 export const projectRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProjectRole"]> = ["reader", "writer", "admin"];

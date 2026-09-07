@@ -1,0 +1,2 @@
+GET /api/v1/audit-events added the new `identity.user_reactivated` enum value to the `items/items/action` response property for the response status `200`
+GET /api/v1/audit-events added the new `identity.user_updated` enum value to the `items/items/action` response property for the response status `200`

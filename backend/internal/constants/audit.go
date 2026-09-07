@@ -8,6 +8,8 @@ const (
 	AuditUserPromotedToSystemAdmin    = "identity.user_promoted_to_system_admin"
 	AuditUserPromotedToSystemViewer   = "identity.user_promoted_to_system_viewer"
 	AuditUserDisabled                 = "identity.user_disabled"
+	AuditUserUpdated                  = "identity.user_updated"
+	AuditUserReactivated              = "identity.user_reactivated"
 	AuditServiceAccountCreated        = "identity.service_account_created"
 	AuditServiceAccountDisabled       = "identity.service_account_disabled"
 	AuditAccessKeyCreated             = "identity.access_key_created"

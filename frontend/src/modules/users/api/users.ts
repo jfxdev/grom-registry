@@ -30,3 +30,9 @@ export const createUserPasswordResetLink = (userId: string) =>
 
 export const disableUser = (userId: string) =>
   apiRequest<void>(`/api/v1/users/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+
+export const updateUser = (userId: string, input: { email?: string; username?: string }) =>
+  apiRequest<User>(`/api/v1/users/${encodeURIComponent(userId)}`, { method: 'PATCH', body: JSON.stringify(input) })
+
+export const reactivateUser = (userId: string) =>
+  apiRequest<User>(`/api/v1/users/${encodeURIComponent(userId)}/reactivate`, { method: 'POST' })

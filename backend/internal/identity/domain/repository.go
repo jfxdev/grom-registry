@@ -14,10 +14,13 @@ type Repository interface {
 	FindUserByEmail(ctx context.Context, email string) (*User, error)
 	FindUserByUsername(ctx context.Context, username string) (*User, error)
 	FindUserByID(ctx context.Context, id foundation.ID) (*User, error)
+	FindUserByIDIncludingDisabled(ctx context.Context, id foundation.ID) (*User, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	PromoteUserToSystemAdmin(ctx context.Context, id foundation.ID) error
 	PromoteUserToSystemViewer(ctx context.Context, id foundation.ID) error
 	DisableUser(ctx context.Context, id foundation.ID) error
+	ReactivateUser(ctx context.Context, id foundation.ID) error
+	UpdateUser(ctx context.Context, id foundation.ID, email, username *string) error
 	UpdateUserPassword(ctx context.Context, id foundation.ID, passwordHash string) error
 
 	CreatePasswordReset(ctx context.Context, reset *PasswordReset) error

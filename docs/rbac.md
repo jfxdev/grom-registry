@@ -54,7 +54,7 @@ the global read-only account restrictions described here.
 | Create a project | Yes | No | No | No |
 | Delete an empty project | Yes | No | No | No |
 | See every project | Yes | Only assigned projects | Only assigned projects | Only assigned projects |
-| Create, disable, or reset users | Yes | No | No | No |
+| Create, edit, disable, reactivate, or reset users | Yes | No | No | No |
 | Promote an active user to administrator or viewer | Yes | No | No | No |
 | Create or disable service accounts | Yes | No | No | No |
 | Create, list, or revoke service-account keys | Yes | No | No | No |
@@ -78,6 +78,12 @@ viewer. Promoting a user to administrator removes viewer status; administrators
 cannot also be viewers. The system does not allow an administrator to disable
 their own account or the last active administrator. Disabling a user blocks new
 logins and revokes their web sessions.
+
+An administrator can edit a user's email or username at any time, including
+their own; edits are validated for uniqueness the same way as user creation.
+A disabled user can be reactivated, which restores sign-in ability; reactivation
+does not touch web sessions since a disabled account has none. Every edit,
+disable, and reactivate action produces an audit event.
 
 Password-reset links are single-use, expire after 30 minutes, and place their
 secret in the URL fragment. Creating a new link invalidates unused earlier

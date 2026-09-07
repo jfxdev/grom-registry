@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   listUsers: vi.fn(),
   promoteUserToSystemAdmin: vi.fn(),
   promoteUserToSystemViewer: vi.fn(),
+  updateUser: vi.fn(),
+  reactivateUser: vi.fn(),
 }))
 
 vi.mock('../api/users', () => ({
@@ -22,6 +24,8 @@ vi.mock('../api/users', () => ({
   listUsers: mocks.listUsers,
   promoteUserToSystemAdmin: mocks.promoteUserToSystemAdmin,
   promoteUserToSystemViewer: mocks.promoteUserToSystemViewer,
+  updateUser: mocks.updateUser,
+  reactivateUser: mocks.reactivateUser,
   userKeys: { all: ['users'], list: (query: string, cursor = '') => ['users', query, cursor] },
 }))
 
@@ -48,6 +52,8 @@ describe('UsersPage', () => {
     mocks.listUsers.mockReset()
     mocks.promoteUserToSystemAdmin.mockReset()
     mocks.promoteUserToSystemViewer.mockReset()
+    mocks.updateUser.mockReset()
+    mocks.reactivateUser.mockReset()
     const users = [
       {
         id: 'user-1',
@@ -147,8 +153,7 @@ describe('UsersPage', () => {
     const regularUser = wrapper.findAll('.user-row').find((row) => row.text().includes('sam@registry.test'))!
     const actions = regularUser.get('.user-actions')
     expect(actions.text()).toContain('Reset password')
-    expect(actions.find('[aria-label="Change role for sam"]').exists()).toBe(true)
-    expect(actions.find('button[aria-label="Disable user sam"]').exists()).toBe(true)
+    expect(actions.find('[aria-label="Manage user sam"]').exists()).toBe(true)
   })
 
   it('navigates pages and resets the cursor when the search changes', async () => {
@@ -171,10 +176,12 @@ describe('UsersPage', () => {
     expect(mocks.listUsers).toHaveBeenLastCalledWith('alex', '')
   })
 
-  it('confirms and disables a user', async () => {
+  it('confirms and disables a user from the manage modal', async () => {
     const wrapper = mountPage()
     await flushPromises()
 
+    await wrapper.get('button[aria-label="Manage user sam"]').trigger('click')
+    await wrapper.get('.danger-zone-trigger').trigger('click')
     await wrapper.get('button[aria-label="Disable user sam"]').trigger('click')
     expect(wrapper.text()).toContain('This revokes the user’s active sessions')
     mocks.disableUser.mockResolvedValue(undefined)
@@ -182,7 +189,20 @@ describe('UsersPage', () => {
     expect(mocks.disableUser).toHaveBeenCalledWith('user-2')
   })
 
-  it('creates regular users and changes roles through a role dropdown', async () => {
+  it('deactivates a user via the deactivate button above delete', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Manage user sam"]').trigger('click')
+    await wrapper.get('.danger-zone-trigger').trigger('click')
+    await wrapper.get('button[aria-label="Deactivate user sam"]').trigger('click')
+    expect(wrapper.text()).toContain('This revokes the user’s active sessions')
+    mocks.disableUser.mockResolvedValue(undefined)
+    await wrapper.get('form[aria-labelledby="disable-user-title"]').trigger('submit')
+    expect(mocks.disableUser).toHaveBeenCalledWith('user-2')
+  })
+
+  it('creates regular users and changes roles from the manage modal', async () => {
     const wrapper = mountPage()
     await flushPromises()
 
@@ -199,17 +219,20 @@ describe('UsersPage', () => {
     expect(wrapper.get('[role="dialog"]').text()).toContain('Copy this registration link now')
     expect(wrapper.text()).toContain('registration-token')
 
-    const roleButton = wrapper.get('button[aria-label="Change role for sam"]')
     expect(wrapper.text()).toContain('Administrator')
     expect(wrapper.text()).toContain('User')
+    await wrapper.get('button[aria-label="Manage user sam"]').trigger('click')
+    const roleButton = wrapper.get('button[aria-label="Change role for sam"]')
     await roleButton.trigger('click')
     expect(wrapper.get('[role="menu"]').text()).toContain('Viewer')
     await wrapper.findAll('[role="menuitem"]').find((item) => item.text().includes('Viewer'))!.trigger('click')
     mocks.promoteUserToSystemViewer.mockResolvedValueOnce(undefined)
     await wrapper.get('form[aria-labelledby="promote-viewer-title"]').trigger('submit')
     expect(mocks.promoteUserToSystemViewer).toHaveBeenCalledWith('user-2')
+    await flushPromises()
 
-    await roleButton.trigger('click')
+    await wrapper.get('button[aria-label="Manage user sam"]').trigger('click')
+    await wrapper.get('button[aria-label="Change role for sam"]').trigger('click')
     await wrapper.findAll('[role="menuitem"]').find((item) => item.text().includes('Administrator'))!.trigger('click')
     expect(wrapper.text()).toContain('Make sam an administrator?')
     mocks.promoteUserToSystemAdmin.mockResolvedValueOnce(undefined)
@@ -228,6 +251,7 @@ describe('UsersPage', () => {
     const wrapper = mountPage()
     await flushPromises()
 
+    await wrapper.get('button[aria-label="Manage user viewer"]').trigger('click')
     await wrapper.get('button[aria-label="Change role for viewer"]').trigger('click')
     const roleMenu = wrapper.get('[role="menu"]')
     expect(roleMenu.text()).not.toContain('Viewer')
@@ -254,7 +278,7 @@ describe('UsersPage', () => {
     expect(wrapper.text()).not.toContain('Could not create user')
   })
 
-  it('does not offer password reset or disable actions for disabled users', async () => {
+  it('does not offer password reset, role, or delete actions for disabled users', async () => {
     mocks.listUsers.mockResolvedValueOnce({
       items: [{
         id: 'user-3', email: 'disabled@example.com', username: 'disabled', systemAdmin: false,
@@ -267,6 +291,9 @@ describe('UsersPage', () => {
 
     expect(wrapper.get('[aria-label="Inactive user"]')).toBeDefined()
     expect(wrapper.text()).not.toContain('Reset password')
+
+    await wrapper.get('button[aria-label="Manage user disabled"]').trigger('click')
+    expect(wrapper.find('button[aria-label="Change role for disabled"]').exists()).toBe(false)
     expect(wrapper.find('button[aria-label="Disable user disabled"]').exists()).toBe(false)
   })
 
@@ -281,6 +308,8 @@ describe('UsersPage', () => {
     const wrapper = mountPage()
     await flushPromises()
 
+    await wrapper.get('button[aria-label="Manage user admin"]').trigger('click')
+    await wrapper.get('.danger-zone-trigger').trigger('click')
     expect(wrapper.get('button[aria-label="Disable user admin"]').attributes('disabled')).toBeDefined()
   })
 
@@ -289,10 +318,106 @@ describe('UsersPage', () => {
     const wrapper = mountPage()
     await flushPromises()
 
+    await wrapper.get('button[aria-label="Manage user sam"]').trigger('click')
+    await wrapper.get('.danger-zone-trigger').trigger('click')
     await wrapper.get('button[aria-label="Disable user sam"]').trigger('click')
     await wrapper.get('form[aria-labelledby="disable-user-title"]').trigger('submit')
     await flushPromises()
 
     expect(wrapper.get('[role="alert"]').text()).toContain('Could not disable the user')
+  })
+
+  it('requires confirmation before saving a user edit', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Manage user sam"]').trigger('click')
+    await wrapper.get('form[aria-labelledby="edit-user-title"] input[type="email"]').setValue('sam-new@registry.test')
+    const usernameInputs = wrapper.findAll('form[aria-labelledby="edit-user-title"] input').filter((input) => input.attributes('type') !== 'email')
+    await usernameInputs[0]!.setValue('sam-new')
+    await wrapper.get('form[aria-labelledby="edit-user-title"]').trigger('submit')
+
+    expect(mocks.updateUser).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Confirm changes to sam')
+    expect(wrapper.text()).toContain('sam@registry.test → sam-new@registry.test')
+    expect(wrapper.text()).toContain('sam → sam-new')
+
+    mocks.updateUser.mockResolvedValueOnce({ id: 'user-2', email: 'sam-new@registry.test', username: 'sam-new', systemAdmin: false, createdAt: '2026-07-29T10:00:00Z' })
+    await wrapper.get('form[aria-labelledby="edit-user-title"]').trigger('submit')
+
+    expect(mocks.updateUser).toHaveBeenCalledWith('user-2', { email: 'sam-new@registry.test', username: 'sam-new' })
+  })
+
+  it('returns to the form when going back from the confirmation step', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Manage user sam"]').trigger('click')
+    await wrapper.get('form[aria-labelledby="edit-user-title"] input[type="email"]').setValue('sam-new@registry.test')
+    await wrapper.get('form[aria-labelledby="edit-user-title"]').trigger('submit')
+    expect(wrapper.text()).toContain('Confirm changes to sam')
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Back')!.trigger('click')
+
+    const emailInput = wrapper.get('form[aria-labelledby="edit-user-title"] input[type="email"]').element as HTMLInputElement
+    expect(emailInput.value).toBe('sam-new@registry.test')
+    expect(mocks.updateUser).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['username_taken', 'This username is already in use.'],
+    ['email_taken', 'This email address is already in use.'],
+  ])('shows a clear edit error for %s', async (errorCode, expectedMessage) => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Manage user sam"]').trigger('click')
+    await wrapper.get('form[aria-labelledby="edit-user-title"] input[type="email"]').setValue('sam-new@registry.test')
+    await wrapper.get('form[aria-labelledby="edit-user-title"]').trigger('submit')
+    mocks.updateUser.mockRejectedValueOnce(new APIError(409, errorCode, 'Could not update user'))
+    await wrapper.get('form[aria-labelledby="edit-user-title"]').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(expectedMessage)
+  })
+
+  it('offers a reactivate action inside manage only for disabled users', async () => {
+    mocks.listUsers.mockResolvedValueOnce({
+      items: [
+        { id: 'user-2', email: 'sam@registry.test', username: 'sam', systemAdmin: false, createdAt: '2026-07-29T10:00:00Z' },
+        { id: 'user-3', email: 'disabled@example.com', username: 'disabled', systemAdmin: false, createdAt: '2026-07-29T10:00:00Z', disabledAt: '2026-07-30T10:00:00Z' },
+      ],
+      pageCount: 2,
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('button[aria-label="Manage user disabled"]').exists()).toBe(true)
+
+    await wrapper.get('button[aria-label="Manage user sam"]').trigger('click')
+    expect(wrapper.find('button[aria-label="Reactivate user sam"]').exists()).toBe(false)
+    await wrapper.get('button[aria-label="Close manage user"]').trigger('click')
+
+    await wrapper.get('button[aria-label="Manage user disabled"]').trigger('click')
+    expect(wrapper.find('button[aria-label="Reactivate user disabled"]').exists()).toBe(true)
+  })
+
+  it('reactivates a disabled user from the manage modal', async () => {
+    mocks.listUsers.mockResolvedValueOnce({
+      items: [{
+        id: 'user-3', email: 'disabled@example.com', username: 'disabled', systemAdmin: false,
+        createdAt: '2026-07-29T10:00:00Z', disabledAt: '2026-07-30T10:00:00Z',
+      }],
+      pageCount: 1,
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Manage user disabled"]').trigger('click')
+    await wrapper.get('button[aria-label="Reactivate user disabled"]').trigger('click')
+    mocks.reactivateUser.mockResolvedValueOnce({ id: 'user-3', email: 'disabled@example.com', username: 'disabled', systemAdmin: false, createdAt: '2026-07-29T10:00:00Z' })
+    await wrapper.get('form[aria-labelledby="reactivate-user-title"]').trigger('submit')
+
+    expect(mocks.reactivateUser).toHaveBeenCalledWith('user-3')
   })
 })

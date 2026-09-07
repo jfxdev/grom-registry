@@ -179,6 +179,8 @@ func (s *Server) routes() chi.Router {
 			protected.Get("/users", s.listUsers)
 			protected.Post("/users", s.createUser)
 			protected.Delete("/users/{id}", s.deleteUser)
+			protected.Patch("/users/{id}", s.updateUser)
+			protected.Post("/users/{id}/reactivate", s.reactivateUser)
 			protected.Put("/users/{id}/administrator", s.promoteUserToSystemAdmin)
 			protected.Put("/users/{id}/viewer", s.promoteUserToSystemViewer)
 			protected.Post("/users/{id}/password-reset-link", s.createUserPasswordResetLink)
@@ -722,6 +724,68 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.recordAudit(r, principalForUser(actor), constants.AuditUserDisabled, constants.AuditResourceUser, targetID, nil)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	var input struct {
+		Email    *string `json:"email"`
+		Username *string `json:"username"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	targetID := foundation.ID(chi.URLParam(r, "id"))
+	updated, err := s.identity.UpdateUser(r.Context(), targetID, input.Email, input.Username)
+	if err != nil {
+		if errors.Is(err, identitydomain.ErrUsernameAlreadyExists) {
+			writeError(w, r, http.StatusConflict, "username_taken", "This username is already in use")
+			return
+		}
+		if errors.Is(err, identitydomain.ErrEmailAlreadyExists) {
+			writeError(w, r, http.StatusConflict, "email_taken", "This email address is already in use")
+			return
+		}
+		if errors.Is(err, identityapp.ErrInvalidUserInput) {
+			writeError(w, r, http.StatusBadRequest, "invalid_user", "Provide a valid email and/or username")
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+			return
+		}
+		s.internalError(w, r, err)
+		return
+	}
+	metadata := map[string]any{}
+	if input.Email != nil {
+		metadata["email"] = updated.Email
+	}
+	if input.Username != nil {
+		metadata["username"] = updated.Username
+	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserUpdated, constants.AuditResourceUser, targetID, metadata)
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) reactivateUser(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	targetID := foundation.ID(chi.URLParam(r, "id"))
+	reactivated, err := s.identity.ReactivateUser(r.Context(), targetID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+			return
+		}
+		s.internalError(w, r, err)
+		return
+	}
+	_ = s.recordAudit(r, principalForUser(userFromContext(r.Context())), constants.AuditUserReactivated, constants.AuditResourceUser, targetID, nil)
+	writeJSON(w, http.StatusOK, reactivated)
 }
 
 func (s *Server) createUserPasswordResetLink(w http.ResponseWriter, r *http.Request) {

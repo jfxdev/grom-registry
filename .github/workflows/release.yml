@@ -135,6 +135,7 @@ jobs:
           base: ${{ steps.openapi-baseline.outputs.spec }}
           revision: HEAD:backend/api/openapi.yaml
           fail-on: WARN
+          warn-ignore: .github/oasdiff-warn-ignore.txt
           allow-external-refs: false
           review: false
           github-token: ""

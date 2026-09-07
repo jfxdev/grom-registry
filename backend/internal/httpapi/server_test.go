@@ -465,6 +465,40 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 	if _, err := identity.AuthenticateSession(ctx, targetSession); err == nil {
 		t.Fatal("expected disabled user's active session to be revoked")
 	}
+	if _, _, err := identity.Login(ctx, "target@example.com", "target-password"); err == nil {
+		t.Fatal("expected a disabled user's login to be rejected")
+	}
+
+	reactivateResponse := httptest.NewRecorder()
+	server.reactivateUser(reactivateResponse, withUserAndParams(httptest.NewRequest(http.MethodPost, "http://grom/api/v1/users/"+target.ID.String()+"/reactivate", nil), admin, map[string]string{"id": target.ID.String()}))
+	if reactivateResponse.Code != http.StatusOK {
+		t.Fatalf("reactivate user: expected 200, got %d: %s", reactivateResponse.Code, reactivateResponse.Body.String())
+	}
+	var reactivatedUser identitydomain.User
+	if err := json.NewDecoder(reactivateResponse.Body).Decode(&reactivatedUser); err != nil {
+		t.Fatal(err)
+	}
+	if reactivatedUser.DisabledAt != nil {
+		t.Fatalf("expected reactivated user to be active, got %#v", reactivatedUser)
+	}
+	if _, _, err := identity.Login(ctx, "target@example.com", "target-password"); err != nil {
+		t.Fatalf("expected reactivated user to sign in again, got %v", err)
+	}
+
+	updateSelfResponse := httptest.NewRecorder()
+	server.updateUser(updateSelfResponse, withUserAndParams(httptest.NewRequest(http.MethodPatch, "http://grom/api/v1/users/"+admin.ID.String(), strings.NewReader(`{"username":"admin-renamed"}`)), admin, map[string]string{"id": admin.ID.String()}))
+	if updateSelfResponse.Code != http.StatusOK {
+		t.Fatalf("self edit: expected 200, got %d: %s", updateSelfResponse.Code, updateSelfResponse.Body.String())
+	}
+	if updated, err := identity.FindUser(ctx, admin.ID); err != nil || updated.Username != "admin-renamed" {
+		t.Fatalf("expected self-edit to persist, got %#v, %v", updated, err)
+	}
+
+	duplicateEmailResponse := httptest.NewRecorder()
+	server.updateUser(duplicateEmailResponse, withUserAndParams(httptest.NewRequest(http.MethodPatch, "http://grom/api/v1/users/"+target.ID.String(), strings.NewReader(`{"email":"admin@example.com"}`)), admin, map[string]string{"id": target.ID.String()}))
+	if duplicateEmailResponse.Code != http.StatusConflict {
+		t.Fatalf("duplicate email: expected 409, got %d: %s", duplicateEmailResponse.Code, duplicateEmailResponse.Body.String())
+	}
 
 	missingBasicResponse := httptest.NewRecorder()
 	server.exchangeRegistryToken(missingBasicResponse, httptest.NewRequest(http.MethodGet, "http://grom/auth/token", nil))
@@ -486,7 +520,7 @@ func TestAdministrativeAuditAndUserDisableFlows(t *testing.T) {
 		}
 		actions[event.Action] = true
 	}
-	for _, action := range []string{constants.AuditLoginFailed, constants.AuditLoginSucceeded, constants.AuditUserCreated, constants.AuditUserPromotedToSystemAdmin, constants.AuditUserPromotedToSystemViewer, constants.AuditUserDisabled, constants.AuditServiceAccountCreated, constants.AuditAccessKeyCreated, constants.AuditAccessKeyRevoked, constants.AuditProjectCreated, constants.AuditProjectDeleteRequested, constants.AuditProjectDeleted, constants.AuditMembershipUpserted, constants.AuditMembershipRemoved, constants.AuditRegistryAuthFailed} {
+	for _, action := range []string{constants.AuditLoginFailed, constants.AuditLoginSucceeded, constants.AuditUserCreated, constants.AuditUserPromotedToSystemAdmin, constants.AuditUserPromotedToSystemViewer, constants.AuditUserDisabled, constants.AuditUserReactivated, constants.AuditUserUpdated, constants.AuditServiceAccountCreated, constants.AuditAccessKeyCreated, constants.AuditAccessKeyRevoked, constants.AuditProjectCreated, constants.AuditProjectDeleteRequested, constants.AuditProjectDeleted, constants.AuditMembershipUpserted, constants.AuditMembershipRemoved, constants.AuditRegistryAuthFailed} {
 		if !actions[action] {
 			t.Errorf("missing audit action %s", action)
 		}
@@ -736,6 +770,30 @@ func TestListServiceAccountsRequiresAdministrator(t *testing.T) {
 	response := httptest.NewRecorder()
 
 	server.listServiceAccounts(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, response.Code)
+	}
+}
+
+func TestUpdateUserRequiresAdministrator(t *testing.T) {
+	server := &Server{}
+	request := withUserAndParams(httptest.NewRequest(http.MethodPatch, "http://backend/api/v1/users/x", strings.NewReader(`{"username":"new"}`)), &identitydomain.User{SystemAdmin: false}, map[string]string{"id": "x"})
+	response := httptest.NewRecorder()
+
+	server.updateUser(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, response.Code)
+	}
+}
+
+func TestReactivateUserRequiresAdministrator(t *testing.T) {
+	server := &Server{}
+	request := withUserAndParams(httptest.NewRequest(http.MethodPost, "http://backend/api/v1/users/x/reactivate", nil), &identitydomain.User{SystemAdmin: false}, map[string]string{"id": "x"})
+	response := httptest.NewRecorder()
+
+	server.reactivateUser(response, request)
 
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("expected status %d, got %d", http.StatusForbidden, response.Code)

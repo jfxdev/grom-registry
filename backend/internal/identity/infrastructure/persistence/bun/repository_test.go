@@ -243,23 +243,26 @@ func assertAdministrativePagesFilterAndAdvanceWithKeysets(t *testing.T, ctx cont
 	userTwoID := foundation.NewID()
 	activeID := foundation.NewID()
 	disabledID := foundation.NewID()
+	// A unique query token keeps this assertion immune to unrelated
+	// "...@example.com" rows left behind by other tests sharing this Postgres instance.
+	querySuffix := foundation.NewID().String()
 	t.Cleanup(func() {
 		_, _ = db.NewDelete().Model((*userModel)(nil)).Where("id IN (?)", bun.List([]string{userOneID.String(), userTwoID.String()})).Exec(context.Background())
 		_, _ = db.NewDelete().Model((*serviceAccountModel)(nil)).Where("id IN (?)", bun.List([]string{activeID.String(), disabledID.String()})).Exec(context.Background())
 	})
 	for i, user := range []identity.User{
-		{ID: userOneID, Email: userOneID.String() + "@example.com", Username: "alex-" + userOneID.String(), PasswordHash: "hash", CreatedAt: base},
-		{ID: userTwoID, Email: userTwoID.String() + "@example.com", Username: "sam-" + userTwoID.String(), PasswordHash: "hash", CreatedAt: base.Add(time.Minute)},
+		{ID: userOneID, Email: userOneID.String() + "-" + querySuffix + "@example.com", Username: "alex-" + userOneID.String(), PasswordHash: "hash", CreatedAt: base},
+		{ID: userTwoID, Email: userTwoID.String() + "-" + querySuffix + "@example.com", Username: "sam-" + userTwoID.String(), PasswordHash: "hash", CreatedAt: base.Add(time.Minute)},
 	} {
 		if err := repository.CreateUser(ctx, &user); err != nil {
 			t.Fatalf("user %d: %v", i, err)
 		}
 	}
-	first, err := repository.ListUsersPage(ctx, "example", foundation.PageRequest{Limit: 1, Scope: "users:q=example"})
+	first, err := repository.ListUsersPage(ctx, querySuffix, foundation.PageRequest{Limit: 1, Scope: "users:q=" + querySuffix})
 	if err != nil || len(first.Items) != 1 || first.Items[0].ID != userTwoID || first.NextCursor == "" {
 		t.Fatalf("first user page: %#v, %v", first, err)
 	}
-	second, err := repository.ListUsersPage(ctx, "example", foundation.PageRequest{Limit: 1, Scope: "users:q=example", Cursor: first.NextCursor})
+	second, err := repository.ListUsersPage(ctx, querySuffix, foundation.PageRequest{Limit: 1, Scope: "users:q=" + querySuffix, Cursor: first.NextCursor})
 	if err != nil || len(second.Items) != 1 || second.Items[0].ID != userOneID {
 		t.Fatalf("second user page: %#v, %v", second, err)
 	}
@@ -352,6 +355,151 @@ func TestPromoteUserToSystemAdmin(t *testing.T) {
 	if err != nil || !user.SystemAdmin {
 		t.Fatalf("expected promoted user, got %#v, %v", user, err)
 	}
+}
+
+func TestReactivateUserClearsDisabledAt(t *testing.T) {
+	forEachIdentityRepositoryDatabase(t, func(t *testing.T, ctx context.Context, db *bun.DB) {
+		repository := New(db)
+		now := time.Now().UTC()
+		userID := foundation.NewID()
+		user := &identity.User{
+			ID: userID, Email: userID.String() + "@example.com", Username: "user-" + userID.String(),
+			PasswordHash: "hash", CreatedAt: now, DisabledAt: &now,
+		}
+		if err := repository.CreateUser(ctx, user); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repository.ReactivateUser(ctx, userID); err != nil {
+			t.Fatal(err)
+		}
+		reactivated, err := repository.FindUserByID(ctx, userID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reactivated.DisabledAt != nil {
+			t.Fatalf("expected disabled_at to be cleared, got %#v", reactivated.DisabledAt)
+		}
+	})
+}
+
+func TestReactivateUserDoesNotTouchSessions(t *testing.T) {
+	ctx := context.Background()
+	db := openSQLiteRepositoryTestDB(t)
+	for _, statement := range []string{
+		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, is_system_admin BOOLEAN NOT NULL, is_system_viewer BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP NOT NULL, disabled_at TIMESTAMP NULL)`,
+		`CREATE TABLE sessions (id TEXT PRIMARY KEY, public_id TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL, secret_hash TEXT NOT NULL, created_at TIMESTAMP NOT NULL, expires_at TIMESTAMP NOT NULL)`,
+	} {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repository := New(db)
+	userID := foundation.NewID()
+	disabledAt := time.Now().UTC()
+	if _, err := db.ExecContext(ctx, `INSERT INTO users (id, email, username, password_hash, is_system_admin, created_at, disabled_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, userID.String(), "user@example.com", "user", "hash", false, time.Now().UTC(), disabledAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO sessions (id, public_id, user_id, secret_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`, foundation.NewID().String(), "leftover-session", userID.String(), "hash", time.Now().UTC(), time.Now().UTC().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repository.ReactivateUser(ctx, userID); err != nil {
+		t.Fatal(err)
+	}
+	count, err := db.NewSelect().Table("sessions").Where("user_id = ?", userID.String()).Count(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expected reactivate to leave existing session rows untouched, got %d", count)
+	}
+}
+
+func TestReactivateUserReturnsNotFoundForMissingOrAlreadyActiveUser(t *testing.T) {
+	forEachIdentityRepositoryDatabase(t, func(t *testing.T, ctx context.Context, db *bun.DB) {
+		repository := New(db)
+		if err := repository.ReactivateUser(ctx, foundation.NewID()); !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("expected sql.ErrNoRows for a missing user, got %v", err)
+		}
+
+		userID := foundation.NewID()
+		user := &identity.User{
+			ID: userID, Email: userID.String() + "@example.com", Username: "user-" + userID.String(),
+			PasswordHash: "hash", CreatedAt: time.Now().UTC(),
+		}
+		if err := repository.CreateUser(ctx, user); err != nil {
+			t.Fatal(err)
+		}
+		if err := repository.ReactivateUser(ctx, userID); !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("expected sql.ErrNoRows for an already-active user, got %v", err)
+		}
+	})
+}
+
+func TestUpdateUserPersistsPartialAndFullChanges(t *testing.T) {
+	forEachIdentityRepositoryDatabase(t, func(t *testing.T, ctx context.Context, db *bun.DB) {
+		repository := New(db)
+		userID := foundation.NewID()
+		user := &identity.User{
+			ID: userID, Email: userID.String() + "@example.com", Username: "user-" + userID.String(),
+			PasswordHash: "hash", CreatedAt: time.Now().UTC(),
+		}
+		if err := repository.CreateUser(ctx, user); err != nil {
+			t.Fatal(err)
+		}
+
+		newEmail := "new-" + userID.String() + "@example.com"
+		if err := repository.UpdateUser(ctx, userID, &newEmail, nil); err != nil {
+			t.Fatal(err)
+		}
+		afterEmail, err := repository.FindUserByID(ctx, userID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if afterEmail.Email != newEmail || afterEmail.Username != user.Username {
+			t.Fatalf("expected only email to change, got %#v", afterEmail)
+		}
+
+		newUsername := "renamed-" + userID.String()
+		if err := repository.UpdateUser(ctx, userID, nil, &newUsername); err != nil {
+			t.Fatal(err)
+		}
+		afterUsername, err := repository.FindUserByID(ctx, userID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if afterUsername.Username != newUsername || afterUsername.Email != newEmail {
+			t.Fatalf("expected only username to change, got %#v", afterUsername)
+		}
+	})
+}
+
+func TestUpdateUserReturnsConflictOnDuplicateEmailOrUsername(t *testing.T) {
+	forEachIdentityRepositoryDatabase(t, func(t *testing.T, ctx context.Context, db *bun.DB) {
+		repository := New(db)
+		firstID, secondID := foundation.NewID(), foundation.NewID()
+		first := &identity.User{
+			ID: firstID, Email: firstID.String() + "@example.com", Username: "first-" + firstID.String(),
+			PasswordHash: "hash", CreatedAt: time.Now().UTC(),
+		}
+		second := &identity.User{
+			ID: secondID, Email: secondID.String() + "@example.com", Username: "second-" + secondID.String(),
+			PasswordHash: "hash", CreatedAt: time.Now().UTC(),
+		}
+		for _, user := range []*identity.User{first, second} {
+			if err := repository.CreateUser(ctx, user); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if err := repository.UpdateUser(ctx, secondID, &first.Email, nil); !errors.Is(err, identity.ErrEmailAlreadyExists) {
+			t.Fatalf("expected ErrEmailAlreadyExists, got %v", err)
+		}
+		if err := repository.UpdateUser(ctx, secondID, nil, &first.Username); !errors.Is(err, identity.ErrUsernameAlreadyExists) {
+			t.Fatalf("expected ErrUsernameAlreadyExists, got %v", err)
+		}
+	})
 }
 
 func TestDisableUserProtectsLastAdministratorConcurrentlyPostgres(t *testing.T) {
