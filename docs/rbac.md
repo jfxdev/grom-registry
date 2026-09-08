@@ -58,6 +58,7 @@ the global read-only account restrictions described here.
 | Promote an active user to administrator or viewer | Yes | No | No | No |
 | Create or disable service accounts | Yes | No | No | No |
 | Create, list, or revoke service-account keys | Yes | No | No | No |
+| View live installation diagnostics | Yes | No | No | No |
 | Create, download, or delete a local backup | Yes | No | No | No |
 | Run Distribution garbage collection | Yes | No | No | No |
 | Manage project memberships | Yes | Yes, in that project | No | No |
@@ -161,6 +162,11 @@ collection is separate and reserved for administrators.
 Audit events cover authentication, users, service accounts, keys, projects,
 memberships, password changes, policies, backups, and destructive operations.
 They never include passwords, tokens, keys, or Authorization headers.
+
+Installation diagnostics are also administrator-only. They are read-only and
+return only component health and safe operational metadata; connection strings,
+filesystem paths, certificates, private keys, credentials, and raw dependency
+errors are never returned.
 
 ## Implementation reference
 

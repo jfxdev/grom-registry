@@ -2,6 +2,7 @@ package distribution
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -17,6 +18,57 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
+}
+
+func TestProbeAcceptsDistributionHealthResponsesAndCapturesAPIVersion(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		apiVersion string
+		err        error
+		wantErr    bool
+	}{
+		{name: "ok", statusCode: http.StatusOK, apiVersion: "registry/2.0"},
+		{name: "protected", statusCode: http.StatusUnauthorized, apiVersion: "registry/2.0"},
+		{name: "missing header", statusCode: http.StatusOK},
+		{name: "unexpected response", statusCode: http.StatusBadGateway, wantErr: true},
+		{name: "transport failure", err: errors.New("dial failed"), wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client, err := NewClient("http://distribution.local", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				if request.URL.Path != "/v2/" {
+					t.Errorf("unexpected probe path %q", request.URL.Path)
+				}
+				if test.err != nil {
+					return nil, test.err
+				}
+				header := make(http.Header)
+				if test.apiVersion != "" {
+					header.Set("Docker-Distribution-API-Version", test.apiVersion)
+				}
+				return &http.Response{
+					StatusCode: test.statusCode, Status: http.StatusText(test.statusCode), Header: header,
+					Body: io.NopCloser(strings.NewReader("")), Request: request,
+				}, nil
+			})
+
+			version, err := client.Probe(context.Background())
+			if (err != nil) != test.wantErr {
+				t.Fatalf("probe error = %v, wantErr %t", err, test.wantErr)
+			}
+			if version != test.apiVersion {
+				t.Fatalf("api version = %q, want %q", version, test.apiVersion)
+			}
+			if available := client.Available(context.Background()); available != !test.wantErr {
+				t.Fatalf("available = %t, want %t", available, !test.wantErr)
+			}
+		})
+	}
 }
 
 func TestListProjectRepositoriesFollowsCatalogPagination(t *testing.T) {

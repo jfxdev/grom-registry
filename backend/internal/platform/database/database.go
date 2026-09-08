@@ -32,6 +32,78 @@ const (
 
 var sqliteMigrationMu sync.Mutex
 
+// Diagnostics is the safe, live database state exposed through installation
+// diagnostics. It intentionally contains no connection details.
+type Diagnostics struct {
+	Kind      Kind
+	Available bool
+	Migration MigrationDiagnostics
+}
+
+type MigrationDiagnostics struct {
+	Status         string
+	AppliedVersion string
+	AppliedAt      *time.Time
+}
+
+type Inspector struct {
+	db   *bun.DB
+	kind Kind
+}
+
+const (
+	MigrationCurrent     = "current"
+	MigrationPending     = "pending"
+	MigrationUnavailable = "unavailable"
+)
+
+func NewInspector(db *bun.DB, kind Kind) *Inspector {
+	return &Inspector{db: db, kind: kind}
+}
+
+func (inspector *Inspector) Inspect(ctx context.Context) Diagnostics {
+	if inspector == nil {
+		return Diagnostics{Migration: MigrationDiagnostics{Status: MigrationUnavailable}}
+	}
+	return Inspect(ctx, inspector.db, inspector.kind)
+}
+
+// Inspect reads the current connection and migration state without changing
+// either. Startup remains responsible for applying migrations.
+func Inspect(ctx context.Context, db *bun.DB, kind Kind) Diagnostics {
+	result := Diagnostics{
+		Kind:      kind,
+		Available: false,
+		Migration: MigrationDiagnostics{Status: MigrationUnavailable},
+	}
+	if db == nil || db.PingContext(ctx) != nil {
+		return result
+	}
+	result.Available = true
+
+	migrator := migrate.NewMigrator(db, appmigrations.Collection, migrate.WithMarkAppliedOnSuccess(true))
+	migrations, err := migrator.MigrationsWithStatus(ctx)
+	if err != nil {
+		return result
+	}
+	missing, err := migrator.MissingMigrations(ctx)
+	if err != nil || len(missing) > 0 {
+		return result
+	}
+
+	result.Migration.Status = MigrationCurrent
+	for _, migration := range migrations {
+		if !migration.IsApplied() {
+			result.Migration.Status = MigrationPending
+			continue
+		}
+		result.Migration.AppliedVersion = migration.Name
+		appliedAt := migration.MigratedAt.UTC()
+		result.Migration.AppliedAt = &appliedAt
+	}
+	return result
+}
+
 func Open(ctx context.Context, databaseURL string) (*bun.DB, Kind, error) {
 	switch {
 	case strings.HasPrefix(databaseURL, "sqlite://"):

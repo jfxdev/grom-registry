@@ -62,6 +62,33 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/settings/diagnostics:
+    get:
+      tags: [System]
+      operationId: getInstallationDiagnostics
+      description: >-
+        Live, non-sensitive installation diagnostics for administrators. Each
+        component is reported independently so an unavailable dependency does
+        not hide the remaining checks.
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Current installation diagnostics
+          headers:
+            Cache-Control:
+              description: Diagnostics must not be cached.
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstallationDiagnostics"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/garbage-collections:
     post:
       tags: [System]
@@ -1508,6 +1535,98 @@ components:
         storage:
           allOf:
             - $ref: "#/components/schemas/StorageUsage"
+          nullable: true
+    InstallationDiagnostics:
+      type: object
+      required: [checkedAt, deployment, database, migration, signing, distribution, storage, backup]
+      properties:
+        checkedAt:
+          type: string
+          format: date-time
+        deployment:
+          $ref: "#/components/schemas/Deployment"
+        database:
+          $ref: "#/components/schemas/DatabaseDiagnostic"
+        migration:
+          $ref: "#/components/schemas/MigrationDiagnostic"
+        signing:
+          $ref: "#/components/schemas/SigningDiagnostic"
+        distribution:
+          $ref: "#/components/schemas/DistributionDiagnostic"
+        storage:
+          $ref: "#/components/schemas/StorageDiagnostic"
+        backup:
+          $ref: "#/components/schemas/BackupDiagnostic"
+    DatabaseDiagnostic:
+      type: object
+      required: [kind, status]
+      properties:
+        kind:
+          type: string
+          enum: [sqlite, postgres]
+        status:
+          type: string
+          enum: [available, unavailable]
+    MigrationDiagnostic:
+      type: object
+      required: [status, appliedVersion, appliedAt]
+      properties:
+        status:
+          type: string
+          enum: [current, pending, unavailable]
+        appliedVersion:
+          type: string
+          nullable: true
+        appliedAt:
+          type: string
+          format: date-time
+          nullable: true
+    SigningDiagnostic:
+      type: object
+      required: [status, algorithm, keyId]
+      properties:
+        status:
+          type: string
+          enum: [loaded, unavailable]
+        algorithm:
+          type: string
+          nullable: true
+        keyId:
+          type: string
+          nullable: true
+    DistributionDiagnostic:
+      type: object
+      required: [status, apiVersion]
+      properties:
+        status:
+          type: string
+          enum: [available, unavailable]
+        apiVersion:
+          type: string
+          nullable: true
+    StorageDiagnostic:
+      type: object
+      required: [status, usedBytes]
+      properties:
+        status:
+          type: string
+          enum: [available, unavailable]
+        usedBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Bytes occupied by files under Distribution's local storage root.
+    BackupDiagnostic:
+      type: object
+      required: [status, lastBackupAt]
+      properties:
+        status:
+          type: string
+          enum: [available, unavailable]
+        lastBackupAt:
+          type: string
+          format: date-time
           nullable: true
     StorageUsage:
       type: object

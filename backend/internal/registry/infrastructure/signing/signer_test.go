@@ -15,3 +15,20 @@ func TestLoadOrCreatePropagatesNonMissingKeyReadError(t *testing.T) {
 		t.Fatalf("expected signing key read error, got %v", err)
 	}
 }
+
+func TestProbeExposesOnlySigningMetadata(t *testing.T) {
+	signer, err := LoadOrCreate(filepath.Join(t.TempDir(), "key.pem"), filepath.Join(t.TempDir(), "cert.pem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	algorithm, keyID, err := signer.Probe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if algorithm != "RS256" || keyID != KeyID {
+		t.Fatalf("unexpected signing metadata: algorithm=%q keyID=%q", algorithm, keyID)
+	}
+	if _, _, err := (*Signer)(nil).Probe(); err == nil {
+		t.Fatal("expected an unavailable signer to fail its probe")
+	}
+}

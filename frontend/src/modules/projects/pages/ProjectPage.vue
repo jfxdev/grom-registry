@@ -595,7 +595,7 @@ function policySummary(policy: Repository['policies'][number]) {
           Accounted registry usage: <strong class="text-foreground">{{ project.data.value ? accountedUsageLabel(project.data.value.accountedUsage) : 'Loading…' }}</strong>
           <span v-if="project.data.value?.accountedUsage?.status === 'stale'"> — last successful accounting is stale.</span>
         </p>
-        <p class="mt-1 text-xs text-muted-foreground">Shared descriptors count once in this project. Physical installation storage is shown in Settings.</p>
+        <p class="mt-1 text-xs text-muted-foreground">Shared descriptors count once in this project. Physical installation storage is shown in Installation.</p>
       </div>
       <div class="flex items-center gap-2">
         <Badge tone="success">Active</Badge>

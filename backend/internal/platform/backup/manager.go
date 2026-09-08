@@ -105,6 +105,24 @@ func (manager *Manager) Overview(ctx context.Context, cursor string) (Overview, 
 	}, nil
 }
 
+// Latest returns the newest verified local recovery point from a fresh agent
+// listing. A nil summary with no error means the agent is available but has no
+// recovery points yet.
+func (manager *Manager) Latest(ctx context.Context) (*Summary, error) {
+	overview, err := manager.Overview(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	if !overview.Available {
+		return nil, fmt.Errorf("backup agent is unavailable")
+	}
+	if len(overview.Backups) == 0 {
+		return nil, nil
+	}
+	latest := overview.Backups[0]
+	return &latest, nil
+}
+
 func (manager *Manager) Start() (Operation, error) {
 	manager.mu.Lock()
 	if manager.deleting || manager.lastOperation != nil &&

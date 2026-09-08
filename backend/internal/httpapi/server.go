@@ -29,6 +29,7 @@ import (
 	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
 	identitydomain "github.com/jfxdev/grom/backend/internal/identity/domain"
 	platformbackup "github.com/jfxdev/grom/backend/internal/platform/backup"
+	platformdiagnostics "github.com/jfxdev/grom/backend/internal/platform/diagnostics"
 	"github.com/jfxdev/grom/backend/internal/platform/maintenance"
 	"github.com/jfxdev/grom/backend/internal/platform/registrymaintenance"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
@@ -64,6 +65,7 @@ type Server struct {
 	maintenance         *maintenance.Controller
 	databaseKind        string
 	registryMaintenance *registrymaintenance.Client
+	diagnostics         *platformdiagnostics.Service
 }
 
 type currentUserKey struct{}
@@ -73,6 +75,7 @@ type OperationalOptions struct {
 	Maintenance         *maintenance.Controller
 	Database            string
 	RegistryMaintenance *registrymaintenance.Client
+	Diagnostics         *platformdiagnostics.Service
 }
 
 func New(
@@ -121,6 +124,7 @@ func New(
 		maintenance:         operationalOptions.Maintenance,
 		databaseKind:        operationalOptions.Database,
 		registryMaintenance: operationalOptions.RegistryMaintenance,
+		diagnostics:         operationalOptions.Diagnostics,
 	}
 	if server.maintenance == nil {
 		server.maintenance = maintenance.New()
@@ -171,6 +175,7 @@ func (s *Server) routes() chi.Router {
 			protected.Use(s.viewerReadOnly)
 			protected.Get("/me", s.currentUser)
 			protected.Get("/settings/status", s.getInstallationStatus)
+			protected.Get("/settings/diagnostics", s.getInstallationDiagnostics)
 			protected.Post("/garbage-collections", s.runGarbageCollection)
 			protected.Put("/me/password", s.changeCurrentUserPassword)
 			protected.Get("/me/registry-tokens", s.listViewerRegistryTokens)
@@ -419,6 +424,14 @@ func (s *Server) getInstallationStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) getInstallationDiagnostics(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, s.diagnostics.Check(r.Context()))
 }
 
 func (s *Server) runGarbageCollection(w http.ResponseWriter, r *http.Request) {

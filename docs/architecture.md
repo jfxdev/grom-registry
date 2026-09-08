@@ -27,14 +27,16 @@ flowchart LR
 
 | Component | Responsibility |
 |---|---|
-| Grom | Serves the embedded Vue interface, management API, sessions, /auth/token, and the streaming /v2/* gateway. |
+| Grom | Serves the embedded Vue interface, management API, sessions, /auth/token, the streaming /v2/* gateway, and live administrator installation diagnostics. |
 | CNCF Distribution | Implements the OCI/Docker protocol and persists OCI content. |
 | SQLite or PostgreSQL | Stores control-plane data and audit history; migrations run before readiness. |
 | Backup agent | Creates and provides recovery points with no network, public ports, or Docker socket. |
 | Recovery UI | A separate mode of the same image, limited to loopback, which restores only empty volumes. |
 
 /healthz reports process health and /readyz reports readiness. A failed migration
-prevents startup.
+prevents startup. Administrators can use Installation diagnostics for fresh,
+component-level checks after a process is running; it does not replace readiness
+or expose startup-failure details.
 
 ## Domain boundaries
 
@@ -146,6 +148,14 @@ Query for server state. Pinia is reserved for genuinely shared client state.
 Product modules own their queries, pages, and components; code moves to shared
 only after real reuse.
 
+`GET /api/v1/settings/diagnostics` is an administrator-only, no-store,
+read-only endpoint. It runs independent checks for the database and migration
+state, Distribution V2 API, active signing key, physical local storage, and the
+latest local recovery point on every request. A partial outage changes only the
+affected component to unavailable. Its response contains only whitelisted
+metadata: it never exposes errors, credentials, URLs, filesystem paths,
+certificates, or key material.
+
 Project-membership listings are enriched at the HTTP boundary through the
 Identity application service: user memberships expose username and email, while
 service-account memberships expose display name and registry username. A
@@ -192,7 +202,7 @@ complete recovery flow and the distinction between accounted and physical usage.
 | backend/cmd/grom-backup/ | Backup agent, recovery, and compatibility tools. |
 | backend/internal/{identity,projects,registry,audit}/ | Domain, application, and infrastructure contexts. |
 | backend/internal/httpapi/ | Central HTTP routing and adaptation. |
-| backend/internal/platform/ | Configuration, database, lifecycle, backup, maintenance, and Distribution supervision. |
+| backend/internal/platform/ | Configuration, database, diagnostics, lifecycle, backup, maintenance, and Distribution supervision. |
 | frontend/src/modules/ | Auth, users, service accounts, projects, registry, backups, and settings. |
 | frontend/src/shared/ | API client, generated types, reusable UI, constants, and utilities. |
 | deploy/compose/, deploy/docker/, deploy/distribution/ | Deployment, image entrypoint, and private Distribution configuration. |

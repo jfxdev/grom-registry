@@ -111,12 +111,19 @@ func TestManagerQuiescesWritesBeforeCheckpointAndCreate(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("backup operation did not complete")
 	}
-	overview, err := manager.Overview(context.Background(), "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if overview.ActiveOperation == nil || overview.ActiveOperation.Status != "complete" || len(overview.Backups) != 1 {
-		t.Fatalf("unexpected manager overview: %#v", overview)
+	deadline := time.Now().Add(time.Second)
+	for {
+		overview, err := manager.Overview(context.Background(), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if overview.ActiveOperation != nil && overview.ActiveOperation.Status == "complete" && len(overview.Backups) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("manager did not report a completed backup: %#v", overview)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
@@ -161,6 +168,24 @@ func TestManagerOverviewAndDelegatedOperations(t *testing.T) {
 	if err := manager.Delete(context.Background(), "backup"); err == nil ||
 		!strings.Contains(err.Error(), "through agent") {
 		t.Fatalf("expected wrapped delete failure, got %v", err)
+	}
+}
+
+func TestManagerLatestUsesFreshAgentListing(t *testing.T) {
+	agent := &fakeAgent{}
+	manager := NewManager(agent, maintenance.New(), func(context.Context) error { return nil }, "test", "development", nil)
+	latest, err := manager.Latest(context.Background())
+	if err != nil || latest != nil {
+		t.Fatalf("expected no recovery points, got latest=%#v err=%v", latest, err)
+	}
+	agent.created = true
+	latest, err = manager.Latest(context.Background())
+	if err != nil || latest == nil || latest.BackupID != "backup-id" {
+		t.Fatalf("unexpected latest backup: %#v err=%v", latest, err)
+	}
+	agent.listErr = errors.New("offline")
+	if _, err := manager.Latest(context.Background()); err == nil {
+		t.Fatal("expected unavailable backup agent error")
 	}
 }
 

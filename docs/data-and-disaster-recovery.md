@@ -147,10 +147,10 @@ filesystem measurement.
 
 ## Physical Distribution usage
 
-The installation-settings page is limited to administrators. It
-queries the private maintenance agent over a Unix socket. That agent walks
+The Installation diagnostics page is limited to administrators. It queries the
+private maintenance agent over a Unix socket on every refresh. That agent walks
 Distribution's local data root and adds the size of every regular file. The
-result appears as usedBytes in installation status.
+result appears as usedBytes in the live storage diagnostic.
 
 ~~~mermaid
 flowchart LR
@@ -191,7 +191,7 @@ it, and restarts Distribution to clear blob-existence caches.
 |---|---|
 | How much live OCI content belongs to this project? | Project accounted usage. |
 | How do shared layers contribute within a project? | Accounted usage, once per digest. |
-| How much local file space does Distribution occupy? | usedBytes in Installation settings. |
+| How much local file space does Distribution occupy? | usedBytes in Installation diagnostics. |
 | How much did the last collection free? | Collection reclaimedBytes. |
 | How much free disk or volume capacity remains? | Host/provider monitoring; Grom does not calculate it. |
 
@@ -209,7 +209,8 @@ attribution and no per-scope deduplication.
 | Physical usage and collection | backend/internal/platform/registrymaintenance/ |
 | Accounted-usage snapshots | backend/internal/registry/infrastructure/persistence/bun/storage.go |
 | Shared usage type | backend/internal/foundation/storage_usage.go |
-| Physical status | GET /api/v1/settings/status |
+| Live installation diagnostics | GET /api/v1/settings/diagnostics |
+| Legacy physical status | GET /api/v1/settings/status |
 | Blob collection | POST /api/v1/garbage-collections |
 
 ## Keeping this document current
