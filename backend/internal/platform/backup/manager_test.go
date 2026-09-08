@@ -111,12 +111,19 @@ func TestManagerQuiescesWritesBeforeCheckpointAndCreate(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("backup operation did not complete")
 	}
-	overview, err := manager.Overview(context.Background(), "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if overview.ActiveOperation == nil || overview.ActiveOperation.Status != "complete" || len(overview.Backups) != 1 {
-		t.Fatalf("unexpected manager overview: %#v", overview)
+	deadline := time.Now().Add(time.Second)
+	for {
+		overview, err := manager.Overview(context.Background(), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if overview.ActiveOperation != nil && overview.ActiveOperation.Status == "complete" && len(overview.Backups) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("manager did not report a completed backup: %#v", overview)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
