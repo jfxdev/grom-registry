@@ -66,6 +66,7 @@ type Server struct {
 	databaseKind        string
 	registryMaintenance *registrymaintenance.Client
 	diagnostics         *platformdiagnostics.Service
+	passwordResetMailer identityapp.PasswordResetMailer
 }
 
 type currentUserKey struct{}
@@ -76,6 +77,7 @@ type OperationalOptions struct {
 	Database            string
 	RegistryMaintenance *registrymaintenance.Client
 	Diagnostics         *platformdiagnostics.Service
+	PasswordResetMailer identityapp.PasswordResetMailer
 }
 
 func New(
@@ -125,6 +127,7 @@ func New(
 		databaseKind:        operationalOptions.Database,
 		registryMaintenance: operationalOptions.RegistryMaintenance,
 		diagnostics:         operationalOptions.Diagnostics,
+		passwordResetMailer: operationalOptions.PasswordResetMailer,
 	}
 	if server.maintenance == nil {
 		server.maintenance = maintenance.New()
@@ -189,6 +192,7 @@ func (s *Server) routes() chi.Router {
 			protected.Put("/users/{id}/administrator", s.promoteUserToSystemAdmin)
 			protected.Put("/users/{id}/viewer", s.promoteUserToSystemViewer)
 			protected.Post("/users/{id}/password-reset-link", s.createUserPasswordResetLink)
+			protected.Post("/users/{id}/password-resets", s.createUserPasswordReset)
 
 			protected.Get("/service-accounts", s.listServiceAccounts)
 			protected.Post("/service-accounts", s.createServiceAccount)
@@ -827,12 +831,74 @@ func (s *Server) createUserPasswordResetLink(w http.ResponseWriter, r *http.Requ
 	})
 }
 
+func (s *Server) createUserPasswordReset(w http.ResponseWriter, r *http.Request) {
+	if !requireSystemAdmin(w, r) {
+		return
+	}
+	targetID := foundation.ID(chi.URLParam(r, "id"))
+	target, err := s.identity.FindUser(r.Context(), targetID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+		return
+	}
+	created, err := s.identity.CreatePasswordReset(r.Context(), targetID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "User not found")
+		return
+	}
+
+	resetURL := s.passwordResetPublicURL(created.Token)
+	delivery := "link"
+	var fallbackReason string
+	smtpAttempted := s.passwordResetMailer != nil
+	if s.passwordResetMailer != nil {
+		if err := s.passwordResetMailer.SendPasswordReset(r.Context(), identityapp.PasswordResetEmail{
+			Recipient: target.Email, Username: target.Username, URL: resetURL, ExpiresAt: created.ExpiresAt,
+		}); err == nil {
+			delivery = "email"
+		} else {
+			fallbackReason = "smtp_delivery_failed"
+			s.logger.Warn("password reset email delivery failed; using manual link fallback")
+		}
+	}
+	metadata := map[string]any{
+		"expiresAt":     created.ExpiresAt,
+		"delivery":      delivery,
+		"smtpAttempted": smtpAttempted,
+	}
+	if fallbackReason != "" {
+		metadata["fallbackReason"] = fallbackReason
+	}
+	if auditErr := s.audit.Record(
+		r.Context(), principalForUser(userFromContext(r.Context())), constants.AuditUserPasswordResetLinkCreated,
+		constants.AuditResourceUser, targetID, metadata,
+	); auditErr != nil {
+		s.logger.Error("record password reset link audit event", "error", auditErr)
+	}
+	response := map[string]any{"delivery": delivery, "expiresAt": created.ExpiresAt}
+	if delivery == "link" {
+		response["url"] = resetURL
+	}
+	if fallbackReason != "" {
+		response["fallbackReason"] = fallbackReason
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
 func (s *Server) passwordResetURL(r *http.Request, token string) string {
 	resetURLBase := s.publicURL.String()
 	if requestOrigin, parseErr := url.Parse(r.Header.Get("Origin")); parseErr == nil && requestOrigin.Scheme != "" && requestOrigin.Host != "" {
 		resetURLBase = requestOrigin.Scheme + "://" + requestOrigin.Host
 	}
-	return resetURLBase + "/reset-password#token=" + url.QueryEscape(token)
+	return passwordResetURL(resetURLBase, token)
+}
+
+func (s *Server) passwordResetPublicURL(token string) string {
+	return passwordResetURL(s.publicURL.String(), token)
+}
+
+func passwordResetURL(baseURL, token string) string {
+	return baseURL + "/reset-password#token=" + url.QueryEscape(token)
 }
 
 func (s *Server) completePasswordReset(w http.ResponseWriter, r *http.Request) {

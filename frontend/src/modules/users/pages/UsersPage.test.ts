@@ -8,7 +8,7 @@ import UsersPage from './UsersPage.vue'
 
 const mocks = vi.hoisted(() => ({
   createUser: vi.fn(),
-  createUserPasswordResetLink: vi.fn(),
+  createUserPasswordReset: vi.fn(),
   disableUser: vi.fn(),
   listUsers: vi.fn(),
   promoteUserToSystemAdmin: vi.fn(),
@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../api/users', () => ({
   createUser: mocks.createUser,
-  createUserPasswordResetLink: mocks.createUserPasswordResetLink,
+  createUserPasswordReset: mocks.createUserPasswordReset,
   disableUser: mocks.disableUser,
   listUsers: mocks.listUsers,
   promoteUserToSystemAdmin: mocks.promoteUserToSystemAdmin,
@@ -47,7 +47,7 @@ function mountPage() {
 describe('UsersPage', () => {
   beforeEach(() => {
     mocks.createUser.mockReset()
-    mocks.createUserPasswordResetLink.mockReset()
+    mocks.createUserPasswordReset.mockReset()
     mocks.disableUser.mockReset()
     mocks.listUsers.mockReset()
     mocks.promoteUserToSystemAdmin.mockReset()
@@ -154,6 +154,39 @@ describe('UsersPage', () => {
     const actions = regularUser.get('.user-actions')
     expect(actions.text()).toContain('Reset password')
     expect(actions.find('[aria-label="Manage user sam"]').exists()).toBe(true)
+  })
+
+  it('confirms SMTP delivery without rendering the reset URL', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const samActions = wrapper.findAll('.user-row').find((row) => row.text().includes('sam@registry.test'))!.get('.user-actions')
+    await samActions.findAll('button').find((button) => button.text() === 'Reset password')!.trigger('click')
+    mocks.createUserPasswordReset.mockResolvedValueOnce({ delivery: 'email', expiresAt: '2026-08-08T00:30:00Z' })
+    await wrapper.findAll('button').find((button) => button.text() === 'Create password reset')!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createUserPasswordReset).toHaveBeenCalledWith('user-2')
+    expect(wrapper.text()).toContain('Reset email sent')
+    expect(wrapper.text()).toContain('sam@registry.test')
+    expect(wrapper.find('.reveal-value').exists()).toBe(false)
+  })
+
+  it('reveals a manual link when SMTP is disabled or unavailable', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const samActions = wrapper.findAll('.user-row').find((row) => row.text().includes('sam@registry.test'))!.get('.user-actions')
+    await samActions.findAll('button').find((button) => button.text() === 'Reset password')!.trigger('click')
+    mocks.createUserPasswordReset.mockResolvedValueOnce({
+      delivery: 'link', url: 'https://grom.example/reset-password#token=manual-token',
+      expiresAt: '2026-08-08T00:30:00Z', fallbackReason: 'smtp_delivery_failed',
+    })
+    await wrapper.findAll('button').find((button) => button.text() === 'Create password reset')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('manual-token')
+    expect(wrapper.text()).toContain('Grom could not send the reset email')
   })
 
   it('navigates pages and resets the cursor when the search changes', async () => {

@@ -92,6 +92,14 @@ links. Completing a reset revokes the user's sessions but never reactivates a
 disabled account. A signed-in user cannot use a reset link; they must change
 their password in the profile or sign out first.
 
+An administrator may use the password-reset delivery operation. If optional
+SMTP is configured and accepts the message, Grom sends the existing reset link
+to the user's stored email and does not reveal it to the administrator. If SMTP
+is disabled or fails, Grom instead reveals that same new link once for manual
+delivery. The registration-link flow remains manual. Audit metadata records
+only the delivery result and expiry; it never includes the URL, token, SMTP
+credential, or recipient address.
+
 ## Web sessions
 
 After an email-and-password login, Grom creates an opaque server-side session

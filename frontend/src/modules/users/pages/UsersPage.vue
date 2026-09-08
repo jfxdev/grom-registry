@@ -13,7 +13,7 @@ import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { Check, CircleCheck, CircleOff, Copy, Eye, KeyRound, Pencil, Plus, Search, ShieldAlert, UserRound, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
-import { createUser, createUserPasswordResetLink, disableUser, listUsers, promoteUserToSystemAdmin, promoteUserToSystemViewer, reactivateUser, updateUser, userKeys } from '../api/users'
+import { createUser, createUserPasswordReset, disableUser, listUsers, promoteUserToSystemAdmin, promoteUserToSystemViewer, reactivateUser, updateUser, userKeys } from '../api/users'
 
 const queryClient = useQueryClient()
 const session = useSessionStore()
@@ -31,6 +31,8 @@ const registrationCopyError = ref('')
 const resetTarget = ref<User | null>(null)
 const resetLink = ref('')
 const resetExpiresAt = ref('')
+const resetEmailDelivered = ref(false)
+const resetDeliveryWarning = ref('')
 const copied = ref(false)
 const copyError = ref('')
 const disableTarget = ref<User | null>(null)
@@ -73,10 +75,17 @@ const create = useMutation({
 })
 
 const createResetLink = useMutation({
-  mutationFn: (userId: string) => createUserPasswordResetLink(userId),
+  mutationFn: (userId: string) => createUserPasswordReset(userId),
   onSuccess: (result) => {
-    resetLink.value = result.url
     resetExpiresAt.value = result.expiresAt
+    resetEmailDelivered.value = result.delivery === 'email'
+    resetLink.value = result.delivery === 'link' ? result.url ?? '' : ''
+    resetDeliveryWarning.value = result.fallbackReason === 'smtp_delivery_failed'
+      ? 'Grom could not send the reset email. Copy and share this link instead.'
+      : ''
+    if (result.delivery === 'link' && !result.url) {
+      error.value = 'Could not prepare a password reset link'
+    }
   },
   onError: (caught) => {
     error.value = caught instanceof APIError ? caught.message : 'Could not reset the password'
@@ -148,6 +157,8 @@ function openReset(user: User) {
   resetTarget.value = user
   resetLink.value = ''
   resetExpiresAt.value = ''
+  resetEmailDelivered.value = false
+  resetDeliveryWarning.value = ''
   copied.value = false
   copyError.value = ''
   error.value = ''
@@ -157,6 +168,8 @@ function closeReset() {
   resetTarget.value = null
   resetLink.value = ''
   resetExpiresAt.value = ''
+  resetEmailDelivered.value = false
+  resetDeliveryWarning.value = ''
   copied.value = false
   copyError.value = ''
 }
@@ -494,15 +507,26 @@ async function copyRegistrationLink() {
           <Button variant="ghost" size="icon" aria-label="Close password reset" @click="closeReset"><X :size="18" /></Button>
         </div>
 
-        <template v-if="!resetLink">
+        <template v-if="!resetLink && !resetEmailDelivered">
           <p v-if="error" class="error-text" role="alert">{{ error }}</p>
           <div class="flex justify-end gap-2">
             <Button variant="ghost" @click="closeReset">Cancel</Button>
             <Button :loading="createResetLink.isPending.value" @click="createResetLink.mutate(resetTarget.id)">
-              Generate reset link
+              Create password reset
             </Button>
           </div>
         </template>
+
+        <div v-else-if="resetEmailDelivered" class="reset-delivery">
+          <div class="reveal-heading">
+            <CircleCheck :size="18" />
+            <div>
+              <p class="text-sm font-semibold">Reset email sent</p>
+              <p class="mt-1 text-xs text-muted-foreground">Grom sent password-reset instructions to {{ resetTarget.email }}. The link expires {{ new Date(resetExpiresAt).toLocaleString() }}.</p>
+            </div>
+          </div>
+          <div class="flex justify-end"><Button @click="closeReset">Done</Button></div>
+        </div>
 
         <div v-else class="reset-secret">
           <div class="reveal-heading">
@@ -513,6 +537,7 @@ async function copyRegistrationLink() {
             </div>
           </div>
           <div class="reveal-value"><code>{{ resetLink }}</code></div>
+          <p v-if="resetDeliveryWarning" class="error-text" role="alert">{{ resetDeliveryWarning }}</p>
           <p v-if="copyError" class="error-text" role="alert">{{ copyError }}</p>
           <div class="reveal-actions">
             <Button variant="outline" @click="closeReset">Done</Button>
@@ -721,6 +746,15 @@ async function copyRegistrationLink() {
   border: 1px solid color-mix(in srgb, var(--warning) 38%, transparent);
   border-radius: 0.7rem;
   background: color-mix(in srgb, var(--warning) 7%, transparent);
+  padding: 1rem;
+}
+
+.reset-delivery {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
   padding: 1rem;
 }
 

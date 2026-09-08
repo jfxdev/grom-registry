@@ -111,6 +111,19 @@ docker push localhost:8080/my-project/my-image:latest
 For a reverse proxy, set `GROM_PUBLIC_URL`, keep `GROM_SECURE_COOKIES=true`,
 and list only immediate proxy networks in `GROM_TRUSTED_PROXIES`.
 
+### Optional password-reset email
+
+Administrators can deliver password-reset links directly through SMTP. Leave
+all `GROM_SMTP_*` variables unset to keep the default reveal-once manual-link
+flow. When SMTP is configured, set `GROM_SMTP_HOST`, `GROM_SMTP_PORT`,
+`GROM_SMTP_FROM_ADDRESS`, and `GROM_SMTP_TLS_MODE` to either `starttls` or
+`tls`; `GROM_SMTP_USERNAME` and `GROM_SMTP_PASSWORD` are optional but must be
+set together. Grom requires encrypted SMTP, validates the server certificate,
+and falls back to a manual reveal-once link if the SMTP transaction fails.
+
+Keep SMTP credentials only in the deployment environment or secret manager.
+Grom never exposes them through the UI or API.
+
 ## Operations
 
 ### Backup and recovery

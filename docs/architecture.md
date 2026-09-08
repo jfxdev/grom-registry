@@ -27,7 +27,7 @@ flowchart LR
 
 | Component | Responsibility |
 |---|---|
-| Grom | Serves the embedded Vue interface, management API, sessions, /auth/token, the streaming /v2/* gateway, and live administrator installation diagnostics. |
+| Grom | Serves the embedded Vue interface, management API, sessions, /auth/token, the streaming /v2/* gateway, live administrator installation diagnostics, and optional password-reset SMTP delivery. |
 | CNCF Distribution | Implements the OCI/Docker protocol and persists OCI content. |
 | SQLite or PostgreSQL | Stores control-plane data and audit history; migrations run before readiness. |
 | Backup agent | Creates and provides recovery points with no network, public ports, or Docker socket. |
@@ -177,6 +177,12 @@ GROM_TRUSTED_PROXIES. Passwords, access keys, sessions, and reset tokens use
 Argon2id. Request bodies are limited to 1 MiB and closed schemas reject unknown
 properties. Cookie-authenticated mutations require an allowed Origin, and
 login/token failures are rate-limited by resolved client address.
+
+SMTP delivery is optional deployment configuration, not persisted Identity
+state. It accepts only certificate-validated STARTTLS or implicit TLS, sends a
+single reset email synchronously, and never logs SMTP credentials, reset URLs,
+or tokens. The reset operation returns no URL after SMTP accepts delivery; a
+failed or disabled mailer returns the same reveal-once manual link instead.
 
 ## Backup and recovery
 
