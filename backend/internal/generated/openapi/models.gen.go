@@ -624,6 +624,39 @@ func (e MigrationDiagnosticStatus) Valid() bool {
 	}
 }
 
+// Defines values for PasswordResetDeliveryDelivery.
+const (
+	Email PasswordResetDeliveryDelivery = "email"
+	Link  PasswordResetDeliveryDelivery = "link"
+)
+
+// Valid indicates whether the value is a known member of the PasswordResetDeliveryDelivery enum.
+func (e PasswordResetDeliveryDelivery) Valid() bool {
+	switch e {
+	case Email:
+		return true
+	case Link:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PasswordResetDeliveryFallbackReason.
+const (
+	SmtpDeliveryFailed PasswordResetDeliveryFallbackReason = "smtp_delivery_failed"
+)
+
+// Valid indicates whether the value is a known member of the PasswordResetDeliveryFallbackReason enum.
+func (e PasswordResetDeliveryFallbackReason) Valid() bool {
+	switch e {
+	case SmtpDeliveryFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PrincipalKind.
 const (
 	PrincipalKindServiceAccount PrincipalKind = "service_account"
@@ -1309,6 +1342,25 @@ type MigrationDiagnostic struct {
 
 // MigrationDiagnosticStatus defines model for MigrationDiagnostic.Status.
 type MigrationDiagnosticStatus string
+
+// PasswordResetDelivery defines model for PasswordResetDelivery.
+type PasswordResetDelivery struct {
+	// Delivery Email means the reset URL was accepted by SMTP and is not returned.
+	Delivery  PasswordResetDeliveryDelivery `json:"delivery"`
+	ExpiresAt time.Time                     `json:"expiresAt"`
+
+	// FallbackReason Present only when an SMTP attempt failed and manual delivery is required.
+	FallbackReason *PasswordResetDeliveryFallbackReason `json:"fallbackReason,omitempty"`
+
+	// Url Reveal-once URL, present only when delivery is link.
+	Url *string `json:"url,omitempty"`
+}
+
+// PasswordResetDeliveryDelivery Email means the reset URL was accepted by SMTP and is not returned.
+type PasswordResetDeliveryDelivery string
+
+// PasswordResetDeliveryFallbackReason Present only when an SMTP attempt failed and manual delivery is required.
+type PasswordResetDeliveryFallbackReason string
 
 // PasswordResetLink defines model for PasswordResetLink.
 type PasswordResetLink struct {

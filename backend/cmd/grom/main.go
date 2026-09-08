@@ -19,6 +19,7 @@ import (
 	"github.com/jfxdev/grom/backend/internal/httpapi"
 	identityapp "github.com/jfxdev/grom/backend/internal/identity/application"
 	identitystore "github.com/jfxdev/grom/backend/internal/identity/infrastructure/persistence/bun"
+	identitysmtp "github.com/jfxdev/grom/backend/internal/identity/infrastructure/smtp"
 	"github.com/jfxdev/grom/backend/internal/platform/backup"
 	"github.com/jfxdev/grom/backend/internal/platform/config"
 	"github.com/jfxdev/grom/backend/internal/platform/database"
@@ -74,6 +75,17 @@ func run(logger *slog.Logger) error {
 	identityRepository := identitystore.New(db)
 	projectRepository := projectstore.New(db)
 	identityService := identityapp.New(identityRepository, cfg.SessionTTL)
+	var passwordResetMailer identityapp.PasswordResetMailer
+	if cfg.SMTP.Enabled {
+		passwordResetMailer, err = identitysmtp.New(identitysmtp.Config{
+			Host: cfg.SMTP.Host, Port: cfg.SMTP.Port, FromAddress: cfg.SMTP.FromAddress,
+			TLSMode:  identitysmtp.TLSMode(cfg.SMTP.TLSMode),
+			Username: cfg.SMTP.Username, Password: cfg.SMTP.Password,
+		})
+		if err != nil {
+			return fmt.Errorf("configure SMTP password reset delivery: %w", err)
+		}
+	}
 	projectService := projectapp.New(projectRepository)
 	registryRepository := registrystore.New(db)
 	repositoryService := registryapp.NewRepositoryService(registryRepository)
@@ -202,7 +214,7 @@ func run(logger *slog.Logger) error {
 			TrustedProxies: cfg.TrustedProxies, AuthFailureLimit: cfg.AuthFailureLimit,
 			AuthFailureWindow: cfg.AuthFailureWindow, AuthBlockDuration: cfg.AuthBlockDuration,
 		},
-		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController, Database: string(databaseKind), RegistryMaintenance: registryMaintenanceClient, Diagnostics: diagnosticsService},
+		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController, Database: string(databaseKind), RegistryMaintenance: registryMaintenanceClient, Diagnostics: diagnosticsService, PasswordResetMailer: passwordResetMailer},
 	)
 	if err != nil {
 		return err

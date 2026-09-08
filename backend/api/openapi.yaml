@@ -309,6 +309,30 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/users/{id}/password-resets:
+    post:
+      tags: [Identity]
+      operationId: createUserPasswordReset
+      description: >-
+        Create a single-use password reset. When SMTP delivery is configured and
+        accepted by the mail server, the URL is sent directly to the user and is
+        not returned. Otherwise the response contains a reveal-once link for the
+        administrator to share manually.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: Password reset delivery result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetDelivery"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/users/{id}:
     patch:
       tags: [Identity]
@@ -2077,6 +2101,25 @@ components:
         expiresAt:
           type: string
           format: date-time
+    PasswordResetDelivery:
+      type: object
+      required: [delivery, expiresAt]
+      properties:
+        delivery:
+          type: string
+          enum: [email, link]
+          description: Email means the reset URL was accepted by SMTP and is not returned.
+        expiresAt:
+          type: string
+          format: date-time
+        url:
+          type: string
+          format: uri
+          description: Reveal-once URL, present only when delivery is link.
+        fallbackReason:
+          type: string
+          enum: [smtp_delivery_failed]
+          description: Present only when an SMTP attempt failed and manual delivery is required.
     ServiceAccount:
       type: object
       required: [id, name, username, description, createdAt]

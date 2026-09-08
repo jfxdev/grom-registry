@@ -217,6 +217,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/password-resets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Create a single-use password reset. When SMTP delivery is configured and accepted by the mail server, the URL is sent directly to the user and is not returned. Otherwise the response contains a reveal-once link for the administrator to share manually. */
+        post: operations["createUserPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}": {
         parameters: {
             query?: never;
@@ -1023,6 +1040,25 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
         };
+        PasswordResetDelivery: {
+            /**
+             * @description Email means the reset URL was accepted by SMTP and is not returned.
+             * @enum {string}
+             */
+            delivery: "email" | "link";
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * Format: uri
+             * @description Reveal-once URL, present only when delivery is link.
+             */
+            url?: string;
+            /**
+             * @description Present only when an SMTP attempt failed and manual delivery is required.
+             * @enum {string}
+             */
+            fallbackReason?: "smtp_delivery_failed";
+        };
         ServiceAccount: {
             /** Format: uuid */
             id: string;
@@ -1825,6 +1861,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PasswordResetLink"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createUserPasswordReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Password reset delivery result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetDelivery"];
                 };
             };
             403: components["responses"]["Forbidden"];
@@ -3158,6 +3218,8 @@ export const backupStatusValues: ReadonlyArray<FlattenedDeepRequired<components>
 export const backupOverviewPageSizeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupOverview"]["pageSize"]> = [5];
 export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["identity.login_succeeded", "identity.login_failed", "identity.registry_auth_failed", "identity.user_created", "identity.user_promoted_to_system_admin", "identity.user_promoted_to_system_viewer", "identity.user_disabled", "identity.user_updated", "identity.user_reactivated", "identity.service_account_created", "identity.service_account_disabled", "identity.access_key_created", "identity.access_key_revoked", "identity.user_password_changed", "identity.user_password_reset_link_created", "identity.user_password_reset_completed", "projects.project_created", "projects.project_delete_requested", "projects.project_deleted", "projects.membership_upserted", "projects.membership_removed", "registry.repository_created_from_push", "registry.repository_policies_updated", "registry.repository_archived", "registry.repository_unarchived", "registry.repository_removed", "registry.artifact_deletion_started", "registry.artifact_deletion_completed", "registry.artifact_deletion_failed", "registry.lifecycle_preview_created", "registry.lifecycle_run_started", "registry.lifecycle_item_deleted", "registry.lifecycle_item_skipped", "registry.lifecycle_item_failed", "registry.lifecycle_run_completed", "registry.lifecycle_run_failed", "platform.restore_completed", "platform.backup_created", "platform.backup_delete_requested", "platform.backup_deleted", "platform.garbage_collection_started", "platform.garbage_collection_completed", "platform.garbage_collection_failed"];
 export const auditResourceKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditResourceKind"]> = ["authentication", "user", "service_account", "project", "membership", "registry_repository", "artifact_deletion", "lifecycle_run", "backup", "garbage_collection"];
+export const passwordResetDeliveryDeliveryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PasswordResetDelivery"]["delivery"]> = ["email", "link"];
+export const passwordResetDeliveryFallbackReasonValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PasswordResetDelivery"]["fallbackReason"]> = ["smtp_delivery_failed"];
 export const principalKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PrincipalKind"]> = ["user", "service_account"];
 export const projectRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProjectRole"]> = ["reader", "writer", "admin"];
 export const repositoryStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryStatus"]> = ["empty", "active", "archived"];

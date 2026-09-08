@@ -262,6 +262,79 @@ func TestLoadRejectsLegacyUnboundedProxyTrust(t *testing.T) {
 	}
 }
 
+func TestLoadSMTPConfiguration(t *testing.T) {
+	tests := []struct {
+		name     string
+		host     string
+		port     string
+		from     string
+		tlsMode  string
+		username string
+		password string
+		wantErr  string
+		wantMode SMTPTLSMode
+		wantAuth bool
+	}{
+		{name: "disabled by default"},
+		{name: "mandatory STARTTLS relay", host: "smtp.example.test", port: "587", from: "notifications@example.test", tlsMode: "starttls", wantMode: SMTPTLSModeStartTLS},
+		{name: "implicit TLS authenticated relay", host: "smtp.example.test", port: "465", from: "notifications@example.test", tlsMode: "tls", username: "mailer", password: "app-password", wantMode: SMTPTLSModeTLS, wantAuth: true},
+		{name: "partial configuration", port: "587", wantErr: "GROM_SMTP_HOST is required"},
+		{name: "insecure SMTP mode", host: "smtp.example.test", port: "25", from: "notifications@example.test", tlsMode: "none", wantErr: "must be starttls or tls"},
+		{name: "invalid host URL", host: "https://smtp.example.test", port: "465", from: "notifications@example.test", tlsMode: "tls", wantErr: "hostname or IP"},
+		{name: "host must not include a port", host: "smtp.example.test:465", port: "465", from: "notifications@example.test", tlsMode: "tls", wantErr: "hostname or IP"},
+		{name: "invalid port", host: "smtp.example.test", port: "0", from: "notifications@example.test", tlsMode: "tls", wantErr: "between 1 and 65535"},
+		{name: "display name sender is rejected", host: "smtp.example.test", port: "465", from: "Grom <notifications@example.test>", tlsMode: "tls", wantErr: "mailbox address"},
+		{name: "incomplete credentials", host: "smtp.example.test", port: "465", from: "notifications@example.test", tlsMode: "tls", username: "mailer", wantErr: "configured together"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setRequiredEnvironment(t)
+			t.Setenv("GROM_SMTP_HOST", test.host)
+			t.Setenv("GROM_SMTP_PORT", test.port)
+			t.Setenv("GROM_SMTP_FROM_ADDRESS", test.from)
+			t.Setenv("GROM_SMTP_TLS_MODE", test.tlsMode)
+			t.Setenv("GROM_SMTP_USERNAME", test.username)
+			t.Setenv("GROM_SMTP_PASSWORD", test.password)
+
+			cfg, err := Load()
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("expected error containing %q, got %v", test.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.host == "" {
+				if cfg.SMTP.Enabled {
+					t.Fatalf("expected SMTP to be disabled, got %#v", cfg.SMTP)
+				}
+				return
+			}
+			if !cfg.SMTP.Enabled || cfg.SMTP.TLSMode != test.wantMode || (cfg.SMTP.Username != "") != test.wantAuth {
+				t.Fatalf("unexpected SMTP config %#v", cfg.SMTP)
+			}
+		})
+	}
+}
+
+func TestLoadStrictProfileRejectsInsecureSMTPTransport(t *testing.T) {
+	setRequiredEnvironment(t)
+	t.Setenv("GROM_DEPLOYMENT_PROFILE", "strict")
+	t.Setenv("GROM_PUBLIC_URL", "https://registry.example.test")
+	t.Setenv("GROM_SECURE_COOKIES", "true")
+	t.Setenv("GROM_SMTP_HOST", "smtp.example.test")
+	t.Setenv("GROM_SMTP_PORT", "25")
+	t.Setenv("GROM_SMTP_FROM_ADDRESS", "notifications@example.test")
+	t.Setenv("GROM_SMTP_TLS_MODE", "none")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "GROM_SMTP_TLS_MODE must be starttls or tls") {
+		t.Fatalf("expected strict profile to reject insecure SMTP, got %v", err)
+	}
+}
+
 func setRequiredEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("GROM_BOOTSTRAP_ADMIN_PASSWORD", "test-password")

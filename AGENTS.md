@@ -252,7 +252,13 @@ or total capacity belongs to host/provider monitoring.
   30 minutes, and is carried in the URL fragment. Completing the reset revokes
   the target user's sessions. Authenticated users cannot access or consume reset
   links; they must change the password from their profile or sign out first.
-  Never log or persist the plaintext reset token.
+  Never log or persist the plaintext reset token. Optional SMTP supports only
+  certificate-validated STARTTLS or implicit TLS. When SMTP accepts an
+  administrator-created reset, do not expose the URL to that administrator; on
+  disabled or failed delivery, return the same new reveal-once link as a manual
+  fallback. SMTP credentials, reset URLs, tokens, email bodies, and recipients
+  must never enter logs or audit metadata. Registration links remain manual
+  unless an explicit product decision changes that scope.
 - API tokens are normally credentials owned by service accounts. The sole exception is a Viewer's profile-scoped, reveal-once registry token: it is revocable by that Viewer and must always grant only `pull` from projects with explicit membership. It must never grant `push` or `delete`, even if the Viewer has a Writer or Admin project membership. Do not add tokens for other user roles or a global user-token page.
 - A service account may have at most three active access keys. Keep enforcement
   and the paginated list's active/max counts server-authoritative; the UI must

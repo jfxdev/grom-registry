@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,6 +23,16 @@ import (
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
 	projectstore "github.com/jfxdev/grom/backend/internal/projects/infrastructure/persistence/bun"
 )
+
+type passwordResetMailerStub struct {
+	input identityapp.PasswordResetEmail
+	err   error
+}
+
+func (s *passwordResetMailerStub) SendPasswordReset(_ context.Context, input identityapp.PasswordResetEmail) error {
+	s.input = input
+	return s.err
+}
 
 func newFlowTestServer(t *testing.T) (*Server, *identityapp.Service, *identitydomain.User) {
 	t.Helper()
@@ -193,6 +204,82 @@ func TestCreateUserPasswordResetLink(t *testing.T) {
 	if missing.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for a missing user, got %d", missing.Code)
 	}
+}
+
+func TestCreateUserPasswordResetDeliversEmailOrReturnsSafeFallback(t *testing.T) {
+	server, identity, admin := newFlowTestServer(t)
+	created, err := identity.CreateUser(context.Background(), "target@example.com", "target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := identity.CompletePasswordReset(context.Background(), created.RegistrationLink.Token, "target-password"); err != nil {
+		t.Fatal(err)
+	}
+	request := func() *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "https://grom.example/api/v1/users/"+created.User.ID.String()+"/password-resets", nil)
+		r.Header.Set("Origin", "http://localhost:5173")
+		return withUserAndParams(
+			r,
+			admin, map[string]string{"id": created.User.ID.String()},
+		)
+	}
+
+	t.Run("SMTP success does not reveal the URL", func(t *testing.T) {
+		mailer := &passwordResetMailerStub{}
+		server.passwordResetMailer = mailer
+		response := httptest.NewRecorder()
+		server.createUserPasswordReset(response, request())
+		if response.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+		}
+		var body struct {
+			Delivery string `json:"delivery"`
+			URL      string `json:"url"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Delivery != "email" || body.URL != "" {
+			t.Fatalf("expected email delivery without URL, got %#v", body)
+		}
+		if mailer.input.Recipient != "target@example.com" || mailer.input.Username != "target" || !strings.HasPrefix(mailer.input.URL, "https://grom.example/reset-password#token=grmpr_") {
+			t.Fatalf("unexpected email input %#v", mailer.input)
+		}
+	})
+
+	t.Run("SMTP failure returns the same usable link", func(t *testing.T) {
+		server.passwordResetMailer = &passwordResetMailerStub{err: errors.New("delivery failed")}
+		response := httptest.NewRecorder()
+		server.createUserPasswordReset(response, request())
+		var body struct {
+			Delivery       string `json:"delivery"`
+			URL            string `json:"url"`
+			FallbackReason string `json:"fallbackReason"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Delivery != "link" || body.URL == "" || body.FallbackReason != "smtp_delivery_failed" {
+			t.Fatalf("expected link fallback, got %#v", body)
+		}
+	})
+
+	t.Run("disabled SMTP keeps manual delivery", func(t *testing.T) {
+		server.passwordResetMailer = nil
+		response := httptest.NewRecorder()
+		server.createUserPasswordReset(response, request())
+		var body struct {
+			Delivery       string `json:"delivery"`
+			URL            string `json:"url"`
+			FallbackReason string `json:"fallbackReason"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Delivery != "link" || body.URL == "" || body.FallbackReason != "" {
+			t.Fatalf("expected disabled SMTP manual delivery, got %#v", body)
+		}
+	})
 }
 
 func TestListUsersValidatesQueryAndRequiresAdministrator(t *testing.T) {

@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/mail"
 	"net/netip"
 	"net/url"
 	"os"
@@ -45,6 +47,27 @@ type Config struct {
 	AuthBlockDuration         time.Duration
 	BackupAgentSocket         string
 	RegistryMaintenanceSocket string
+	SMTP                      SMTPConfig
+}
+
+type SMTPTLSMode string
+
+const (
+	SMTPTLSModeStartTLS SMTPTLSMode = "starttls"
+	SMTPTLSModeTLS      SMTPTLSMode = "tls"
+)
+
+// SMTPConfig is empty when outbound email delivery is disabled. SMTP is kept
+// separate from Identity state: credentials remain deployment configuration and
+// are never persisted or exposed through the management API.
+type SMTPConfig struct {
+	Enabled     bool
+	Host        string
+	Port        int
+	FromAddress string
+	TLSMode     SMTPTLSMode
+	Username    string
+	Password    string
 }
 
 func Load() (Config, error) {
@@ -86,6 +109,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	smtp, err := smtpConfigFromEnv()
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
 		HTTPAddress:               env("GROM_HTTP_ADDRESS", ":8080"),
 		DatabaseURL:               env("GROM_DATABASE_URL", "sqlite://"+dataDir+"/grom.db"),
@@ -110,6 +137,7 @@ func Load() (Config, error) {
 		AuthBlockDuration:         authBlockDuration,
 		BackupAgentSocket:         env("GROM_BACKUP_AGENT_SOCKET", ""),
 		RegistryMaintenanceSocket: env("GROM_REGISTRY_MAINTENANCE_SOCKET", ""),
+		SMTP:                      smtp,
 	}
 	if cfg.BootstrapEmail == "" || cfg.BootstrapUsername == "" || cfg.BootstrapPassword == "" {
 		return Config{}, fmt.Errorf("bootstrap administrator credentials cannot be empty")
@@ -122,6 +150,75 @@ func Load() (Config, error) {
 	}
 	cfg.InsecureHTTP = insecureHTTP
 	return cfg, nil
+}
+
+func smtpConfigFromEnv() (SMTPConfig, error) {
+	host := strings.TrimSpace(os.Getenv("GROM_SMTP_HOST"))
+	portRaw := strings.TrimSpace(os.Getenv("GROM_SMTP_PORT"))
+	fromAddress := strings.TrimSpace(os.Getenv("GROM_SMTP_FROM_ADDRESS"))
+	tlsModeRaw := strings.ToLower(strings.TrimSpace(os.Getenv("GROM_SMTP_TLS_MODE")))
+	username := os.Getenv("GROM_SMTP_USERNAME")
+	password := os.Getenv("GROM_SMTP_PASSWORD")
+
+	if host == "" {
+		if portRaw != "" || fromAddress != "" || tlsModeRaw != "" || username != "" || password != "" {
+			return SMTPConfig{}, fmt.Errorf("GROM_SMTP_HOST is required when SMTP settings are configured")
+		}
+		return SMTPConfig{}, nil
+	}
+	if !validSMTPHost(host) {
+		return SMTPConfig{}, fmt.Errorf("GROM_SMTP_HOST must be a hostname or IP address without a scheme or path")
+	}
+	port, err := strconv.Atoi(portRaw)
+	if err != nil || port < 1 || port > 65535 {
+		return SMTPConfig{}, fmt.Errorf("GROM_SMTP_PORT must be an integer between 1 and 65535")
+	}
+	parsedFrom, err := mail.ParseAddress(fromAddress)
+	if err != nil || parsedFrom.Address != fromAddress {
+		return SMTPConfig{}, fmt.Errorf("GROM_SMTP_FROM_ADDRESS must be a mailbox address without a display name")
+	}
+	tlsMode := SMTPTLSMode(tlsModeRaw)
+	if tlsMode != SMTPTLSModeStartTLS && tlsMode != SMTPTLSModeTLS {
+		return SMTPConfig{}, fmt.Errorf("GROM_SMTP_TLS_MODE must be starttls or tls")
+	}
+	if (username == "") != (password == "") {
+		return SMTPConfig{}, fmt.Errorf("GROM_SMTP_USERNAME and GROM_SMTP_PASSWORD must be configured together")
+	}
+	return SMTPConfig{
+		Enabled: true, Host: host, Port: port, FromAddress: parsedFrom.Address,
+		TLSMode: tlsMode, Username: username, Password: password,
+	}, nil
+}
+
+func validSMTPHost(host string) bool {
+	if strings.Contains(host, "://") || strings.ContainsAny(host, "/@ \t\r\n") {
+		return false
+	}
+	address := host
+	if strings.HasPrefix(host, "[") || strings.HasSuffix(host, "]") {
+		if !strings.HasPrefix(host, "[") || !strings.HasSuffix(host, "]") {
+			return false
+		}
+		address = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	}
+	if net.ParseIP(address) != nil {
+		return true
+	}
+	if address == "" || len(address) > 253 || strings.Contains(address, ":") {
+		return false
+	}
+	for _, label := range strings.Split(address, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, character := range label {
+			if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') &&
+				(character < '0' || character > '9') && character != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func env(key, fallback string) string {

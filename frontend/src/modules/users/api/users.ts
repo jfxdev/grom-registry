@@ -1,5 +1,5 @@
 import { apiRequest } from '@/shared/api/client'
-import type { CreateUserResponse, User, UserPage } from '@/shared/api/models'
+import type { CreateUserResponse, PasswordResetDelivery, User, UserPage } from '@/shared/api/models'
 
 export const userKeys = {
   all: ['users'] as const,
@@ -25,6 +25,11 @@ export const promoteUserToSystemViewer = (userId: string) =>
 
 export const createUserPasswordResetLink = (userId: string) =>
   apiRequest<{ url: string; expiresAt: string }>(`/api/v1/users/${encodeURIComponent(userId)}/password-reset-link`, {
+    method: 'POST',
+  })
+
+export const createUserPasswordReset = (userId: string) =>
+  apiRequest<PasswordResetDelivery>(`/api/v1/users/${encodeURIComponent(userId)}/password-resets`, {
     method: 'POST',
   })
 
