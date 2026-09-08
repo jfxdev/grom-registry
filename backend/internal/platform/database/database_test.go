@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	appmigrations "github.com/jfxdev/grom/backend/migrations"
 )
 
 func TestMigratePropagatesMigrationFailureWithoutMarkingItApplied(t *testing.T) {
@@ -133,6 +135,66 @@ func TestCheckpointReportsSQLiteExecutionFailure(t *testing.T) {
 	err = Checkpoint(context.Background(), db, kind)
 	if err == nil || !strings.Contains(err.Error(), "checkpoint sqlite database") {
 		t.Fatalf("expected checkpoint failure, got %v", err)
+	}
+}
+
+func TestInspectReportsCurrentPendingAndUnavailableSQLite(t *testing.T) {
+	ctx := context.Background()
+	db, kind, err := Open(ctx, "sqlite://file:diagnostics-test?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(ctx, db, kind, time.Second, slog.Default()); err != nil {
+		t.Fatal(err)
+	}
+
+	current := Inspect(ctx, db, kind)
+	if !current.Available || current.Kind != SQLite || current.Migration.Status != MigrationCurrent || current.Migration.AppliedVersion == "" || current.Migration.AppliedAt == nil {
+		t.Fatalf("unexpected current diagnostics: %#v", current)
+	}
+	if _, err := db.ExecContext(ctx, "DELETE FROM bun_migrations WHERE name = ?", current.Migration.AppliedVersion); err != nil {
+		t.Fatal(err)
+	}
+	pending := Inspect(ctx, db, kind)
+	if !pending.Available || pending.Migration.Status != MigrationPending {
+		t.Fatalf("unexpected pending diagnostics: %#v", pending)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	unavailable := Inspect(ctx, db, kind)
+	if unavailable.Available || unavailable.Migration.Status != MigrationUnavailable {
+		t.Fatalf("unexpected unavailable diagnostics: %#v", unavailable)
+	}
+}
+
+func TestInspectReadsPostgresMigrationStateWithoutSharedTables(t *testing.T) {
+	databaseURL := os.Getenv("GROM_TEST_POSTGRES_URL")
+	if databaseURL == "" {
+		if os.Getenv("GROM_REQUIRE_POSTGRES_TESTS") == "1" {
+			t.Fatal("GROM_TEST_POSTGRES_URL is required when PostgreSQL tests are enabled")
+		}
+		t.Skip("GROM_TEST_POSTGRES_URL is not configured")
+	}
+	ctx := context.Background()
+	db, kind, err := Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.ExecContext(ctx, "CREATE TEMP TABLE bun_migrations (id BIGINT NOT NULL, name TEXT NOT NULL, group_id BIGINT NOT NULL, migrated_at TIMESTAMPTZ NOT NULL)"); err != nil {
+		t.Fatal(err)
+	}
+	for index, migration := range appmigrations.Collection.Sorted() {
+		if _, err := db.ExecContext(ctx, "INSERT INTO bun_migrations (id, name, group_id, migrated_at) VALUES (?, ?, ?, now())", index+1, migration.Name, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	state := Inspect(ctx, db, kind)
+	if !state.Available || state.Kind != Postgres || state.Migration.Status != MigrationCurrent || state.Migration.AppliedVersion == "" || state.Migration.AppliedAt == nil {
+		t.Fatalf("unexpected postgres diagnostics: %#v", state)
 	}
 }
 

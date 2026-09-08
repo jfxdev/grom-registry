@@ -115,6 +115,18 @@ func (s *Signer) CertificatePath() string {
 	return s.certPath
 }
 
+// Probe verifies that the active in-memory key remains usable. It exposes only
+// public metadata suitable for installation diagnostics.
+func (s *Signer) Probe() (algorithm, keyID string, err error) {
+	if s == nil || s.privateKey == nil {
+		return "", "", errors.New("signing key is unavailable")
+	}
+	if err := s.privateKey.Validate(); err != nil {
+		return "", "", fmt.Errorf("validate signing key: %w", err)
+	}
+	return jwt.SigningMethodRS256.Alg(), KeyID, nil
+}
+
 func (s *Signer) WriteJWKS(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("create JWKS directory: %w", err)

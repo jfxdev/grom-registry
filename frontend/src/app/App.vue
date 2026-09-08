@@ -56,7 +56,7 @@ const navigationSections = [
       { label: 'Repository search', to: ROUTES.repositorySearch, icon: Search, adminOnly: true },
       { label: 'Backup & recovery', to: ROUTES.backups, icon: DatabaseBackup, adminOnly: true },
       { label: 'Audit log', to: ROUTES.auditLog, icon: ScrollText, adminOnly: true },
-      { label: 'Settings', to: ROUTES.settings, icon: Settings, adminOnly: true },
+      { label: 'Installation', to: ROUTES.settings, icon: Settings, adminOnly: true },
     ],
   },
 ]

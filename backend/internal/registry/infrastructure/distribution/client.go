@@ -105,18 +105,33 @@ func NewClient(rawURL string, tokens *registryapp.TokenService) (*Client, error)
 	}, nil
 }
 
-func (c *Client) Available(ctx context.Context) bool {
+// Probe performs a fresh Distribution V2 connectivity check. A protected
+// registry correctly returns 401 here, so both 200 and 401 are healthy. The
+// returned value is the server-reported API version, not a Distribution binary
+// release version.
+func (c *Client) Probe(ctx context.Context) (string, error) {
+	if c == nil {
+		return "", errors.New("distribution client is unavailable")
+	}
 	endpoint := c.baseURL.ResolveReference(&url.URL{Path: "/v2/"})
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
-		return false
+		return "", err
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
-		return false
+		return "", err
 	}
 	defer func() { _ = response.Body.Close() }()
-	return response.StatusCode == http.StatusOK || response.StatusCode == http.StatusUnauthorized
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusUnauthorized {
+		return "", &responseStatusError{statusCode: response.StatusCode, status: response.Status}
+	}
+	return response.Header.Get("Docker-Distribution-API-Version"), nil
+}
+
+func (c *Client) Available(ctx context.Context) bool {
+	_, err := c.Probe(ctx)
+	return err == nil
 }
 
 func (c *Client) ListProjectRepositories(ctx context.Context, project string) ([]string, error) {

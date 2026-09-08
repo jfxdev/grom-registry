@@ -22,6 +22,7 @@ import (
 	"github.com/jfxdev/grom/backend/internal/platform/backup"
 	"github.com/jfxdev/grom/backend/internal/platform/config"
 	"github.com/jfxdev/grom/backend/internal/platform/database"
+	"github.com/jfxdev/grom/backend/internal/platform/diagnostics"
 	"github.com/jfxdev/grom/backend/internal/platform/maintenance"
 	"github.com/jfxdev/grom/backend/internal/platform/registrymaintenance"
 	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
@@ -179,6 +180,17 @@ func run(logger *slog.Logger) error {
 	if cfg.RegistryMaintenanceSocket != "" {
 		registryMaintenanceClient = registrymaintenance.NewClient(cfg.RegistryMaintenanceSocket)
 	}
+	diagnosticsService := diagnostics.New(diagnostics.Options{
+		DatabaseKind: string(databaseKind),
+		Deployment: diagnostics.Deployment{
+			Profile: string(cfg.DeploymentProfile), InsecureHTTP: cfg.InsecureHTTP,
+		},
+		Database:     database.NewInspector(db, databaseKind),
+		Distribution: distributionClient,
+		Signing:      signer,
+		Storage:      registryMaintenanceClient,
+		Backup:       backupManager,
+	})
 	apiServer, err := httpapi.New(
 		identityService, auditService, projectService, repositoryService, inventoryService,
 		artifactDeletionService, lifecycleService,
@@ -190,7 +202,7 @@ func run(logger *slog.Logger) error {
 			TrustedProxies: cfg.TrustedProxies, AuthFailureLimit: cfg.AuthFailureLimit,
 			AuthFailureWindow: cfg.AuthFailureWindow, AuthBlockDuration: cfg.AuthBlockDuration,
 		},
-		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController, Database: string(databaseKind), RegistryMaintenance: registryMaintenanceClient},
+		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController, Database: string(databaseKind), RegistryMaintenance: registryMaintenanceClient, Diagnostics: diagnosticsService},
 	)
 	if err != nil {
 		return err

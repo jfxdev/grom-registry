@@ -124,7 +124,7 @@ describe('App deployment warning', () => {
     expect(accessSection.text()).toContain('Service accounts')
     expect(managementSection.text()).toContain('Management')
     expect(managementSection.text()).toContain('Backup & recovery')
-    expect(managementSection.text()).toContain('Settings')
+    expect(managementSection.text()).toContain('Installation')
     expect(wrapper.find('.sidebar-navigation').text()).not.toContain('Projects')
   })
 

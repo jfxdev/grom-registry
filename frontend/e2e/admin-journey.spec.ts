@@ -3,6 +3,26 @@ import { ADMIN_E2E_ADMIN } from './support/admin-stack'
 import { pushFirstImage } from './support/docker'
 import { readRuntime } from './support/runtime'
 
+test('an administrator views live installation diagnostics through the public UI', async ({ page }) => {
+  const runtime = await readRuntime()
+  await signIn(page, runtime.publicURL)
+
+  const [response] = await Promise.all([
+    page.waitForResponse((candidate) => candidate.request().method() === 'GET' && candidate.url().includes('/api/v1/settings/diagnostics')),
+    page.getByRole('link', { name: 'Installation' }).click(),
+  ])
+  expect(response.status()).toBe(200)
+  expect(response.headers()['cache-control']).toBe('no-store')
+  await expect(page.getByRole('heading', { name: 'Installation', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Diagnostics', exact: true })).toBeVisible()
+  await expect(page.getByText('SQLite', { exact: true })).toBeVisible()
+  await expect(page.getByText('Current', { exact: true })).toBeVisible()
+  await expect(page.getByText('registry/2.0', { exact: true })).toBeVisible()
+  await expect(page.getByText('RS256', { exact: true })).toBeVisible()
+  await expect(page.getByText('grom-default', { exact: false })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Maintenance', exact: true })).toBeVisible()
+})
+
 test('an administrator completes the first-push journey through the public UI', async ({ page }) => {
   const runtime = await readRuntime()
   await signIn(page, runtime.publicURL)

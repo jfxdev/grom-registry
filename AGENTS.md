@@ -146,6 +146,13 @@ confirmation, resolves only a validated backup UUID, and must remain serialized
 against creation and download. Deleting a local snapshot must never affect an
 already downloaded bundle.
 
+Installation diagnostics stay administrator-only, read-only, and uncached. They
+must perform fresh, independent checks per request so one unavailable component
+does not hide the others. Expose only safe status metadata: never return raw
+errors, connection strings, paths, credentials, certificates, or signing-key
+material. Physical registry storage remains used regular-file bytes only; free
+or total capacity belongs to host/provider monitoring.
+
 ## Architecture
 
 - Backend: Go with pragmatic DDD and vertical bounded contexts under `backend/internal`.

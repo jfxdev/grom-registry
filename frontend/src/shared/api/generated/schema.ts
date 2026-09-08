@@ -68,6 +68,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Live, non-sensitive installation diagnostics for administrators. Each component is reported independently so an unavailable dependency does not hide the remaining checks. */
+        get: operations["getInstallationDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/garbage-collections": {
         parameters: {
             query?: never;
@@ -753,6 +770,56 @@ export interface components {
             /** @enum {string} */
             distribution: "available" | "unavailable";
             storage?: components["schemas"]["StorageUsage"] | null;
+        };
+        InstallationDiagnostics: {
+            /** Format: date-time */
+            checkedAt: string;
+            deployment: components["schemas"]["Deployment"];
+            database: components["schemas"]["DatabaseDiagnostic"];
+            migration: components["schemas"]["MigrationDiagnostic"];
+            signing: components["schemas"]["SigningDiagnostic"];
+            distribution: components["schemas"]["DistributionDiagnostic"];
+            storage: components["schemas"]["StorageDiagnostic"];
+            backup: components["schemas"]["BackupDiagnostic"];
+        };
+        DatabaseDiagnostic: {
+            /** @enum {string} */
+            kind: "sqlite" | "postgres";
+            /** @enum {string} */
+            status: "available" | "unavailable";
+        };
+        MigrationDiagnostic: {
+            /** @enum {string} */
+            status: "current" | "pending" | "unavailable";
+            appliedVersion: string | null;
+            /** Format: date-time */
+            appliedAt: string | null;
+        };
+        SigningDiagnostic: {
+            /** @enum {string} */
+            status: "loaded" | "unavailable";
+            algorithm: string | null;
+            keyId: string | null;
+        };
+        DistributionDiagnostic: {
+            /** @enum {string} */
+            status: "available" | "unavailable";
+            apiVersion: string | null;
+        };
+        StorageDiagnostic: {
+            /** @enum {string} */
+            status: "available" | "unavailable";
+            /**
+             * Format: int64
+             * @description Bytes occupied by files under Distribution's local storage root.
+             */
+            usedBytes: number | null;
+        };
+        BackupDiagnostic: {
+            /** @enum {string} */
+            status: "available" | "unavailable";
+            /** Format: date-time */
+            lastBackupAt: string | null;
         };
         StorageUsage: {
             /**
@@ -1481,6 +1548,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InstallationStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getInstallationDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current installation diagnostics */
+            200: {
+                headers: {
+                    /** @description Diagnostics must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationDiagnostics"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -3050,11 +3141,19 @@ type ReadonlyArray<T> = [
 ] extends [
     unknown[]
 ] ? Readonly<Exclude<T, undefined>> : Readonly<Exclude<T, undefined>[]>;
+export const pathsApiV1SettingsDiagnosticsGetResponses200HeadersCacheControlValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/settings/diagnostics"]["get"]["responses"]["200"]["headers"]["Cache-Control"]> = ["no-store"];
 export const pathsApiV1ServiceAccountsGetParametersQueryStatusValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/service-accounts"]["get"]["parameters"]["query"]["status"]> = ["active", "disabled", "all"];
 export const pathsApiV1RepositoriesGetResponses200HeadersCacheControlValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/repositories"]["get"]["responses"]["200"]["headers"]["Cache-Control"]> = ["no-store"];
 export const deploymentProfileValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Deployment"]["profile"]> = ["development", "permissive", "strict"];
 export const installationStatusDatabaseValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["database"]> = ["sqlite", "postgres"];
 export const installationStatusDistributionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["distribution"]> = ["available", "unavailable"];
+export const databaseDiagnosticKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DatabaseDiagnostic"]["kind"]> = ["sqlite", "postgres"];
+export const databaseDiagnosticStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DatabaseDiagnostic"]["status"]> = ["available", "unavailable"];
+export const migrationDiagnosticStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["MigrationDiagnostic"]["status"]> = ["current", "pending", "unavailable"];
+export const signingDiagnosticStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SigningDiagnostic"]["status"]> = ["loaded", "unavailable"];
+export const distributionDiagnosticStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DistributionDiagnostic"]["status"]> = ["available", "unavailable"];
+export const storageDiagnosticStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["StorageDiagnostic"]["status"]> = ["available", "unavailable"];
+export const backupDiagnosticStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupDiagnostic"]["status"]> = ["available", "unavailable"];
 export const backupStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupStatus"]> = ["starting", "quiescing", "creating", "complete", "failed"];
 export const backupOverviewPageSizeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupOverview"]["pageSize"]> = [5];
 export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["identity.login_succeeded", "identity.login_failed", "identity.registry_auth_failed", "identity.user_created", "identity.user_promoted_to_system_admin", "identity.user_promoted_to_system_viewer", "identity.user_disabled", "identity.user_updated", "identity.user_reactivated", "identity.service_account_created", "identity.service_account_disabled", "identity.access_key_created", "identity.access_key_revoked", "identity.user_password_changed", "identity.user_password_reset_link_created", "identity.user_password_reset_completed", "projects.project_created", "projects.project_delete_requested", "projects.project_deleted", "projects.membership_upserted", "projects.membership_removed", "registry.repository_created_from_push", "registry.repository_policies_updated", "registry.repository_archived", "registry.repository_unarchived", "registry.repository_removed", "registry.artifact_deletion_started", "registry.artifact_deletion_completed", "registry.artifact_deletion_failed", "registry.lifecycle_preview_created", "registry.lifecycle_run_started", "registry.lifecycle_item_deleted", "registry.lifecycle_item_skipped", "registry.lifecycle_item_failed", "registry.lifecycle_run_completed", "registry.lifecycle_run_failed", "platform.restore_completed", "platform.backup_created", "platform.backup_delete_requested", "platform.backup_deleted", "platform.garbage_collection_started", "platform.garbage_collection_completed", "platform.garbage_collection_failed"];

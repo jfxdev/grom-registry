@@ -294,6 +294,24 @@ func (e AuditResourceKind) Valid() bool {
 	}
 }
 
+// Defines values for BackupDiagnosticStatus.
+const (
+	BackupDiagnosticStatusAvailable   BackupDiagnosticStatus = "available"
+	BackupDiagnosticStatusUnavailable BackupDiagnosticStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the BackupDiagnosticStatus enum.
+func (e BackupDiagnosticStatus) Valid() bool {
+	switch e {
+	case BackupDiagnosticStatusAvailable:
+		return true
+	case BackupDiagnosticStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BackupOverviewPageSize.
 const (
 	N5 BackupOverviewPageSize = 5
@@ -360,6 +378,42 @@ func (e ClassificationConfidence) Valid() bool {
 	}
 }
 
+// Defines values for DatabaseDiagnosticKind.
+const (
+	DatabaseDiagnosticKindPostgres DatabaseDiagnosticKind = "postgres"
+	DatabaseDiagnosticKindSqlite   DatabaseDiagnosticKind = "sqlite"
+)
+
+// Valid indicates whether the value is a known member of the DatabaseDiagnosticKind enum.
+func (e DatabaseDiagnosticKind) Valid() bool {
+	switch e {
+	case DatabaseDiagnosticKindPostgres:
+		return true
+	case DatabaseDiagnosticKindSqlite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DatabaseDiagnosticStatus.
+const (
+	DatabaseDiagnosticStatusAvailable   DatabaseDiagnosticStatus = "available"
+	DatabaseDiagnosticStatusUnavailable DatabaseDiagnosticStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the DatabaseDiagnosticStatus enum.
+func (e DatabaseDiagnosticStatus) Valid() bool {
+	switch e {
+	case DatabaseDiagnosticStatusAvailable:
+		return true
+	case DatabaseDiagnosticStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeploymentProfile.
 const (
 	Development DeploymentProfile = "development"
@@ -381,18 +435,36 @@ func (e DeploymentProfile) Valid() bool {
 	}
 }
 
+// Defines values for DistributionDiagnosticStatus.
+const (
+	DistributionDiagnosticStatusAvailable   DistributionDiagnosticStatus = "available"
+	DistributionDiagnosticStatusUnavailable DistributionDiagnosticStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the DistributionDiagnosticStatus enum.
+func (e DistributionDiagnosticStatus) Valid() bool {
+	switch e {
+	case DistributionDiagnosticStatusAvailable:
+		return true
+	case DistributionDiagnosticStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InstallationStatusDatabase.
 const (
-	Postgres InstallationStatusDatabase = "postgres"
-	Sqlite   InstallationStatusDatabase = "sqlite"
+	InstallationStatusDatabasePostgres InstallationStatusDatabase = "postgres"
+	InstallationStatusDatabaseSqlite   InstallationStatusDatabase = "sqlite"
 )
 
 // Valid indicates whether the value is a known member of the InstallationStatusDatabase enum.
 func (e InstallationStatusDatabase) Valid() bool {
 	switch e {
-	case Postgres:
+	case InstallationStatusDatabasePostgres:
 		return true
-	case Sqlite:
+	case InstallationStatusDatabaseSqlite:
 		return true
 	default:
 		return false
@@ -525,6 +597,27 @@ func (e LifecycleRunItemStatus) Valid() bool {
 	case LifecycleRunItemStatusFailed:
 		return true
 	case LifecycleRunItemStatusSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MigrationDiagnosticStatus.
+const (
+	MigrationDiagnosticStatusCurrent     MigrationDiagnosticStatus = "current"
+	MigrationDiagnosticStatusPending     MigrationDiagnosticStatus = "pending"
+	MigrationDiagnosticStatusUnavailable MigrationDiagnosticStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the MigrationDiagnosticStatus enum.
+func (e MigrationDiagnosticStatus) Valid() bool {
+	switch e {
+	case MigrationDiagnosticStatusCurrent:
+		return true
+	case MigrationDiagnosticStatusPending:
+		return true
+	case MigrationDiagnosticStatusUnavailable:
 		return true
 	default:
 		return false
@@ -687,6 +780,42 @@ func (e RepositoryStatus) Valid() bool {
 	}
 }
 
+// Defines values for SigningDiagnosticStatus.
+const (
+	SigningDiagnosticStatusLoaded      SigningDiagnosticStatus = "loaded"
+	SigningDiagnosticStatusUnavailable SigningDiagnosticStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the SigningDiagnosticStatus enum.
+func (e SigningDiagnosticStatus) Valid() bool {
+	switch e {
+	case SigningDiagnosticStatusLoaded:
+		return true
+	case SigningDiagnosticStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StorageDiagnosticStatus.
+const (
+	StorageDiagnosticStatusAvailable   StorageDiagnosticStatus = "available"
+	StorageDiagnosticStatusUnavailable StorageDiagnosticStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the StorageDiagnosticStatus enum.
+func (e StorageDiagnosticStatus) Valid() bool {
+	switch e {
+	case StorageDiagnosticStatusAvailable:
+		return true
+	case StorageDiagnosticStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListServiceAccountsParamsStatus.
 const (
 	ListServiceAccountsParamsStatusActive   ListServiceAccountsParamsStatus = "active"
@@ -830,6 +959,15 @@ type AuditEventPage struct {
 // AuditResourceKind defines model for AuditResourceKind.
 type AuditResourceKind string
 
+// BackupDiagnostic defines model for BackupDiagnostic.
+type BackupDiagnostic struct {
+	LastBackupAt *time.Time             `json:"lastBackupAt"`
+	Status       BackupDiagnosticStatus `json:"status"`
+}
+
+// BackupDiagnosticStatus defines model for BackupDiagnostic.Status.
+type BackupDiagnosticStatus string
+
 // BackupOperation defines model for BackupOperation.
 type BackupOperation struct {
 	CompletedAt *time.Time         `json:"completedAt,omitempty"`
@@ -942,6 +1080,18 @@ type CreatedViewerRegistryToken struct {
 	Token  ViewerRegistryToken `json:"token"`
 }
 
+// DatabaseDiagnostic defines model for DatabaseDiagnostic.
+type DatabaseDiagnostic struct {
+	Kind   DatabaseDiagnosticKind   `json:"kind"`
+	Status DatabaseDiagnosticStatus `json:"status"`
+}
+
+// DatabaseDiagnosticKind defines model for DatabaseDiagnostic.Kind.
+type DatabaseDiagnosticKind string
+
+// DatabaseDiagnosticStatus defines model for DatabaseDiagnostic.Status.
+type DatabaseDiagnosticStatus string
+
 // Deployment defines model for Deployment.
 type Deployment struct {
 	// InsecureHttp True only for an explicitly opted-in permissive HTTP deployment
@@ -951,6 +1101,15 @@ type Deployment struct {
 
 // DeploymentProfile defines model for Deployment.Profile.
 type DeploymentProfile string
+
+// DistributionDiagnostic defines model for DistributionDiagnostic.
+type DistributionDiagnostic struct {
+	ApiVersion *string                      `json:"apiVersion"`
+	Status     DistributionDiagnosticStatus `json:"status"`
+}
+
+// DistributionDiagnosticStatus defines model for DistributionDiagnostic.Status.
+type DistributionDiagnosticStatus string
 
 // Error defines model for Error.
 type Error struct {
@@ -972,6 +1131,18 @@ type GarbageCollection struct {
 type Health struct {
 	// Status Example: ok
 	Status string `json:"status"`
+}
+
+// InstallationDiagnostics defines model for InstallationDiagnostics.
+type InstallationDiagnostics struct {
+	Backup       BackupDiagnostic       `json:"backup"`
+	CheckedAt    time.Time              `json:"checkedAt"`
+	Database     DatabaseDiagnostic     `json:"database"`
+	Deployment   Deployment             `json:"deployment"`
+	Distribution DistributionDiagnostic `json:"distribution"`
+	Migration    MigrationDiagnostic    `json:"migration"`
+	Signing      SigningDiagnostic      `json:"signing"`
+	Storage      StorageDiagnostic      `json:"storage"`
 }
 
 // InstallationStatus defines model for InstallationStatus.
@@ -1128,6 +1299,16 @@ type MembershipPage struct {
 	Items      []Membership `json:"items"`
 	NextCursor *string      `json:"nextCursor,omitempty"`
 }
+
+// MigrationDiagnostic defines model for MigrationDiagnostic.
+type MigrationDiagnostic struct {
+	AppliedAt      *time.Time                `json:"appliedAt"`
+	AppliedVersion *string                   `json:"appliedVersion"`
+	Status         MigrationDiagnosticStatus `json:"status"`
+}
+
+// MigrationDiagnosticStatus defines model for MigrationDiagnostic.Status.
+type MigrationDiagnosticStatus string
 
 // PasswordResetLink defines model for PasswordResetLink.
 type PasswordResetLink struct {
@@ -1338,10 +1519,31 @@ type SetMembershipRequest struct {
 	Role ProjectRole `json:"role"`
 }
 
+// SigningDiagnostic defines model for SigningDiagnostic.
+type SigningDiagnostic struct {
+	Algorithm *string                 `json:"algorithm"`
+	KeyId     *string                 `json:"keyId"`
+	Status    SigningDiagnosticStatus `json:"status"`
+}
+
+// SigningDiagnosticStatus defines model for SigningDiagnostic.Status.
+type SigningDiagnosticStatus string
+
 // Status defines model for Status.
 type Status struct {
 	Status string `json:"status"`
 }
+
+// StorageDiagnostic defines model for StorageDiagnostic.
+type StorageDiagnostic struct {
+	Status StorageDiagnosticStatus `json:"status"`
+
+	// UsedBytes Bytes occupied by files under Distribution's local storage root.
+	UsedBytes *int64 `json:"usedBytes"`
+}
+
+// StorageDiagnosticStatus defines model for StorageDiagnostic.Status.
+type StorageDiagnosticStatus string
 
 // StorageUsage defines model for StorageUsage.
 type StorageUsage struct {

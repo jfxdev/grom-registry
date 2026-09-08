@@ -164,6 +164,24 @@ func TestManagerOverviewAndDelegatedOperations(t *testing.T) {
 	}
 }
 
+func TestManagerLatestUsesFreshAgentListing(t *testing.T) {
+	agent := &fakeAgent{}
+	manager := NewManager(agent, maintenance.New(), func(context.Context) error { return nil }, "test", "development", nil)
+	latest, err := manager.Latest(context.Background())
+	if err != nil || latest != nil {
+		t.Fatalf("expected no recovery points, got latest=%#v err=%v", latest, err)
+	}
+	agent.created = true
+	latest, err = manager.Latest(context.Background())
+	if err != nil || latest == nil || latest.BackupID != "backup-id" {
+		t.Fatalf("unexpected latest backup: %#v err=%v", latest, err)
+	}
+	agent.listErr = errors.New("offline")
+	if _, err := manager.Latest(context.Background()); err == nil {
+		t.Fatal("expected unavailable backup agent error")
+	}
+}
+
 func TestManagerRejectsUnavailableAndConcurrentOperations(t *testing.T) {
 	agent := &fakeAgent{unavailable: true}
 	manager := NewManager(agent, maintenance.New(), func(context.Context) error { return nil }, "test", "development", nil)
