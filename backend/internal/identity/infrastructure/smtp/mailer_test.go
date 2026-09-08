@@ -68,7 +68,7 @@ func TestMailerSendsPasswordResetOverMandatoryTLS(t *testing.T) {
 	for _, mode := range []TLSMode{TLSModeStartTLS, TLSModeTLS} {
 		t.Run(string(mode), func(t *testing.T) {
 			listener, clientTLS, received := startTLSSMTPServer(t, mode)
-			defer listener.Close()
+			defer func() { _ = listener.Close() }()
 			port := listener.Addr().(*net.TCPAddr).Port
 			mailer, err := newMailer(Config{
 				Host: "127.0.0.1", Port: port, FromAddress: "grom@example.test", TLSMode: mode,
@@ -116,7 +116,7 @@ func startTLSSMTPServer(t *testing.T, mode TLSMode) (net.Listener, *tls.Config, 
 			received <- capturedSMTPMessage{err: err}
 			return
 		}
-		defer connection.Close()
+		defer func() { _ = connection.Close() }()
 		if mode == TLSModeTLS {
 			tlsConnection := tls.Server(connection, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
 			if err := tlsConnection.Handshake(); err != nil {
