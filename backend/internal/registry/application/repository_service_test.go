@@ -301,7 +301,7 @@ type tagSearchStore struct {
 	page             foundation.PageResult[string]
 }
 
-func (s *tagSearchStore) SearchTagNamesPage(_ context.Context, repositoryID foundation.ID, query string, _ foundation.PageRequest) (foundation.PageResult[string], error) {
+func (s *tagSearchStore) SearchTagNamesPage(_ context.Context, repositoryID foundation.ID, query string, _ registrydomain.TagSort, _ foundation.PageRequest) (foundation.PageResult[string], error) {
 	s.lastRepositoryID = repositoryID
 	s.lastQuery = query
 	return s.page, nil
@@ -310,7 +310,7 @@ func (s *tagSearchStore) SearchTagNamesPage(_ context.Context, repositoryID foun
 func TestSearchTagNamesPassesRepositoryAndQueryThrough(t *testing.T) {
 	store := &tagSearchStore{page: foundation.PageResult[string]{Items: []string{"v1.0.0"}}}
 
-	page, err := NewRepositoryService(store).SearchTagNames(context.Background(), foundation.ID("repository-1"), "v1", foundation.PageRequest{Limit: 10})
+	page, err := NewRepositoryService(store).SearchTagNames(context.Background(), foundation.ID("repository-1"), "v1", registrydomain.TagSortNewest, foundation.PageRequest{Limit: 10})
 	if err != nil {
 		t.Fatalf("search tag names: %v", err)
 	}

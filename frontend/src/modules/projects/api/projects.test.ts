@@ -33,21 +33,23 @@ describe('listTags', () => {
     mocks.apiRequest.mockResolvedValue({ items: [] })
   })
 
-  it('always includes the repository and omits empty query or cursor', async () => {
+  it('always includes the repository and default sort, and omits empty query or cursor', async () => {
     await listTags('payments', 'api')
     const url = mocks.apiRequest.mock.calls.at(-1)![0] as string
     const query = new URLSearchParams(url.split('?')[1])
     expect(query.get('repository')).toBe('api')
+    expect(query.get('sort')).toBe('newest')
     expect(query.has('q')).toBe(false)
     expect(query.has('cursor')).toBe(false)
   })
 
-  it('includes the search query and cursor when provided', async () => {
-    await listTags('payments', 'api', 'v1', 'cursor-1')
+  it('includes the search query, sort and cursor when provided', async () => {
+    await listTags('payments', 'api', 'v1', 'name-asc', 'cursor-1')
     const url = mocks.apiRequest.mock.calls.at(-1)![0] as string
     const query = new URLSearchParams(url.split('?')[1])
     expect(query.get('repository')).toBe('api')
     expect(query.get('q')).toBe('v1')
+    expect(query.get('sort')).toBe('name-asc')
     expect(query.get('cursor')).toBe('cursor-1')
   })
 })

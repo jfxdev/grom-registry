@@ -1011,13 +1011,20 @@ paths:
           in: query
           required: false
           description: >-
-            Case-insensitive tag name search. When present, results come from
-            the last-reconciled inventory snapshot rather than a live
-            registry call, so very recent pushes or deletes may briefly lag;
-            omit q for a live, dangling-tag-safe listing.
+            Case-insensitive tag name search. Results always come from the
+            last-reconciled inventory snapshot, so very recent pushes or
+            deletes may briefly lag.
           schema:
             type: string
             maxLength: 200
+        - name: sort
+          in: query
+          required: false
+          description: Tag ordering. Defaults to newest.
+          schema:
+            type: string
+            enum: [newest, oldest, name-asc, name-desc]
+            default: newest
       responses:
         "200":
           description: Repository tags

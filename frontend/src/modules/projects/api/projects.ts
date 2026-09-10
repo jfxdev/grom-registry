@@ -94,8 +94,9 @@ export const replaceRepositoryPolicies = (
     `/api/v1/projects/${encodeURIComponent(slug)}/repositories/${encodeURIComponent(repositoryId)}/policies`,
     { method: 'PUT', body: JSON.stringify(input) },
   )
-export const listTags = (slug: string, repository: string, query = '', cursor = '') => {
-  const params = new URLSearchParams({ repository })
+export type TagSortBy = 'newest' | 'oldest' | 'name-asc' | 'name-desc'
+export const listTags = (slug: string, repository: string, query = '', sort: TagSortBy = 'newest', cursor = '') => {
+  const params = new URLSearchParams({ repository, sort })
   if (query) params.set('q', query)
   if (cursor) params.set('cursor', cursor)
   return apiRequest<TagPage>(`/api/v1/projects/${encodeURIComponent(slug)}/repository-tags?${params.toString()}`)
