@@ -1,4 +1,4 @@
-.PHONY: generate test test-postgres test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-backup-restore-postgres-e2e test-production-image-smoke build image-publish-local dev dev-postgres compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
+.PHONY: generate test test-postgres test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-backup-restore-postgres-e2e test-production-image-smoke build image-publish-local generate-secrets dev dev-postgres compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
 
 DEV_ENV_FILE ?= .env
 
@@ -60,6 +60,19 @@ image-publish-local:
 	: "$${GROM_VERSION:=dev}"; \
 	docker build --build-arg GROM_VERSION="$$GROM_VERSION" --tag "$$GROM_IMAGE" . && \
 	docker push "$$GROM_IMAGE"
+
+generate-secrets:
+	@if [ ! -f "$(DEV_ENV_FILE)" ]; then \
+		echo "Missing $(DEV_ENV_FILE). Run: cp .env.example .env"; \
+		exit 1; \
+	fi
+	@registry_secret=$$(openssl rand -hex 32); \
+	admin_password=$$(openssl rand -hex 20); \
+	sed -i.bak \
+		-e "s#^GROM_REGISTRY_HTTP_SECRET=.*#GROM_REGISTRY_HTTP_SECRET=$$registry_secret#" \
+		-e "s#^GROM_BOOTSTRAP_ADMIN_PASSWORD=.*#GROM_BOOTSTRAP_ADMIN_PASSWORD=$$admin_password#" \
+		"$(DEV_ENV_FILE)" && rm -f "$(DEV_ENV_FILE).bak" && \
+	echo "Generated GROM_REGISTRY_HTTP_SECRET and GROM_BOOTSTRAP_ADMIN_PASSWORD in $(DEV_ENV_FILE)."
 
 dev:
 	@if [ ! -f "$(DEV_ENV_FILE)" ]; then \

@@ -1,6 +1,8 @@
+x-grom-image: &grom-image ${GROM_IMAGE:-grom-registry:local}
+
 services:
   distribution-config-init:
-    image: ${GROM_IMAGE:-grom-registry:local}
+    image: *grom-image
     user: "0:0"
     command: ["config-init"]
     volumes:
@@ -12,7 +14,7 @@ services:
     restart: "no"
 
   grom:
-    image: ${GROM_IMAGE:-grom-registry:local}
+    image: *grom-image
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -62,7 +64,7 @@ services:
     restart: unless-stopped
 
   backup-agent:
-    image: ${GROM_IMAGE:-grom-registry:local}
+    image: *grom-image
     user: "0:101"
     command:
       - backup-agent
@@ -121,7 +123,7 @@ services:
     restart: unless-stopped
 
   recovery:
-    image: ${GROM_IMAGE:-grom-registry:local}
+    image: *grom-image
     profiles: ["recovery"]
     user: "0:0"
     command: ["recovery", "--listen=:8080"]
