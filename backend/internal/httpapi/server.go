@@ -2138,7 +2138,8 @@ func (s *Server) originGuard(next http.Handler) http.Handler {
 		}
 		parsed, err := url.Parse(origin)
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" || !s.allowedOrigin(parsed, r) {
-			writeError(w, r, http.StatusForbidden, "invalid_origin", "Request origin is not allowed")
+			message := fmt.Sprintf("Request origin %q is not allowed (expected %s)", origin, s.publicURL.String())
+			writeError(w, r, http.StatusForbidden, "invalid_origin", message)
 			return
 		}
 		next.ServeHTTP(w, r)

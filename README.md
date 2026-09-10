@@ -34,6 +34,7 @@ web interface for access, images, and recovery.
   - [Local quick start](#local-quick-start)
   - [Push an image](#push-an-image)
   - [Deployment profiles](#deployment-profiles)
+  - [Bind-mounted volumes](#bind-mounted-volumes)
 - [Operations](#operations)
   - [Backup and recovery](#backup-and-recovery)
   - [Releases and upgrades](#releases-and-upgrades)
@@ -109,7 +110,32 @@ docker push localhost:8080/my-project/my-image:latest
 | `strict` | Default for production; requires HTTPS and secure cookies. |
 
 For a reverse proxy, set `GROM_PUBLIC_URL`, keep `GROM_SECURE_COOKIES=true`,
-and list only immediate proxy networks in `GROM_TRUSTED_PROXIES`.
+and list only immediate proxy networks in `GROM_TRUSTED_PROXIES`. The
+`distribution` service's `REGISTRY_AUTH_TOKEN_REALM` must resolve to the same
+host as `GROM_PUBLIC_URL` (`deploy/compose/docker-compose.yml` derives it from
+`GROM_PUBLIC_URL` already). If you fork the compose file, derive
+`REGISTRY_AUTH_TOKEN_REALM` from `GROM_PUBLIC_URL` too instead of hardcoding it
+separately — otherwise the two drift and mutating requests fail origin checks
+with no obvious cause.
+
+Run `make generate-secrets` after `cp .env.example .env` to fill in
+`GROM_REGISTRY_HTTP_SECRET` and `GROM_BOOTSTRAP_ADMIN_PASSWORD` with random
+values instead of the `change-this-*` placeholders.
+
+### Bind-mounted volumes
+
+Named volumes (the compose default) are auto-chowned by Docker and need no
+setup. If you bind-mount host paths instead, they must be owned by the uid/gid
+the containers run as:
+
+| Service | Runs as | Volumes needing that ownership |
+|---|---|---|
+| `grom` | `100:101` | `/data`, `/certs`, `/database-backups` |
+| `backup-agent` | `0:101` | reads the above read-only; no ownership change needed |
+| `distribution-config-init`, `recovery` | `0:0` | manage their own volumes as root |
+
+Run `deploy/scripts/init-host-paths.sh` (as root) against your bind-mount
+paths before first boot to set this up.
 
 ### Optional password-reset email
 
@@ -150,6 +176,19 @@ Before upgrading, create and download a verified recovery point. Set both
 image digests, start with `docker compose pull` and `docker compose up -d
 --no-build`, then check `/readyz` and `/api/docs`. Do not downgrade a database
 by changing only the image; restore a compatible backup.
+
+If your deployment repo lists `GROM_IMAGE`/`GROM_REGISTRY_MAINTENANCE_IMAGE`
+across several compose services, a YAML anchor keeps the version single-sourced
+so it can't drift between services on a bump:
+
+```yaml
+x-grom-image: &grom-image ghcr.io/jfxdev/grom-registry:${GROM_VERSION:-v1.0.0}
+services:
+  grom:
+    image: *grom-image
+  backup-agent:
+    image: *grom-image
+```
 
 ## Compatibility policy
 
