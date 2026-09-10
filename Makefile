@@ -71,9 +71,8 @@ generate-secrets:
 	sed -i.bak \
 		-e "s#^GROM_REGISTRY_HTTP_SECRET=.*#GROM_REGISTRY_HTTP_SECRET=$$registry_secret#" \
 		-e "s#^GROM_BOOTSTRAP_ADMIN_PASSWORD=.*#GROM_BOOTSTRAP_ADMIN_PASSWORD=$$admin_password#" \
-		"$(DEV_ENV_FILE)" && rm -f "$(DEV_ENV_FILE).bak"; \
-	echo "Generated GROM_REGISTRY_HTTP_SECRET and GROM_BOOTSTRAP_ADMIN_PASSWORD in $(DEV_ENV_FILE)."; \
-	echo "Bootstrap admin password: $$admin_password"
+		"$(DEV_ENV_FILE)" && rm -f "$(DEV_ENV_FILE).bak" && \
+	echo "Generated GROM_REGISTRY_HTTP_SECRET and GROM_BOOTSTRAP_ADMIN_PASSWORD in $(DEV_ENV_FILE)."
 
 dev:
 	@if [ ! -f "$(DEV_ENV_FILE)" ]; then \
