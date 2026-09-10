@@ -2716,8 +2716,10 @@ export interface operations {
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Repository path relative to the project, including optional nested segments */
                 repository: string;
-                /** @description Case-insensitive tag name search. When present, results come from the last-reconciled inventory snapshot rather than a live registry call, so very recent pushes or deletes may briefly lag; omit q for a live, dangling-tag-safe listing. */
+                /** @description Case-insensitive tag name search. Results always come from the last-reconciled inventory snapshot, so very recent pushes or deletes may briefly lag. */
                 q?: string;
+                /** @description Tag ordering. Defaults to newest. */
+                sort?: "newest" | "oldest" | "name-asc" | "name-desc";
             };
             header?: never;
             path: {
@@ -3204,6 +3206,7 @@ type ReadonlyArray<T> = [
 export const pathsApiV1SettingsDiagnosticsGetResponses200HeadersCacheControlValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/settings/diagnostics"]["get"]["responses"]["200"]["headers"]["Cache-Control"]> = ["no-store"];
 export const pathsApiV1ServiceAccountsGetParametersQueryStatusValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/service-accounts"]["get"]["parameters"]["query"]["status"]> = ["active", "disabled", "all"];
 export const pathsApiV1RepositoriesGetResponses200HeadersCacheControlValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/repositories"]["get"]["responses"]["200"]["headers"]["Cache-Control"]> = ["no-store"];
+export const pathsApiV1ProjectsProjectRepositoryTagsGetParametersQuerySortValues: ReadonlyArray<FlattenedDeepRequired<paths>["/api/v1/projects/{project}/repository-tags"]["get"]["parameters"]["query"]["sort"]> = ["newest", "oldest", "name-asc", "name-desc"];
 export const deploymentProfileValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Deployment"]["profile"]> = ["development", "permissive", "strict"];
 export const installationStatusDatabaseValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["database"]> = ["sqlite", "postgres"];
 export const installationStatusDistributionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstallationStatus"]["distribution"]> = ["available", "unavailable"];

@@ -220,8 +220,8 @@ func (s *RepositoryService) SearchAcrossProjects(ctx context.Context, query stri
 	return s.store.SearchRepositoriesAcrossProjects(ctx, query, request)
 }
 
-func (s *RepositoryService) SearchTagNames(ctx context.Context, repositoryID foundation.ID, query string, request foundation.PageRequest) (foundation.PageResult[string], error) {
-	return s.store.SearchTagNamesPage(ctx, repositoryID, query, request)
+func (s *RepositoryService) SearchTagNames(ctx context.Context, repositoryID foundation.ID, query string, sort registrydomain.TagSort, request foundation.PageRequest) (foundation.PageResult[string], error) {
+	return s.store.SearchTagNamesPage(ctx, repositoryID, query, sort, request)
 }
 
 func (s *RepositoryService) Find(ctx context.Context, projectID foundation.ID, name string) (*registrydomain.Repository, error) {

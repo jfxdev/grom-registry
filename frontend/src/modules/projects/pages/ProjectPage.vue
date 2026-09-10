@@ -34,6 +34,7 @@ import { Input } from '@/shared/components/ui/input'
 import { PrincipalTypeBadge } from '@/shared/components/ui/principal-type-badge'
 import { DockerPushBanner } from '@/shared/components/registry'
 import { PaginationControls } from '@/shared/components/ui/pagination'
+import { Select } from '@/shared/components/ui/select'
 import { ROUTES } from '@/shared/constants'
 import { writeClipboardText } from '@/shared/lib/clipboard'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
@@ -58,6 +59,7 @@ import {
 	setMember,
 	unarchiveRepository,
 } from '../api/projects'
+import type { TagSortBy } from '../api/projects'
 import RepositoryCreateModal from '../components/RepositoryCreateModal.vue'
 import RepositoryPolicyModal from '../components/RepositoryPolicyModal.vue'
 
@@ -110,6 +112,13 @@ const activeRepositoryOperations = ref(0)
 const repositoryOperationActive = computed(() => activeRepositoryOperations.value > 0)
 const repositorySearchQuery = ref('')
 const tagSearchQuery = ref('')
+const tagSortBy = ref<TagSortBy>('newest')
+const tagSortOptions: { value: TagSortBy; label: string }[] = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'name-asc', label: 'A-Z' },
+  { value: 'name-desc', label: 'Z-A' },
+]
 
 function openProjectSettings(event: globalThis.MouseEvent) {
   projectSettingsTrigger.value = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
@@ -148,8 +157,8 @@ const routedRepository = useQuery({
   enabled: computed(() => Boolean(repositoryId.value) && repositories.isSuccess.value && !pageItems(repositories.data.value).some((repository) => repository.id === repositoryId.value)),
 })
 const tags = useQuery({
-  queryKey: computed(() => [...projectKeys.tags(slug.value, selectedRepository.value?.name ?? ''), tagSearchQuery.value.trim(), tagPagination.cursor.value]),
-  queryFn: () => listTags(slug.value, selectedRepository.value!.name, tagSearchQuery.value.trim(), tagPagination.cursor.value),
+  queryKey: computed(() => [...projectKeys.tags(slug.value, selectedRepository.value?.name ?? ''), tagSearchQuery.value.trim(), tagSortBy.value, tagPagination.cursor.value]),
+  queryFn: () => listTags(slug.value, selectedRepository.value!.name, tagSearchQuery.value.trim(), tagSortBy.value, tagPagination.cursor.value),
   enabled: computed(() => selectedRepository.value !== null),
   refetchInterval: computed(() => repositoryOperationActive.value ? 5_000 : false),
   refetchOnWindowFocus: computed(() => repositoryOperationActive.value),
@@ -213,6 +222,7 @@ watch(tagSearchQuery, () => {
   tagPagination.reset()
   inventoryPagination.reset()
 })
+watch(tagSortBy, () => tagPagination.reset())
 
 async function openRepository(repository: Repository) {
   await router.push({ name: 'repository-detail', params: { project: slug.value, repositoryId: repository.id } })
@@ -444,14 +454,7 @@ function manifestForTag(tag: string) {
   return manifestsByTag.value.get(tag)
 }
 
-const tagsByNewestPush = computed(() => [...pageItems(tags.data.value)].sort((left, right) => {
-  const leftPushedAt = manifestForTag(left)?.lastPushedAt
-  const rightPushedAt = manifestForTag(right)?.lastPushedAt
-  const leftTimestamp = leftPushedAt ? new Date(leftPushedAt).getTime() : 0
-  const rightTimestamp = rightPushedAt ? new Date(rightPushedAt).getTime() : 0
-  if (leftTimestamp !== rightTimestamp) return rightTimestamp - leftTimestamp
-  return left.localeCompare(right)
-}))
+const tagItems = computed(() => pageItems(tags.data.value))
 
 function platformsForTag(tag: string): ManifestPlatform[] {
   return manifestForTag(tag)?.platforms ?? []
@@ -875,10 +878,13 @@ function policySummary(policy: Repository['policies'][number]) {
         </Card>
       </section>
 
-      <label class="repository-search">
-        <Search :size="16" aria-hidden="true" />
-        <Input v-model="tagSearchQuery" type="search" placeholder="Filter tags or digests" aria-label="Filter tags and digests" />
-      </label>
+      <div class="tag-filters">
+        <label class="repository-search">
+          <Search :size="16" aria-hidden="true" />
+          <Input v-model="tagSearchQuery" type="search" placeholder="Filter tags or digests" aria-label="Filter tags and digests" />
+        </label>
+        <Select v-model="tagSortBy" :options="tagSortOptions" ariaLabel="Sort tags by" />
+      </div>
 
       <section class="repo-panel">
         <div class="panel-heading">
@@ -888,11 +894,11 @@ function policySummary(policy: Repository['policies'][number]) {
           </div>
         </div>
         <div class="repo-panel-body">
-          <div v-if="!tagsByNewestPush.length" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          <div v-if="!tagItems.length" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
             {{ tagSearchQuery.trim() ? 'No tags match this filter.' : 'No tags available.' }}
           </div>
           <div v-else class="space-y-3">
-            <Card v-for="tag in tagsByNewestPush" :key="tag" class="overflow-hidden">
+            <Card v-for="tag in tagItems" :key="tag" class="overflow-hidden">
               <div class="flex items-start justify-between gap-3 border-b px-4 py-3">
                 <div>
                   <p class="eyebrow">Tag</p>
@@ -1538,6 +1544,13 @@ function policySummary(policy: Repository['policies'][number]) {
 .overview-label { color: var(--muted-foreground); font-size: .72rem; font-weight: 600; }
 .overview-value { margin-top: .3rem; font-size: 1.1rem; font-weight: 680; }
 .overview-detail { margin-top: .5rem; color: var(--muted-foreground); font-size: .76rem; line-height: 1.4; }
+
+.tag-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
 
 .repository-search,
 .list-search {

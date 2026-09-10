@@ -424,7 +424,7 @@ describe('ProjectPage membership management', () => {
     expect(await screen.findByText(/Historical record.*42 B manifest metadata/)).toBeTruthy()
   })
 
-  it('orders repository tags from the most recently pushed to the oldest, and searches tags and manifests on the server', async () => {
+  it('renders tags in the order returned by the server, requests the default sort, and searches tags and manifests on the server', async () => {
     mocks.listRepositories.mockResolvedValue([{
       id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
       creationSource: 'push', profile: 'container_image', profileSource: 'inferred', profileConfidence: 'high',
@@ -444,7 +444,7 @@ describe('ProjectPage membership management', () => {
     }
     mocks.listTags.mockImplementation((_slug: string, _repository: string, query: string) => {
       const q = query.toLowerCase()
-      return Promise.resolve({ name: 'payments/api', tags: ['older', 'newer'].filter((tag) => !q || tag.includes(q)) })
+      return Promise.resolve({ name: 'payments/api', tags: ['newer', 'older'].filter((tag) => !q || tag.includes(q)) })
     })
     mocks.listInventory.mockImplementation((_slug: string, _repository: string, query: string) => {
       const q = query.toLowerCase()
@@ -460,11 +460,11 @@ describe('ProjectPage membership management', () => {
 
     const filter = screen.getByRole('searchbox', { name: 'Filter tags and digests' })
     await fireEvent.update(filter, 'newer')
-    await waitFor(() => expect(mocks.listTags).toHaveBeenLastCalledWith('payments', 'api', 'newer', ''))
+    await waitFor(() => expect(mocks.listTags).toHaveBeenLastCalledWith('payments', 'api', 'newer', 'newest', ''))
     await waitFor(() => expect(Array.from(tagsPanel.querySelectorAll('.space-y-3 > section')).map((card) => card.querySelector('code')?.textContent)).toEqual(['newer']))
 
     await fireEvent.update(filter, 'sha256:older')
-    await waitFor(() => expect(mocks.listTags).toHaveBeenLastCalledWith('payments', 'api', 'sha256:older', ''))
+    await waitFor(() => expect(mocks.listTags).toHaveBeenLastCalledWith('payments', 'api', 'sha256:older', 'newest', ''))
     await waitFor(() => expect(Array.from(tagsPanel.querySelectorAll('.space-y-3 > section')).map((card) => card.querySelector('code')?.textContent)).toEqual([]))
     const inventoryToggle = screen.getByRole('button', { name: /Manifest inventory/ })
     if (inventoryToggle.getAttribute('aria-expanded') !== 'true') {

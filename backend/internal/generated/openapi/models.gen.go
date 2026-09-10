@@ -849,6 +849,30 @@ func (e StorageDiagnosticStatus) Valid() bool {
 	}
 }
 
+// Defines values for ListRepositoryTagsParamsSort.
+const (
+	NameAsc  ListRepositoryTagsParamsSort = "name-asc"
+	NameDesc ListRepositoryTagsParamsSort = "name-desc"
+	Newest   ListRepositoryTagsParamsSort = "newest"
+	Oldest   ListRepositoryTagsParamsSort = "oldest"
+)
+
+// Valid indicates whether the value is a known member of the ListRepositoryTagsParamsSort enum.
+func (e ListRepositoryTagsParamsSort) Valid() bool {
+	switch e {
+	case NameAsc:
+		return true
+	case NameDesc:
+		return true
+	case Newest:
+		return true
+	case Oldest:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListServiceAccountsParamsStatus.
 const (
 	ListServiceAccountsParamsStatusActive   ListServiceAccountsParamsStatus = "active"
@@ -1773,9 +1797,15 @@ type ListRepositoryTagsParams struct {
 	// Repository Repository path relative to the project, including optional nested segments
 	Repository string `form:"repository" json:"repository"`
 
-	// Q Case-insensitive tag name search. When present, results come from the last-reconciled inventory snapshot rather than a live registry call, so very recent pushes or deletes may briefly lag; omit q for a live, dangling-tag-safe listing.
+	// Q Case-insensitive tag name search. Results always come from the last-reconciled inventory snapshot, so very recent pushes or deletes may briefly lag.
 	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Sort Tag ordering. Defaults to newest.
+	Sort *ListRepositoryTagsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
 }
+
+// ListRepositoryTagsParamsSort defines parameters for ListRepositoryTags.
+type ListRepositoryTagsParamsSort string
 
 // SearchRepositoriesParams defines parameters for SearchRepositories.
 type SearchRepositoriesParams struct {

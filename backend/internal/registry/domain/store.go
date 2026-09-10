@@ -13,7 +13,7 @@ type Store interface {
 	ListRepositories(ctx context.Context, projectID foundation.ID) ([]Repository, error)
 	ListRepositoriesPage(ctx context.Context, projectID foundation.ID, query string, request foundation.PageRequest) (foundation.PageResult[Repository], error)
 	SearchRepositoriesAcrossProjects(ctx context.Context, query string, request foundation.PageRequest) (foundation.PageResult[RepositorySearchResult], error)
-	SearchTagNamesPage(ctx context.Context, repositoryID foundation.ID, query string, request foundation.PageRequest) (foundation.PageResult[string], error)
+	SearchTagNamesPage(ctx context.Context, repositoryID foundation.ID, query string, sort TagSort, request foundation.PageRequest) (foundation.PageResult[string], error)
 	FindRepository(ctx context.Context, projectID foundation.ID, name string) (*Repository, error)
 	FindRepositoryByID(ctx context.Context, repositoryID foundation.ID) (*Repository, error)
 	RepositoryExists(ctx context.Context, projectID foundation.ID, name string) (bool, error)

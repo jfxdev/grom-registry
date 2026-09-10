@@ -1948,7 +1948,7 @@ func (s *Server) listTags(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Project not found")
 		return
 	}
-	if !validListQuery(r, "cursor", "limit", "repository", "q") {
+	if !validListQuery(r, "cursor", "limit", "repository", "q", "sort") {
 		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
 		return
 	}
@@ -1958,55 +1958,39 @@ func (s *Server) listTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	if query != "" {
-		scope := "repository-tags:" + project.Slug + ":" + repository + ":q=" + strings.ToLower(query)
-		request, _, pageErr := pageRequest(r, scope)
-		if pageErr != nil {
-			writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
-			return
-		}
-		target, findErr := s.repositories.Find(r.Context(), project.ID, repository)
-		if findErr != nil {
-			writeJSON(w, http.StatusOK, foundation.PageResult[string]{})
-			return
-		}
-		result, searchErr := s.repositories.SearchTagNames(r.Context(), target.ID, query, request)
-		if searchErr != nil {
-			s.internalError(w, r, searchErr)
-			return
-		}
-		writeJSON(w, http.StatusOK, result)
+	sort, sortErr := parseTagSort(r.URL.Query().Get("sort"))
+	if sortErr != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_query", "Query parameters are invalid")
 		return
 	}
-	scope := "repository-tags:" + project.Slug + ":" + repository
-	request, _, err := pageRequest(r, scope)
-	if err != nil {
+	scope := "repository-tags:" + project.Slug + ":" + repository + ":q=" + strings.ToLower(query) + ":sort=" + string(sort)
+	request, _, pageErr := pageRequest(r, scope)
+	if pageErr != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
 		return
 	}
-	marker := ""
-	if request.Cursor != "" {
-		cursor, decodeErr := foundation.DecodePageCursor(request.Cursor, scope)
-		if decodeErr != nil {
-			writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
-			return
-		}
-		marker = cursor.Marker
-		if marker == "" {
-			writeError(w, r, http.StatusBadRequest, "invalid_cursor", "Page cursor or limit is invalid")
-			return
-		}
-	}
-	tags, err := s.distributionClient.ListLiveTagsPage(r.Context(), project.Slug+"/"+repository, request.Limit, marker)
-	if err != nil {
-		writeError(w, r, http.StatusBadGateway, "registry_unavailable", "Registry metadata is unavailable")
+	target, findErr := s.repositories.Find(r.Context(), project.ID, repository)
+	if findErr != nil {
+		writeJSON(w, http.StatusOK, foundation.PageResult[string]{})
 		return
 	}
-	result := foundation.PageResult[string]{Items: tags.Tags}
-	if tags.NextMarker != "" {
-		result.NextCursor, _ = foundation.EncodePageCursor(foundation.PageCursor{Scope: scope, Marker: tags.NextMarker})
+	result, searchErr := s.repositories.SearchTagNames(r.Context(), target.ID, query, sort, request)
+	if searchErr != nil {
+		s.internalError(w, r, searchErr)
+		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func parseTagSort(raw string) (registrydomain.TagSort, error) {
+	switch registrydomain.TagSort(raw) {
+	case "":
+		return registrydomain.TagSortNewest, nil
+	case registrydomain.TagSortNewest, registrydomain.TagSortOldest, registrydomain.TagSortNameAsc, registrydomain.TagSortNameDesc:
+		return registrydomain.TagSort(raw), nil
+	default:
+		return "", fmt.Errorf("invalid sort %q", raw)
+	}
 }
 
 func (s *Server) exchangeRegistryToken(w http.ResponseWriter, r *http.Request) {

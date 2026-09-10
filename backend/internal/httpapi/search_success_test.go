@@ -43,7 +43,7 @@ func (s *searchTestStore) SearchRepositoriesAcrossProjects(context.Context, stri
 	return s.searchResults, s.searchErr
 }
 
-func (s *searchTestStore) SearchTagNamesPage(_ context.Context, _ foundation.ID, query string, _ foundation.PageRequest) (foundation.PageResult[string], error) {
+func (s *searchTestStore) SearchTagNamesPage(_ context.Context, _ foundation.ID, query string, _ registrydomain.TagSort, _ foundation.PageRequest) (foundation.PageResult[string], error) {
 	s.lastTagQuery = query
 	return s.tagResults, s.tagErr
 }
