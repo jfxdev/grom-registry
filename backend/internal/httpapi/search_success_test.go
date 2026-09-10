@@ -29,6 +29,7 @@ type searchTestStore struct {
 	inventoryResults   foundation.PageResult[registrydomain.ManifestInventory]
 	inventoryErr       error
 	lastTagQuery       string
+	lastTagSort        registrydomain.TagSort
 	lastInventoryQuery string
 }
 
@@ -43,8 +44,9 @@ func (s *searchTestStore) SearchRepositoriesAcrossProjects(context.Context, stri
 	return s.searchResults, s.searchErr
 }
 
-func (s *searchTestStore) SearchTagNamesPage(_ context.Context, _ foundation.ID, query string, _ registrydomain.TagSort, _ foundation.PageRequest) (foundation.PageResult[string], error) {
+func (s *searchTestStore) SearchTagNamesPage(_ context.Context, _ foundation.ID, query string, sort registrydomain.TagSort, _ foundation.PageRequest) (foundation.PageResult[string], error) {
 	s.lastTagQuery = query
+	s.lastTagSort = sort
 	return s.tagResults, s.tagErr
 }
 
@@ -121,6 +123,36 @@ func TestListTagsSearchRejectsInvalidCursor(t *testing.T) {
 
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestListTagsRejectsUnsupportedSort(t *testing.T) {
+	store := &searchTestStore{repository: &registrydomain.Repository{ID: foundation.ID("repository-1"), ProjectID: unarchiveTestProjectID, Name: "api"}}
+	server := newSearchTestServer(store)
+
+	response := httptest.NewRecorder()
+	server.listTags(response, adminRequest(http.MethodGet, "http://grom/api/v1/projects/payments/repository-tags?repository=api&sort=bogus", map[string]string{"project": "payments"}))
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestListTagsAcceptsExplicitSort(t *testing.T) {
+	store := &searchTestStore{
+		repository: &registrydomain.Repository{ID: foundation.ID("repository-1"), ProjectID: unarchiveTestProjectID, Name: "api"},
+		tagResults: foundation.PageResult[string]{Items: []string{"v1.0.0"}},
+	}
+	server := newSearchTestServer(store)
+
+	response := httptest.NewRecorder()
+	server.listTags(response, adminRequest(http.MethodGet, "http://grom/api/v1/projects/payments/repository-tags?repository=api&sort=oldest", map[string]string{"project": "payments"}))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if store.lastTagSort != registrydomain.TagSortOldest {
+		t.Fatalf("expected sort %q, got %q", registrydomain.TagSortOldest, store.lastTagSort)
 	}
 }
 

@@ -176,3 +176,95 @@ func TestSearchTagNamesPageSortsByPushDate(t *testing.T) {
 		}
 	})
 }
+
+func TestSearchTagNamesPageSortsByNameAscending(t *testing.T) {
+	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
+		ctx := context.Background()
+		store := New(db)
+		now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+		_, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
+
+		for _, tag := range []string{"alpha", "beta", "gamma"} {
+			observation := registrydomain.ManifestObservation{Digest: "sha256:manifest-" + tag, ManifestSize: 10, Tag: tag}
+			if err := store.UpsertManifestObservation(ctx, repositoryID, observation, now); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		scope := "repository-tags:test:api:q=:sort=" + string(registrydomain.TagSortNameAsc)
+		first, err := store.SearchTagNamesPage(ctx, repositoryID, "", registrydomain.TagSortNameAsc, foundation.PageRequest{Limit: 2, Scope: scope})
+		if err != nil || len(first.Items) != 2 || first.Items[0] != "alpha" || first.Items[1] != "beta" || first.NextCursor == "" {
+			t.Fatalf("first page: items=%#v cursor=%q err=%v", first.Items, first.NextCursor, err)
+		}
+
+		second, err := store.SearchTagNamesPage(ctx, repositoryID, "", registrydomain.TagSortNameAsc, foundation.PageRequest{Limit: 2, Scope: scope, Cursor: first.NextCursor})
+		if err != nil || len(second.Items) != 1 || second.Items[0] != "gamma" || second.NextCursor != "" {
+			t.Fatalf("second page: items=%#v cursor=%q err=%v", second.Items, second.NextCursor, err)
+		}
+	})
+}
+
+func TestSearchTagNamesPageRejectsUnsupportedSort(t *testing.T) {
+	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
+		ctx := context.Background()
+		store := New(db)
+		now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+		_, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
+
+		_, err := store.SearchTagNamesPage(ctx, repositoryID, "", registrydomain.TagSort("bogus"), foundation.PageRequest{Limit: 10, Scope: "repository-tags:test:api:q=:sort=bogus"})
+		if err == nil {
+			t.Fatal("expected an error for an unsupported sort")
+		}
+	})
+}
+
+func TestSearchTagNamesPageRejectsInvalidCursorTimestamp(t *testing.T) {
+	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
+		ctx := context.Background()
+		store := New(db)
+		now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+		_, repositoryID := seedProjectWithRepository(t, ctx, db, store, now)
+		observation := registrydomain.ManifestObservation{Digest: "sha256:manifest-alpha", ManifestSize: 10, Tag: "alpha"}
+		if err := store.UpsertManifestObservation(ctx, repositoryID, observation, now); err != nil {
+			t.Fatal(err)
+		}
+
+		scope := "repository-tags:test:api:q=:sort=" + string(registrydomain.TagSortNewest)
+		badCursor, err := foundation.EncodePageCursor(foundation.PageCursor{Scope: scope, Name: "alpha", Timestamp: "not-a-timestamp"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = store.SearchTagNamesPage(ctx, repositoryID, "", registrydomain.TagSortNewest, foundation.PageRequest{Limit: 10, Scope: scope, Cursor: badCursor})
+		if err == nil {
+			t.Fatal("expected an error for an invalid cursor timestamp")
+		}
+	})
+}
+
+func TestSearchTagNamesPageReportsQueryFailure(t *testing.T) {
+	forStorageDatabases(t, func(t *testing.T, db *bun.DB) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		store := New(db)
+		now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+		_, repositoryID := seedProjectWithRepository(t, context.Background(), db, store, now)
+
+		_, err := store.SearchTagNamesPage(ctx, repositoryID, "", registrydomain.TagSortNewest, foundation.PageRequest{Limit: 10, Scope: "repository-tags:test:api:q=:sort=newest"})
+		if err == nil {
+			t.Fatal("expected a query error for a canceled context")
+		}
+	})
+}
+
+func TestTagSortOrderExprRejectsUnsupportedSort(t *testing.T) {
+	if _, err := tagSortOrderExpr(registrydomain.TagSort("bogus")); err == nil {
+		t.Fatal("expected an error for an unsupported sort")
+	}
+}
+
+func TestTagSortKeysetPredicateRejectsUnsupportedSort(t *testing.T) {
+	if _, _, err := tagSortKeysetPredicate(registrydomain.TagSort("bogus"), "name", ""); err == nil {
+		t.Fatal("expected an error for an unsupported sort")
+	}
+}
