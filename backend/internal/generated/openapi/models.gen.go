@@ -56,15 +56,16 @@ func (e ArtifactDeletionStatus) Valid() bool {
 
 // Defines values for ArtifactKind.
 const (
-	ArtifactKindContainerImage  ArtifactKind = "container_image"
-	ArtifactKindGenericOci      ArtifactKind = "generic_oci"
-	ArtifactKindHelmChart       ArtifactKind = "helm_chart"
-	ArtifactKindImageIndex      ArtifactKind = "image_index"
-	ArtifactKindSbomCyclonedx   ArtifactKind = "sbom_cyclonedx"
-	ArtifactKindSbomSpdx        ArtifactKind = "sbom_spdx"
-	ArtifactKindSignature       ArtifactKind = "signature"
-	ArtifactKindTerraformModule ArtifactKind = "terraform_module"
-	ArtifactKindUnknownOci      ArtifactKind = "unknown_oci"
+	ArtifactKindContainerImage ArtifactKind = "container_image"
+	ArtifactKindGenericOci     ArtifactKind = "generic_oci"
+	ArtifactKindHelmChart      ArtifactKind = "helm_chart"
+	ArtifactKindImageIndex     ArtifactKind = "image_index"
+	ArtifactKindOpentofuModule ArtifactKind = "opentofu_module"
+	ArtifactKindSbomCyclonedx  ArtifactKind = "sbom_cyclonedx"
+	ArtifactKindSbomSpdx       ArtifactKind = "sbom_spdx"
+	ArtifactKindSignature      ArtifactKind = "signature"
+	ArtifactKindUnknownOci     ArtifactKind = "unknown_oci"
+	ArtifactKindWasm           ArtifactKind = "wasm"
 )
 
 // Valid indicates whether the value is a known member of the ArtifactKind enum.
@@ -78,15 +79,17 @@ func (e ArtifactKind) Valid() bool {
 		return true
 	case ArtifactKindImageIndex:
 		return true
+	case ArtifactKindOpentofuModule:
+		return true
 	case ArtifactKindSbomCyclonedx:
 		return true
 	case ArtifactKindSbomSpdx:
 		return true
 	case ArtifactKindSignature:
 		return true
-	case ArtifactKindTerraformModule:
-		return true
 	case ArtifactKindUnknownOci:
+		return true
+	case ArtifactKindWasm:
 		return true
 	default:
 		return false
@@ -764,12 +767,14 @@ func (e RepositoryPolicyType) Valid() bool {
 
 // Defines values for RepositoryProfile.
 const (
-	RepositoryProfileContainerImage  RepositoryProfile = "container_image"
-	RepositoryProfileGenericOci      RepositoryProfile = "generic_oci"
-	RepositoryProfileMixed           RepositoryProfile = "mixed"
-	RepositoryProfileSbom            RepositoryProfile = "sbom"
-	RepositoryProfileTerraformModule RepositoryProfile = "terraform_module"
-	RepositoryProfileUnknown         RepositoryProfile = "unknown"
+	RepositoryProfileContainerImage RepositoryProfile = "container_image"
+	RepositoryProfileGenericOci     RepositoryProfile = "generic_oci"
+	RepositoryProfileHelmChart      RepositoryProfile = "helm_chart"
+	RepositoryProfileMixed          RepositoryProfile = "mixed"
+	RepositoryProfileOpentofuModule RepositoryProfile = "opentofu_module"
+	RepositoryProfileSbom           RepositoryProfile = "sbom"
+	RepositoryProfileUnknown        RepositoryProfile = "unknown"
+	RepositoryProfileWasm           RepositoryProfile = "wasm"
 )
 
 // Valid indicates whether the value is a known member of the RepositoryProfile enum.
@@ -779,13 +784,17 @@ func (e RepositoryProfile) Valid() bool {
 		return true
 	case RepositoryProfileGenericOci:
 		return true
+	case RepositoryProfileHelmChart:
+		return true
 	case RepositoryProfileMixed:
+		return true
+	case RepositoryProfileOpentofuModule:
 		return true
 	case RepositoryProfileSbom:
 		return true
-	case RepositoryProfileTerraformModule:
-		return true
 	case RepositoryProfileUnknown:
+		return true
+	case RepositoryProfileWasm:
 		return true
 	default:
 		return false

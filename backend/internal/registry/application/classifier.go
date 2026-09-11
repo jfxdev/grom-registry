@@ -1,6 +1,7 @@
 package application
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -47,14 +48,34 @@ func ClassifyManifest(metadata ManifestMetadata) ManifestClassification {
 	}
 	confidence := constants.ClassificationConfidenceLow
 	kind := constants.ArtifactKindUnknownOCI
-	if metadata.ArtifactType != "" || strings.Contains(strings.ToLower(metadata.MediaType), "artifact") {
+	source := "media_type"
+	if metadata.ArtifactType != "" {
+		// An unrecognised but declared artifactType is still a deliberate
+		// statement of intent by the client, so report where the decision
+		// actually came from.
+		confidence = constants.ClassificationConfidenceMedium
+		kind = constants.ArtifactKindGenericOCI
+		source = "artifact_type"
+	} else if strings.Contains(strings.ToLower(metadata.MediaType), "artifact") {
 		confidence = constants.ClassificationConfidenceMedium
 		kind = constants.ArtifactKindGenericOCI
 	}
 	return ManifestClassification{
 		Kind: kind, Profile: constants.RepositoryProfileGenericOCI,
-		Relationship: relationship, Source: "media_type", Confidence: confidence,
+		Relationship: relationship, Source: source, Confidence: confidence,
 	}
+}
+
+// fallbackReferrersTagPattern matches the tag schemes clients fall back to when
+// they cannot attach content through the registry's referrers API. ORAS writes a
+// bare <algorithm>-<digest> index listing the referrers; sigstore appends .sig,
+// .att or .sbom. Both are tagged primary manifests that describe another
+// artifact rather than the repository's own content, so neither may vote on the
+// repository profile.
+var fallbackReferrersTagPattern = regexp.MustCompile(`^sha(?:256|512)-[0-9a-f]{32,128}(?:\.[a-zA-Z0-9]+)?$`)
+
+func IsFallbackReferrersTag(tag string) bool {
+	return fallbackReferrersTagPattern.MatchString(tag)
 }
 
 func classifyByValue(value, source, relationship string) *ManifestClassification {
@@ -70,10 +91,18 @@ func classifyByValue(value, source, relationship string) *ManifestClassification
 		result.Kind, result.Profile = constants.ArtifactKindSBOMCycloneDX, constants.RepositoryProfileSBOM
 	case strings.Contains(lower, "spdx") || strings.Contains(lower, "sbom"):
 		result.Kind, result.Profile = constants.ArtifactKindSBOMSPDX, constants.RepositoryProfileSBOM
-	case strings.Contains(lower, "terraform") || strings.Contains(lower, "opentofu"):
-		result.Kind, result.Profile = constants.ArtifactKindTerraformModule, constants.RepositoryProfileTerraform
+	// Both keywords stay matched: OpenTofu is the product language, but
+	// terraform-named artifact types exist in the wider ecosystem, such as
+	// application/vnd.cncf.oras.terraform.module.v1, and clients push them.
+	case strings.Contains(lower, "opentofu") || strings.Contains(lower, "terraform"):
+		result.Kind, result.Profile = constants.ArtifactKindOpenTofuModule, constants.RepositoryProfileOpenTofu
 	case strings.Contains(lower, "helm"):
-		result.Kind, result.Profile = constants.ArtifactKindHelmChart, constants.RepositoryProfileGenericOCI
+		result.Kind, result.Profile = constants.ArtifactKindHelmChart, constants.RepositoryProfileHelmChart
+	// Matches application/wasm layers as well as the config and artifact types
+	// the WebAssembly toolchains stamp, such as application/vnd.wasm.config.v0+json
+	// and application/vnd.bytecodealliance.component.v1+wasm.
+	case strings.Contains(lower, "wasm"):
+		result.Kind, result.Profile = constants.ArtifactKindWASM, constants.RepositoryProfileWASM
 	case strings.Contains(lower, "cosign") || strings.Contains(lower, "notation") ||
 		strings.Contains(lower, "notary") || strings.Contains(lower, "signature") ||
 		strings.Contains(lower, "sigstore"):

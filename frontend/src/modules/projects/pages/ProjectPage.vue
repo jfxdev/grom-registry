@@ -32,10 +32,10 @@ import { DangerZone } from '@/shared/components/ui/danger-zone'
 import { Dialog } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { PrincipalTypeBadge } from '@/shared/components/ui/principal-type-badge'
-import { DockerPushBanner } from '@/shared/components/registry'
+import { ArtifactPushBanner } from '@/shared/components/registry'
 import { PaginationControls } from '@/shared/components/ui/pagination'
 import { Select } from '@/shared/components/ui/select'
-import { ROUTES } from '@/shared/constants'
+import { artifactKindLabel, artifactPullCommand, repositoryProfileLabel, ROUTES } from '@/shared/constants'
 import { writeClipboardText } from '@/shared/lib/clipboard'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
@@ -417,7 +417,8 @@ async function copyCommand(command: string, key: string) {
 }
 
 function pullCommand(repository: string, tag = 'latest') {
-  return `docker pull ${window.location.host}/${slug.value}/${repository}:${tag}`
+  const reference = { host: window.location.host, path: `${slug.value}/${repository}`, tag }
+  return artifactPullCommand(reference, selectedRepository.value?.profile ?? 'unknown')
 }
 
 function manifestTags(manifest: ManifestInventory) {
@@ -458,6 +459,13 @@ const tagItems = computed(() => pageItems(tags.data.value))
 
 function platformsForTag(tag: string): ManifestPlatform[] {
   return manifestForTag(tag)?.platforms ?? []
+}
+
+// Only container images carry an operating system and architecture. An OpenTofu
+// module, Helm chart or any other artifact is measured but has no platform, so
+// the column is dropped rather than filled with separators.
+function hasPlatformDetail(tag: string): boolean {
+  return platformsForTag(tag).some(platform => platform.os !== '' || platform.architecture !== '')
 }
 
 function lastPushedLabel(tag: string): string | null {
@@ -527,7 +535,7 @@ function changeMemberKind() {
 }
 
 function profileLabel(profile: Repository['profile']) {
-  return profile.replaceAll('_', ' ')
+  return repositoryProfileLabel(profile)
 }
 
 const policyTypeLabels: Record<string, string> = {
@@ -556,7 +564,7 @@ function policySummary(policy: Repository['policies'][number]) {
     const sentences: string[] = []
     if (retentionCriterionActive(policy.expireAfterDaysEnabled, policy.expireAfterDays)) sentences.push(`Removes tags${scope} older than ${policy.expireAfterDays} days`)
     if (retentionCriterionActive(policy.keepLastEnabled, policy.keepLast)) sentences.push(`Always keeps the last ${policy.keepLast} tags${scope}`)
-    if (retentionCriterionActive(policy.untaggedGraceDaysEnabled, policy.untaggedGraceDays)) sentences.push(`Cleans untagged images after ${policy.untaggedGraceDays} days`)
+    if (retentionCriterionActive(policy.untaggedGraceDaysEnabled, policy.untaggedGraceDays)) sentences.push(`Cleans untagged artifacts after ${policy.untaggedGraceDays} days`)
     return sentences.length ? `${sentences.join('. ')}.` : 'No active criteria.'
   }
   if (policy.type === 'tag_protection') {
@@ -890,7 +898,7 @@ function policySummary(policy: Repository['policies'][number]) {
         <div class="panel-heading">
           <div>
             <h2>Tags</h2>
-            <p>Pull commands and platform manifests for each published tag.</p>
+            <p>Pull commands and manifests for each published tag.</p>
           </div>
         </div>
         <div class="repo-panel-body">
@@ -926,19 +934,18 @@ function policySummary(policy: Repository['policies'][number]) {
                   <thead class="border-b text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th class="px-4 py-3">Digest</th>
-                      <th class="px-4 py-3">OS/ARCH</th>
+                      <th v-if="hasPlatformDetail(tag)" class="px-4 py-3">OS/ARCH</th>
                       <th class="px-4 py-3 text-right">Compressed size</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="platform in platformsForTag(tag)" :key="platform.digest" class="border-b last:border-0">
                       <td class="px-4 py-3"><code class="text-xs text-accent">{{ platform.digest || manifestForTag(tag)?.digest || '—' }}</code></td>
-                      <td class="px-4 py-3 text-muted-foreground">{{ platform.os }}/{{ platform.architecture }}{{ platform.variant ? `/${platform.variant}` : '' }}</td>
+                      <td v-if="hasPlatformDetail(tag)" class="px-4 py-3 text-muted-foreground">{{ platform.os }}/{{ platform.architecture }}{{ platform.variant ? `/${platform.variant}` : '' }}</td>
                       <td class="px-4 py-3 text-right tabular-nums">{{ formatCompressedSize(platform.compressedSize) }}</td>
                     </tr>
                     <tr v-if="!platformsForTag(tag).length">
                       <td class="px-4 py-3"><code class="text-xs text-accent">{{ manifestForTag(tag)?.digest ?? '—' }}</code></td>
-                      <td class="px-4 py-3 text-muted-foreground">—</td>
                       <td class="px-4 py-3 text-right tabular-nums">—</td>
                     </tr>
                   </tbody>
@@ -965,7 +972,7 @@ function policySummary(policy: Repository['policies'][number]) {
         <template v-if="currentInventoryItems.length">
           <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current in Distribution</p>
           <Card v-for="manifest in currentInventoryItems" :key="manifest.id" class="cursor-pointer p-3" role="button" tabindex="0" @click="selectedManifest = manifest" @keydown.enter="selectedManifest = manifest">
-            <div class="flex items-center justify-between gap-3"><code class="truncate text-xs">{{ manifest.digest }}</code><div class="flex gap-1"><Badge>{{ manifest.observedKind.replaceAll('_', ' ') }}</Badge><Badge :tone="manifestStateTone(manifest.state)">{{ manifestStateLabel(manifest.state) }}</Badge></div></div>
+            <div class="flex items-center justify-between gap-3"><code class="truncate text-xs">{{ manifest.digest }}</code><div class="flex gap-1"><Badge>{{ artifactKindLabel(manifest.observedKind) }}</Badge><Badge :tone="manifestStateTone(manifest.state)">{{ manifestStateLabel(manifest.state) }}</Badge></div></div>
             <p class="mt-1 text-xs text-muted-foreground">{{ manifestPresence(manifest) }} · {{ formatCompressedSize(manifest.manifestSize) }} manifest metadata</p>
           </Card>
         </template>
@@ -1094,7 +1101,7 @@ function policySummary(policy: Repository['policies'][number]) {
     <Dialog v-if="archiveRepositoryOpen && selectedRepository" labelled-by="archive-repository-title" @close="archiveRepositoryOpen = false">
       <form class="modal form-stack" aria-labelledby="archive-repository-title" @submit.prevent="archive.mutate()">
         <div class="flex items-start justify-between gap-4"><div><p class="eyebrow">Repository access</p><h2 id="archive-repository-title" class="text-lg font-semibold">Archive repository</h2></div><Button variant="ghost" size="icon" type="button" aria-label="Close repository archive confirmation" @click="archiveRepositoryOpen = false"><X :size="18" /></Button></div>
-        <div class="deletion-warning"><AlertTriangle :size="18" /><p>Archive <strong>{{ selectedRepository.name }}</strong>? New image pushes will be blocked. Pulls and existing OCI content will remain available until you unarchive it.</p></div>
+        <div class="deletion-warning"><AlertTriangle :size="18" /><p>Archive <strong>{{ selectedRepository.name }}</strong>? New pushes will be blocked. Pulls and existing OCI content will remain available until you unarchive it.</p></div>
         <p v-if="repositoryOperationError" class="error-text" role="alert">{{ repositoryOperationError }}</p>
         <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="archiveRepositoryOpen = false">Cancel</Button><Button type="submit" :disabled="archive.isPending.value">{{ archive.isPending.value ? 'Archiving…' : 'Archive repository' }}</Button></div>
       </form>
@@ -1115,7 +1122,7 @@ function policySummary(policy: Repository['policies'][number]) {
         <div><p class="text-xs text-muted-foreground">Digest</p><code class="mt-1 block break-all text-xs">{{ selectedManifest.digest }}</code></div>
         <div class="grid grid-cols-2 gap-3 text-sm"><div><p class="text-xs text-muted-foreground">Media type</p><p class="break-all">{{ selectedManifest.mediaType || 'Unknown' }}</p></div><div><p class="text-xs text-muted-foreground">Manifest metadata</p><p>{{ formatCompressedSize(selectedManifest.manifestSize) }}</p></div><div><p class="text-xs text-muted-foreground">State</p><Badge :tone="manifestStateTone(selectedManifest.state)">{{ manifestStateLabel(selectedManifest.state) }}</Badge></div><div><p class="text-xs text-muted-foreground">Observed</p><p>{{ new Date(selectedManifest.firstSeenAt).toLocaleString() }}</p></div><div><p class="text-xs text-muted-foreground">Last seen</p><p>{{ new Date(selectedManifest.lastSeenAt).toLocaleString() }}</p></div></div>
         <div><p class="text-xs text-muted-foreground">Tags</p><div class="mt-1 flex flex-wrap gap-1"><Badge v-for="tag in manifestTags(selectedManifest)" :key="tag">{{ tag }}</Badge><span v-if="!manifestTags(selectedManifest).length" class="text-sm">{{ manifestStateLabel(selectedManifest.state) }}</span></div></div>
-        <div class="grid grid-cols-2 gap-3 text-sm"><div><p class="text-xs text-muted-foreground">Classification</p><p>{{ selectedManifest.observedKind.replaceAll('_', ' ') }} · {{ selectedManifest.classificationConfidence }}</p></div><div><p class="text-xs text-muted-foreground">OCI relationship</p><p>{{ selectedManifest.artifactRelationship }}</p></div></div>
+        <div class="grid grid-cols-2 gap-3 text-sm"><div><p class="text-xs text-muted-foreground">Classification</p><p>{{ artifactKindLabel(selectedManifest.observedKind) }} · {{ selectedManifest.classificationConfidence }}</p></div><div><p class="text-xs text-muted-foreground">OCI relationship</p><p>{{ selectedManifest.artifactRelationship }}</p></div></div>
         <div v-if="selectedManifest.subjectDigest"><p class="text-xs text-muted-foreground">Subject digest</p><code class="mt-1 block break-all text-xs">{{ selectedManifest.subjectDigest }}</code></div>
       </section>
     </Dialog>
@@ -1144,14 +1151,19 @@ function policySummary(policy: Repository['policies'][number]) {
       <section class="modal form-stack" aria-labelledby="push-instructions-title">
         <div class="flex items-start justify-between gap-4">
           <div>
-            <p class="eyebrow">Docker</p>
+            <p class="eyebrow">Registry client</p>
             <h2 id="push-instructions-title" class="text-lg font-semibold">Push instructions</h2>
           </div>
           <Button variant="ghost" size="icon" aria-label="Close push instructions" @click="pushInstructionsOpen = false">
             <X :size="18" />
           </Button>
         </div>
-        <DockerPushBanner :registry-host="registryHost" :project="slug" :repository="selectedRepository?.name" />
+        <ArtifactPushBanner
+          :registry-host="registryHost"
+          :project="slug"
+          :repository="selectedRepository?.name"
+          :profile="selectedRepository?.profile"
+        />
       </section>
     </Dialog>
 
@@ -1189,7 +1201,7 @@ function policySummary(policy: Repository['policies'][number]) {
           </div>
         </div>
         <div v-if="deletionPreview.childDigests.length">
-          <p class="text-xs text-muted-foreground">Unreferenced platform manifests</p>
+          <p class="text-xs text-muted-foreground">Unreferenced child manifests</p>
           <p class="mt-1 text-xs text-muted-foreground">These child manifests belong only to this image index and will be removed with it.</p>
           <code v-for="digest in deletionPreview.childDigests" :key="digest" class="mt-1 block break-all text-xs">{{ digest }}</code>
         </div>

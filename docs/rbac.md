@@ -144,7 +144,9 @@ The token flow applies RBAC on every request:
    /auth/token.
 3. Grom validates the credential, expiry, revocation, and owner.
 4. Each requested scope is evaluated separately; the leading slug locates its
-   project.
+   project. Clients may send one scope per `scope` parameter, as Docker does, or
+   several scopes joined by spaces in a single parameter, as ORAS, Helm, and
+   OpenTofu do; both forms are expanded identically.
 5. Requested actions are intersected with the principal's current role.
 6. Grom signs a short-lived JWT containing only the allowed subset.
 7. Distribution validates the JWT for the OCI operation.
