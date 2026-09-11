@@ -129,13 +129,13 @@ func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, refe
 }
 
 // votesOnProfile reports whether an observation may influence the repository
-// profile. Only tagged primary manifests vote, and sigstore's tag-based
-// fallback artifacts are excluded because they describe another artifact rather
-// than the repository's own content.
+// profile. Only tagged primary manifests vote, and tag-based referrer fallbacks
+// are excluded because they describe another artifact rather than the
+// repository's own content.
 func votesOnProfile(tag string, classification ManifestClassification) bool {
 	return tag != "" &&
 		classification.Relationship == constants.ArtifactRelationshipPrimary &&
-		!IsFallbackSignatureTag(tag)
+		!IsFallbackReferrersTag(tag)
 }
 
 func (s *InventoryService) Reconcile(
@@ -171,7 +171,7 @@ func (s *InventoryService) Reconcile(
 	previousConfidence := target.ProfileConfidence
 	previousNeedsReview := target.ProfileNeedsReview
 	if target.Profile == constants.RepositoryProfileMixed {
-		registrydomain.ResetInferredProfile(target)
+		registrydomain.ResetInferredProfile(target, now)
 	}
 	for _, tag := range tags {
 		metadata, fetchErr := s.distribution.FetchManifest(ctx, fullRepository, tag)

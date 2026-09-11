@@ -133,7 +133,7 @@ test('an administrator archives, unarchives, and removes empty repositories', as
   await openRepository(page, runtime.publicURL, 'repository-removal', 'empty')
   await page.getByRole('button', { name: 'Archive' }).click()
   const archiveDialog = page.getByRole('dialog', { name: 'Archive repository' })
-  await expect(archiveDialog).toContainText('New image pushes will be blocked')
+  await expect(archiveDialog).toContainText('New pushes will be blocked')
   const [archiveResponse] = await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/archive')),
     archiveDialog.getByRole('button', { name: 'Archive repository' }).click(),

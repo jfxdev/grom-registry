@@ -109,11 +109,14 @@ Grom stores any OCI artifact, not only container images. The same service
 account key works as the password for every OCI client.
 
 ```bash
-oras login localhost:8080
-oras push localhost:8080/my-project/my-module:1.0.0 \
+oras login --plain-http localhost:8080
+oras push --plain-http localhost:8080/my-project/my-module:1.0.0 \
   --artifact-type application/vnd.opentofu.modulepkg \
   module.tgz:archive/tar+gzip
 ```
+
+`--plain-http` is needed only because the local quick start serves HTTP. Drop it
+against a deployment with HTTPS.
 
 OpenTofu consumes the module directly from an `oci://` module source; follow
 the OpenTofu documentation for the exact source syntax and credential

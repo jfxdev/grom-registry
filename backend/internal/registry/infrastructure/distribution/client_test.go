@@ -544,6 +544,60 @@ func TestListReferrersFailsRatherThanUnderReportingAPartialPage(t *testing.T) {
 	}
 }
 
+func TestListReferrersRejectsCyclicPagination(t *testing.T) {
+	page := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:signature","size":11}]}`
+	requests := 0
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requests++
+		header := make(http.Header)
+		// Always point back at the same page.
+		header.Set("Link", `</v2/project/api/referrers/sha256:subject?last=sha256:signature>; rel="next"`)
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(page)), Request: r}, nil
+	})
+	client := referrersTestClient(t, transport)
+
+	if _, err := client.ListReferrers(context.Background(), "project/api", "sha256:subject"); err == nil {
+		t.Fatal("expected a repeated pagination link to fail rather than loop")
+	}
+	if requests > 3 {
+		t.Fatalf("expected the loop to stop after revisiting a link, made %d requests", requests)
+	}
+}
+
+func TestListReferrersFailsWhenAPageAfterAnEmptyFirstPageIsMissing(t *testing.T) {
+	// An empty first page can still carry a next link, so the count of collected
+	// descriptors cannot stand in for "no page has been read yet".
+	emptyFirstPage := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}`
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Query().Get("last") != "" {
+			return &http.Response{StatusCode: http.StatusNotFound, Status: "404 Not Found", Header: make(http.Header), Body: http.NoBody, Request: r}, nil
+		}
+		header := make(http.Header)
+		header.Set("Link", `</v2/project/api/referrers/sha256:subject?last=sha256:cursor>; rel="next"`)
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(emptyFirstPage)), Request: r}, nil
+	})
+	client := referrersTestClient(t, transport)
+
+	if _, err := client.ListReferrers(context.Background(), "project/api", "sha256:subject"); err == nil {
+		t.Fatal("a truncated listing must not be reported as an empty one")
+	}
+}
+
+func referrersTestClient(t *testing.T, transport http.RoundTripper) *Client {
+	t.Helper()
+	temp := t.TempDir()
+	signer, err := signing.LoadOrCreate(temp+"/key.pem", temp+"/cert.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient("http://distribution.local", registryapp.NewTokenService(nil, nil, signer, time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = transport
+	return client
+}
+
 func TestListReferrersTreatsAMissingSubjectAsEmpty(t *testing.T) {
 	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusNotFound, Status: "404 Not Found", Header: make(http.Header), Body: http.NoBody, Request: r}, nil

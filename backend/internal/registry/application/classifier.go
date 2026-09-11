@@ -66,14 +66,16 @@ func ClassifyManifest(metadata ManifestMetadata) ManifestClassification {
 	}
 }
 
-// fallbackSignatureTagPattern matches the tag scheme sigstore uses when it
-// attaches a signature, attestation or SBOM without an OCI subject. Such a
-// manifest is tagged and carries an image config, so it would otherwise vote on
-// the repository profile and drag an artifact repository into mixed.
-var fallbackSignatureTagPattern = regexp.MustCompile(`^sha256-[0-9a-f]{64}\.(sig|att|sbom)$`)
+// fallbackReferrersTagPattern matches the tag schemes clients fall back to when
+// they cannot attach content through the registry's referrers API. ORAS writes a
+// bare <algorithm>-<digest> index listing the referrers; sigstore appends .sig,
+// .att or .sbom. Both are tagged primary manifests that describe another
+// artifact rather than the repository's own content, so neither may vote on the
+// repository profile.
+var fallbackReferrersTagPattern = regexp.MustCompile(`^sha(?:256|512)-[0-9a-f]{32,128}(?:\.[a-zA-Z0-9]+)?$`)
 
-func IsFallbackSignatureTag(tag string) bool {
-	return fallbackSignatureTagPattern.MatchString(tag)
+func IsFallbackReferrersTag(tag string) bool {
+	return fallbackReferrersTagPattern.MatchString(tag)
 }
 
 func classifyByValue(value, source, relationship string) *ManifestClassification {

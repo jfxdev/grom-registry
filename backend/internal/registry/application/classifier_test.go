@@ -120,16 +120,37 @@ func TestClassifyManifest(t *testing.T) {
 	}
 }
 
-func TestIsFallbackSignatureTag(t *testing.T) {
+func TestIsFallbackReferrersTag(t *testing.T) {
 	subject := "sha256-" + strings.Repeat("a", 64)
-	for _, tag := range []string{subject + ".sig", subject + ".att", subject + ".sbom"} {
-		if !IsFallbackSignatureTag(tag) {
-			t.Fatalf("expected %q to be recognised as a sigstore fallback tag", tag)
+	// The bare form is the OCI referrers fallback index ORAS writes when the
+	// registry's referrers API is unavailable; the suffixed forms are sigstore's.
+	recognised := []string{subject, subject + ".sig", subject + ".att", subject + ".sbom",
+		"sha512-" + strings.Repeat("b", 128)}
+	for _, tag := range recognised {
+		if !IsFallbackReferrersTag(tag) {
+			t.Fatalf("expected %q to be recognised as a referrers fallback tag", tag)
 		}
 	}
-	for _, tag := range []string{"latest", "v1.0.0", subject, "sha256-short.sig", subject + ".tar"} {
-		if IsFallbackSignatureTag(tag) {
-			t.Fatalf("expected %q not to be recognised as a sigstore fallback tag", tag)
+	for _, tag := range []string{"latest", "v1.0.0", "sha256-short", "sha256-" + strings.Repeat("a", 64) + ".tar.gz"} {
+		if IsFallbackReferrersTag(tag) {
+			t.Fatalf("expected %q not to be recognised as a referrers fallback tag", tag)
 		}
+	}
+}
+
+func TestFallbackReferrersTagsDoNotVoteOnTheProfile(t *testing.T) {
+	// An ORAS attach against a registry without the referrers API leaves a tagged
+	// OCI index behind. It classifies as an image index, so without this guard it
+	// would conflict with the repository's real profile and force mixed.
+	index := ClassifyManifest(ManifestMetadata{
+		MediaType:            "application/vnd.oci.image.index.v1+json",
+		DescriptorMediaTypes: []string{"application/vnd.oci.image.manifest.v1+json"},
+	})
+	fallbackTag := "sha256-" + strings.Repeat("a", 64)
+	if votesOnProfile(fallbackTag, index) {
+		t.Fatal("a referrers fallback index must not vote on the repository profile")
+	}
+	if !votesOnProfile("1.0.0", index) {
+		t.Fatal("an ordinary tagged primary manifest must still vote")
 	}
 }

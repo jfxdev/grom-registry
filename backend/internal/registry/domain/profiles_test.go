@@ -47,12 +47,18 @@ func TestResetInferredProfileLetsAReconciliationLeaveMixed(t *testing.T) {
 		t.Fatal("mixed must stay absorbing for a single observation")
 	}
 
-	ResetInferredProfile(repository)
+	resetAt := now.Add(30 * time.Second)
+	ResetInferredProfile(repository, resetAt)
 	if repository.Profile != constants.RepositoryProfileUnknown ||
 		repository.ProfileSource != constants.ProfileSourceNone ||
 		repository.ProfileConfidence != constants.ClassificationConfidenceNone ||
 		repository.ProfileInferredAt != nil || repository.ProfileNeedsReview {
 		t.Fatalf("unexpected reset profile: %#v", repository)
+	}
+	// A reconciliation that only resets still persists the repository, so the
+	// reset must carry a fresh timestamp rather than leave a stale one behind.
+	if !repository.UpdatedAt.Equal(resetAt) {
+		t.Fatalf("expected the reset to advance UpdatedAt to %s, got %s", resetAt, repository.UpdatedAt)
 	}
 
 	if !ApplyInferredProfile(repository, constants.RepositoryProfileOpenTofu, constants.ClassificationConfidenceHigh, now.Add(time.Minute)) {

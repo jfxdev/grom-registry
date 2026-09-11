@@ -528,20 +528,32 @@ func (c *Client) ListReferrers(ctx context.Context, repository, digest string) (
 	// accumulates many referrers. Follow it so signatures and attestations beyond
 	// the first page are inventoried instead of silently dropped.
 	nextPath := "/v2/" + repository + "/referrers/" + digest
+	visited := make(map[string]struct{})
+	completedPages := 0
 	for nextPath != "" {
+		// A registry whose next link points back at a page already read would
+		// otherwise loop forever, appending the same descriptors until the caller's
+		// context expires.
+		if _, seen := visited[nextPath]; seen {
+			return nil, fmt.Errorf("distribution referrers pagination repeats %s", nextPath)
+		}
+		visited[nextPath] = struct{}{}
 		var payload referrersResponse
 		followPath, err := c.getReferrersPage(ctx, nextPath, token, &payload)
 		if err != nil {
-			// A registry that does not know the subject answers 404 on the first
-			// request, which means no referrers. A 404 part-way through the
-			// pagination is not that: referrers block deletion, so returning the
-			// partial set would under-report them and weaken that guard.
+			// A registry without the referrers API, or without this subject,
+			// answers 404 on the very first request, which means no referrers. A
+			// 404 once a page has been read is not that: referrers block deletion,
+			// so returning the partial set would under-report them and weaken that
+			// guard. Completed pages are counted rather than descriptors, because
+			// an empty first page can still carry a next link.
 			var statusErr *responseStatusError
-			if len(result) == 0 && errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound {
+			if completedPages == 0 && errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound {
 				return []registryapp.ManifestDescriptor{}, nil
 			}
 			return nil, err
 		}
+		completedPages++
 		for _, descriptor := range payload.Manifests {
 			result = append(result, registryapp.ManifestDescriptor{
 				Digest: descriptor.Digest, MediaType: descriptor.MediaType,
