@@ -1,11 +1,9 @@
 import type { ArtifactKind, RepositoryProfile } from '@/shared/api/models'
 
-// The wire value stays terraform_module: RepositoryProfile is a closed enum in
-// the v1 contract, so only the label follows the product language.
 export const REPOSITORY_PROFILE_LABELS: Record<RepositoryProfile, string> = {
   unknown: 'Unknown',
   container_image: 'Container image',
-  terraform_module: 'OpenTofu module',
+  opentofu_module: 'OpenTofu module',
   sbom: 'SBOM',
   generic_oci: 'Generic OCI artifact',
   mixed: 'Mixed',
@@ -14,7 +12,7 @@ export const REPOSITORY_PROFILE_LABELS: Record<RepositoryProfile, string> = {
 export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
   container_image: 'Container image',
   image_index: 'Image index',
-  terraform_module: 'OpenTofu module',
+  opentofu_module: 'OpenTofu module',
   sbom_spdx: 'SBOM (SPDX)',
   sbom_cyclonedx: 'SBOM (CycloneDX)',
   signature: 'Signature',
@@ -95,7 +93,7 @@ function parentPath(path: string): string {
 const PROFILE_RECIPES: Record<RepositoryProfile, ArtifactRecipe> = {
   unknown: DOCKER,
   container_image: DOCKER,
-  terraform_module: OPENTOFU,
+  opentofu_module: OPENTOFU,
   sbom: ORAS,
   generic_oci: ORAS,
   mixed: ORAS,

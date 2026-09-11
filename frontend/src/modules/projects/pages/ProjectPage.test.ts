@@ -392,13 +392,13 @@ describe('ProjectPage membership management', () => {
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     mocks.listRepositories.mockResolvedValue([{
       id: 'repository-1', projectId: 'project-1', name: 'vpc', description: '', status: 'active',
-      creationSource: 'push', profile: 'terraform_module', profileSource: 'inferred', profileConfidence: 'high',
+      creationSource: 'push', profile: 'opentofu_module', profileSource: 'inferred', profileConfidence: 'high',
       profileNeedsReview: false, policyVersion: 1, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
     }])
     mocks.listTags.mockResolvedValue({ name: 'payments/vpc', tags: ['1.0.0'] })
     mocks.listInventory.mockResolvedValue([{
       id: 'manifest-1', digest: 'sha256:module', mediaType: 'application/vnd.oci.image.manifest.v1+json',
-      artifactType: 'application/vnd.opentofu.modulepkg', subjectDigest: '', observedKind: 'terraform_module',
+      artifactType: 'application/vnd.opentofu.modulepkg', subjectDigest: '', observedKind: 'opentofu_module',
       artifactRelationship: 'primary', classificationSource: 'artifact_type', classificationConfidence: 'high',
       manifestSize: 42, state: 'active', firstSeenAt: '2026-07-29T00:00:00Z', lastSeenAt: '2026-07-30T00:00:00Z',
       tags: ['1.0.0'], platforms: [{ digest: 'sha256:module', os: '', architecture: '', compressedSize: 4098 }],

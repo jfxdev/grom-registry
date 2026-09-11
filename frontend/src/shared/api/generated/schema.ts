@@ -1311,9 +1311,9 @@ export interface components {
         /** @enum {string} */
         InventoryState: "active" | "untagged" | "missing" | "deleted";
         /** @enum {string} */
-        RepositoryProfile: "unknown" | "container_image" | "terraform_module" | "sbom" | "generic_oci" | "mixed";
+        RepositoryProfile: "unknown" | "container_image" | "opentofu_module" | "sbom" | "generic_oci" | "mixed";
         /** @enum {string} */
-        ArtifactKind: "container_image" | "image_index" | "terraform_module" | "sbom_spdx" | "sbom_cyclonedx" | "signature" | "helm_chart" | "generic_oci" | "unknown_oci";
+        ArtifactKind: "container_image" | "image_index" | "opentofu_module" | "sbom_spdx" | "sbom_cyclonedx" | "signature" | "helm_chart" | "generic_oci" | "unknown_oci";
         /** @enum {string} */
         ArtifactRelationship: "primary" | "referrer";
         /** @enum {string} */
@@ -3232,8 +3232,8 @@ export const repositoryProfileSourceValues: ReadonlyArray<FlattenedDeepRequired<
 export const accountedStorageUsageStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AccountedStorageUsage"]["status"]> = ["ready", "pending", "stale", "unavailable"];
 export const artifactDeletionStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ArtifactDeletion"]["status"]> = ["running", "completed", "failed"];
 export const inventoryStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InventoryState"]> = ["active", "untagged", "missing", "deleted"];
-export const repositoryProfileValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryProfile"]> = ["unknown", "container_image", "terraform_module", "sbom", "generic_oci", "mixed"];
-export const artifactKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ArtifactKind"]> = ["container_image", "image_index", "terraform_module", "sbom_spdx", "sbom_cyclonedx", "signature", "helm_chart", "generic_oci", "unknown_oci"];
+export const repositoryProfileValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryProfile"]> = ["unknown", "container_image", "opentofu_module", "sbom", "generic_oci", "mixed"];
+export const artifactKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ArtifactKind"]> = ["container_image", "image_index", "opentofu_module", "sbom_spdx", "sbom_cyclonedx", "signature", "helm_chart", "generic_oci", "unknown_oci"];
 export const artifactRelationshipValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ArtifactRelationship"]> = ["primary", "referrer"];
 export const classificationConfidenceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ClassificationConfidence"]> = ["none", "low", "medium", "high"];
 export const lifecycleDecisionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LifecycleDecision"]> = ["eligible", "retained", "blocked"];

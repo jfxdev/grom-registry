@@ -17,13 +17,10 @@ const (
 
 	RepositoryProfileUnknown        = "unknown"
 	RepositoryProfileContainerImage = "container_image"
-	// The OpenTofu module value reads terraform_module because RepositoryProfile
-	// is a closed enum in the v1 contract and renaming a value is a breaking
-	// change. The product language is OpenTofu; the wire value is frozen.
-	RepositoryProfileOpenTofu   = "terraform_module"
-	RepositoryProfileSBOM       = "sbom"
-	RepositoryProfileGenericOCI = "generic_oci"
-	RepositoryProfileMixed      = "mixed"
+	RepositoryProfileOpenTofu       = "opentofu_module"
+	RepositoryProfileSBOM           = "sbom"
+	RepositoryProfileGenericOCI     = "generic_oci"
+	RepositoryProfileMixed          = "mixed"
 
 	ProfileSourceNone     = "none"
 	ProfileSourceInferred = "inferred"
@@ -35,7 +32,7 @@ const (
 
 	ArtifactKindContainerImage = "container_image"
 	ArtifactKindImageIndex     = "image_index"
-	ArtifactKindOpenTofuModule = "terraform_module"
+	ArtifactKindOpenTofuModule = "opentofu_module"
 	ArtifactKindSBOMSPDX       = "sbom_spdx"
 	ArtifactKindSBOMCycloneDX  = "sbom_cyclonedx"
 	ArtifactKindSignature      = "signature"

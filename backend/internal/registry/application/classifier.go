@@ -90,8 +90,8 @@ func classifyByValue(value, source, relationship string) *ManifestClassification
 	case strings.Contains(lower, "spdx") || strings.Contains(lower, "sbom"):
 		result.Kind, result.Profile = constants.ArtifactKindSBOMSPDX, constants.RepositoryProfileSBOM
 	// Both keywords stay matched: OpenTofu is the product language, but
-	// terraform-named artifact types are already published and must keep
-	// classifying as module packages.
+	// terraform-named artifact types exist in the wider ecosystem, such as
+	// application/vnd.cncf.oras.terraform.module.v1, and clients push them.
 	case strings.Contains(lower, "opentofu") || strings.Contains(lower, "terraform"):
 		result.Kind, result.Profile = constants.ArtifactKindOpenTofuModule, constants.RepositoryProfileOpenTofu
 	case strings.Contains(lower, "helm"):

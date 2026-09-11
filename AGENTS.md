@@ -256,17 +256,21 @@ or total capacity belongs to host/provider monitoring.
   stream with no method allowlist, media-type check, or body size limit, and
   `deploy/distribution/config.yml` must not gain a manifest `validation` block
   that would reject arbitrary artifact types.
-- `RepositoryProfile` and `ArtifactKind` are closed enums in the v1 contract, and
-  adding a value is a breaking change under the compatibility policy. A newly
-  recognised artifact family is expressed as an artifact kind or left to the
-  per-manifest `artifactType`, never by adding a profile value. Do not add
-  `helm_chart` or `wasm` profiles; Helm charts are `helm_chart` kind under the
-  `generic_oci` profile. The OpenTofu module value likewise stays
-  `terraform_module` on the wire: the product language is OpenTofu, the enum
-  value is frozen, and the Go constants are named `RepositoryProfileOpenTofu` and
-  `ArtifactKindOpenTofuModule` over that frozen value. The classifier keeps
-  matching both `opentofu` and `terraform` in artifact and media types, because
-  terraform-named artifact types are already published.
+- `RepositoryProfile` and `ArtifactKind` are closed enums. No stable release
+  exists yet, so their values are still free to change; once the first tag ships
+  they are frozen, and adding or renaming a value becomes a breaking change
+  under the compatibility policy. Until then, a contract change to these enums
+  needs a `.github/oasdiff-warn-ignore.txt` entry because `OpenAPI
+  Compatibility` compares against `main`, not against a release.
+- A newly recognised artifact family is normally expressed as an artifact kind
+  or left to the per-manifest `artifactType` rather than as a new profile. Helm
+  charts are `helm_chart` kind under the `generic_oci` profile; do not add a
+  `helm_chart` or `wasm` profile without a product decision.
+- The classifier matches both `opentofu` and `terraform` in artifact and media
+  types. OpenTofu is the product language and the enum value is
+  `opentofu_module`, but terraform-named artifact types such as
+  `application/vnd.cncf.oras.terraform.module.v1` exist in the wild and must
+  keep classifying as module packages.
 - Repository profiles are inferred passively from tagged primary OCI manifests. Referrers such as SBOMs and signatures never change the repository profile. Neither do sigstore's tag-based fallback artifacts (`sha256-<digest>.sig`, `.att`, `.sbom`), which are tagged primary manifests describing other content; `IsFallbackSignatureTag` excludes them from profile voting.
 - Passive profile inference must not enable policies or reject pushes. Conflicting specific primary types produce the `mixed` profile with `profileNeedsReview=true`. `mixed` stays absorbing for a single push; only a full inventory reconciliation may reset and recompute it, which is the supported escape from `mixed`.
 - Every leaf manifest records one self-referencing platform row so generic

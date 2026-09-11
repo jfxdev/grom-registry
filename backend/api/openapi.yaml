@@ -2650,11 +2650,11 @@ components:
       enum: [active, untagged, missing, deleted]
     RepositoryProfile:
       type: string
-      enum: [unknown, container_image, terraform_module, sbom, generic_oci, mixed]
+      enum: [unknown, container_image, opentofu_module, sbom, generic_oci, mixed]
     ArtifactKind:
       type: string
       enum:
-        [container_image, image_index, terraform_module, sbom_spdx,
+        [container_image, image_index, opentofu_module, sbom_spdx,
          sbom_cyclonedx, signature, helm_chart, generic_oci, unknown_oci]
     ArtifactRelationship:
       type: string

@@ -38,7 +38,7 @@ describe('ArtifactPushBanner', () => {
         registryHost: 'registry.example.test',
         project: 'platform',
         repository: 'modules/vpc',
-        profile: 'terraform_module' as const,
+        profile: 'opentofu_module' as const,
       },
     })
 

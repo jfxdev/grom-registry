@@ -105,9 +105,7 @@ payloads. Reconciliation imports legacy content, updates active and untagged
 records, and keeps disappeared items as missing or deleted history.
 
 A repository's content profile is one of `unknown`, `container_image`,
-`terraform_module` (OpenTofu modules), `sbom`, `generic_oci`, or `mixed`. The
-OpenTofu value reads `terraform_module` because the enum is frozen in the v1
-contract. It is inferred passively
+`opentofu_module`, `sbom`, `generic_oci`, or `mixed`. It is inferred passively
 from tagged primary manifests, from the manifest's `artifactType`, config media
 type, layer media types, and index descriptors in that order. Artifact families
 without a dedicated profile, such as Helm charts and WebAssembly modules, are

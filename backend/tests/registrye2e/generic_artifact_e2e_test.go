@@ -152,9 +152,7 @@ func TestGenericOCIArtifactJourney(t *testing.T) {
 	if module.CreationSource != "push" {
 		t.Fatalf("expected the repository to record a push creation source, got %q", module.CreationSource)
 	}
-	// The generated identifier still reads TerraformModule: the enum value is
-	// frozen in the v1 contract even though the product language is OpenTofu.
-	if module.Profile != openapi.RepositoryProfileTerraformModule {
+	if module.Profile != openapi.RepositoryProfileOpentofuModule {
 		t.Fatalf("expected the OpenTofu module profile, got %q", module.Profile)
 	}
 	if module.ProfileNeedsReview {
@@ -166,7 +164,7 @@ func TestGenericOCIArtifactJourney(t *testing.T) {
 	if primary.ArtifactType == nil || *primary.ArtifactType != openTofuModuleArtifactType {
 		t.Fatalf("expected the artifact type to be preserved verbatim, got %+v", primary.ArtifactType)
 	}
-	if primary.ObservedKind != openapi.ArtifactKindTerraformModule {
+	if primary.ObservedKind != openapi.ArtifactKindOpentofuModule {
 		t.Fatalf("expected the OpenTofu module kind, got %q", primary.ObservedKind)
 	}
 	// Without the leaf-manifest measurement an artifact with no image config
@@ -202,7 +200,7 @@ func TestGenericOCIArtifactJourney(t *testing.T) {
 		if candidate.Name != "vpc" {
 			continue
 		}
-		if candidate.Profile != openapi.RepositoryProfileTerraformModule {
+		if candidate.Profile != openapi.RepositoryProfileOpentofuModule {
 			t.Fatalf("a referrer must not change the repository profile, got %q", candidate.Profile)
 		}
 	}
