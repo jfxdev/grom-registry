@@ -64,6 +64,37 @@ func TestClassifyManifest(t *testing.T) {
 			relationship: constants.ArtifactRelationshipPrimary, confidence: constants.ClassificationConfidenceHigh,
 		},
 		{
+			name: "helm chart config",
+			metadata: ManifestMetadata{
+				MediaType:       "application/vnd.oci.image.manifest.v1+json",
+				ConfigMediaType: "application/vnd.cncf.helm.config.v1+json",
+				LayerMediaTypes: []string{"application/vnd.cncf.helm.chart.content.v1.tar+gzip"},
+			},
+			kind: constants.ArtifactKindHelmChart, profile: constants.RepositoryProfileHelmChart,
+			relationship: constants.ArtifactRelationshipPrimary, confidence: constants.ClassificationConfidenceHigh,
+		},
+		{
+			name: "wasm component artifact type",
+			metadata: ManifestMetadata{
+				MediaType:       "application/vnd.oci.image.manifest.v1+json",
+				ArtifactType:    "application/vnd.bytecodealliance.component.v1+wasm",
+				ConfigMediaType: "application/vnd.oci.empty.v1+json",
+			},
+			kind: constants.ArtifactKindWASM, profile: constants.RepositoryProfileWASM,
+			relationship: constants.ArtifactRelationshipPrimary, confidence: constants.ClassificationConfidenceHigh,
+		},
+		{
+			name: "wasm module recognised from its layer",
+			metadata: ManifestMetadata{
+				MediaType:       "application/vnd.oci.image.manifest.v1+json",
+				ConfigMediaType: "application/vnd.oci.empty.v1+json",
+				LayerMediaTypes: []string{"application/wasm"},
+			},
+			kind: constants.ArtifactKindWASM, profile: constants.RepositoryProfileWASM,
+			relationship: constants.ArtifactRelationshipPrimary, confidence: constants.ClassificationConfidenceHigh,
+			source: "layer_media_type",
+		},
+		{
 			name: "unrecognised artifact type stays generic",
 			metadata: ManifestMetadata{
 				MediaType:       "application/vnd.oci.image.manifest.v1+json",

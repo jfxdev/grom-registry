@@ -65,6 +65,7 @@ const (
 	ArtifactKindSbomSpdx       ArtifactKind = "sbom_spdx"
 	ArtifactKindSignature      ArtifactKind = "signature"
 	ArtifactKindUnknownOci     ArtifactKind = "unknown_oci"
+	ArtifactKindWasm           ArtifactKind = "wasm"
 )
 
 // Valid indicates whether the value is a known member of the ArtifactKind enum.
@@ -87,6 +88,8 @@ func (e ArtifactKind) Valid() bool {
 	case ArtifactKindSignature:
 		return true
 	case ArtifactKindUnknownOci:
+		return true
+	case ArtifactKindWasm:
 		return true
 	default:
 		return false
@@ -766,10 +769,12 @@ func (e RepositoryPolicyType) Valid() bool {
 const (
 	RepositoryProfileContainerImage RepositoryProfile = "container_image"
 	RepositoryProfileGenericOci     RepositoryProfile = "generic_oci"
+	RepositoryProfileHelmChart      RepositoryProfile = "helm_chart"
 	RepositoryProfileMixed          RepositoryProfile = "mixed"
 	RepositoryProfileOpentofuModule RepositoryProfile = "opentofu_module"
 	RepositoryProfileSbom           RepositoryProfile = "sbom"
 	RepositoryProfileUnknown        RepositoryProfile = "unknown"
+	RepositoryProfileWasm           RepositoryProfile = "wasm"
 )
 
 // Valid indicates whether the value is a known member of the RepositoryProfile enum.
@@ -779,6 +784,8 @@ func (e RepositoryProfile) Valid() bool {
 		return true
 	case RepositoryProfileGenericOci:
 		return true
+	case RepositoryProfileHelmChart:
+		return true
 	case RepositoryProfileMixed:
 		return true
 	case RepositoryProfileOpentofuModule:
@@ -786,6 +793,8 @@ func (e RepositoryProfile) Valid() bool {
 	case RepositoryProfileSbom:
 		return true
 	case RepositoryProfileUnknown:
+		return true
+	case RepositoryProfileWasm:
 		return true
 	default:
 		return false

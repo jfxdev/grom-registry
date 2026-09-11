@@ -418,7 +418,7 @@ async function copyCommand(command: string, key: string) {
 
 function pullCommand(repository: string, tag = 'latest') {
   const reference = { host: window.location.host, path: `${slug.value}/${repository}`, tag }
-  return artifactPullCommand(reference, selectedRepository.value?.profile ?? 'unknown', manifestForTag(tag)?.observedKind)
+  return artifactPullCommand(reference, selectedRepository.value?.profile ?? 'unknown')
 }
 
 function manifestTags(manifest: ManifestInventory) {

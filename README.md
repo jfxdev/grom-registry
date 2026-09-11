@@ -52,7 +52,7 @@ web interface for access, images, and recovery.
 ### Features
 
 - Project-based push and pull for Docker images and generic OCI artifacts
-  such as OpenTofu modules, Helm charts, and SBOMs.
+  such as OpenTofu modules, Helm charts, WebAssembly modules, and SBOMs.
 - Reader, Writer, and Admin roles.
 - Service accounts with reveal-once, revocable access keys.
 - Web management for users, projects, repositories, and policies.
@@ -122,9 +122,10 @@ configuration. Note that OCI clients normally require HTTPS, so a plain-HTTP
 
 Grom infers a repository's content profile from what is pushed, so the web UI
 shows `OpenTofu module` for this repository and offers ORAS commands rather
-than Docker ones. Helm charts (`helm push`), SBOMs, signatures, and arbitrary
-`oras push` artifacts work the same way; anything Grom does not recognise is
-kept and shown as a generic OCI artifact with its declared `artifactType`.
+than Docker ones. Helm charts, WebAssembly modules and components, SBOMs,
+signatures, and arbitrary `oras push` artifacts work the same way, each with
+the commands its own tooling uses; anything Grom does not recognise is kept and
+shown as a generic OCI artifact with its declared `artifactType`.
 
 Artifacts attached with `oras attach` are inventoried as OCI referrers. They
 never change the repository profile and they block deletion of their subject.

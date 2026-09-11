@@ -105,14 +105,14 @@ payloads. Reconciliation imports legacy content, updates active and untagged
 records, and keeps disappeared items as missing or deleted history.
 
 A repository's content profile is one of `unknown`, `container_image`,
-`opentofu_module`, `sbom`, `generic_oci`, or `mixed`. It is inferred passively
-from tagged primary manifests, from the manifest's `artifactType`, config media
-type, layer media types, and index descriptors in that order. Artifact families
-without a dedicated profile, such as Helm charts and WebAssembly modules, are
-`generic_oci`; their exact type stays visible in the per-manifest `artifactType`
-and `observedKind`. These values are closed enums in the public contract, so a
-newly recognised artifact family is classified as an artifact kind or reported
-through `artifactType`, never by adding a profile value.
+`opentofu_module`, `helm_chart`, `wasm`, `sbom`, `generic_oci`, or `mixed`. It
+is inferred passively from tagged primary manifests, from the manifest's
+`artifactType`, config media type, layer media types, and index descriptors in
+that order. An artifact family without a dedicated profile is `generic_oci`;
+its exact type stays visible in the per-manifest `artifactType` and
+`observedKind`. WebAssembly modules and components share the `wasm` profile and
+kind, because Grom does not read the binary and the media types in use do not
+reliably separate them.
 
 Referrers do not change profiles, policies, or authorization. Neither do
 sigstore's tag-based fallback artifacts (`sha256-<digest>.sig`, `.att`, `.sbom`),

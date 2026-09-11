@@ -4,6 +4,8 @@ export const REPOSITORY_PROFILE_LABELS: Record<RepositoryProfile, string> = {
   unknown: 'Unknown',
   container_image: 'Container image',
   opentofu_module: 'OpenTofu module',
+  helm_chart: 'Helm chart',
+  wasm: 'WebAssembly',
   sbom: 'SBOM',
   generic_oci: 'Generic OCI artifact',
   mixed: 'Mixed',
@@ -13,10 +15,11 @@ export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
   container_image: 'Container image',
   image_index: 'Image index',
   opentofu_module: 'OpenTofu module',
+  helm_chart: 'Helm chart',
+  wasm: 'WebAssembly',
   sbom_spdx: 'SBOM (SPDX)',
   sbom_cyclonedx: 'SBOM (CycloneDX)',
   signature: 'Signature',
-  helm_chart: 'Helm chart',
   generic_oci: 'Generic OCI artifact',
   unknown_oci: 'Unrecognised OCI artifact',
 }
@@ -85,6 +88,15 @@ const HELM: ArtifactRecipe = {
   pullCommand: reference => `helm pull oci://${reference.host}/${reference.path} --version ${reference.tag}`,
 }
 
+// No artifact type is asserted here: the WebAssembly toolchains have not settled
+// on one, while application/wasm is the registered media type for the binary.
+const WASM: ArtifactRecipe = {
+  title: 'Push a module',
+  description: 'Publish a WebAssembly module or component to this repository.',
+  pushCommand: reference => `oras push ${tagged(reference)} module.wasm:application/wasm`,
+  pullCommand: reference => `oras pull ${tagged(reference)}`,
+}
+
 function parentPath(path: string): string {
   const segments = path.split('/')
   return segments.length > 1 ? segments.slice(0, -1).join('/') : path
@@ -94,6 +106,8 @@ const PROFILE_RECIPES: Record<RepositoryProfile, ArtifactRecipe> = {
   unknown: DOCKER,
   container_image: DOCKER,
   opentofu_module: OPENTOFU,
+  helm_chart: HELM,
+  wasm: WASM,
   sbom: ORAS,
   generic_oci: ORAS,
   mixed: ORAS,
@@ -104,23 +118,14 @@ const PROFILE_RECIPES: Record<RepositoryProfile, ArtifactRecipe> = {
  * is also the best guide to which client the next person will reach for. An
  * empty repository has nothing to infer from and defaults to Docker.
  */
-export function artifactRecipe(profile: RepositoryProfile, observedKind?: ArtifactKind): ArtifactRecipe {
-  if (observedKind === 'helm_chart') return HELM
+export function artifactRecipe(profile: RepositoryProfile): ArtifactRecipe {
   return PROFILE_RECIPES[profile] ?? ORAS
 }
 
-export function artifactPushCommand(
-  reference: ArtifactReference,
-  profile: RepositoryProfile,
-  observedKind?: ArtifactKind,
-): string {
-  return artifactRecipe(profile, observedKind).pushCommand(reference)
+export function artifactPushCommand(reference: ArtifactReference, profile: RepositoryProfile): string {
+  return artifactRecipe(profile).pushCommand(reference)
 }
 
-export function artifactPullCommand(
-  reference: ArtifactReference,
-  profile: RepositoryProfile,
-  observedKind?: ArtifactKind,
-): string {
-  return artifactRecipe(profile, observedKind).pullCommand(reference)
+export function artifactPullCommand(reference: ArtifactReference, profile: RepositoryProfile): string {
+  return artifactRecipe(profile).pullCommand(reference)
 }

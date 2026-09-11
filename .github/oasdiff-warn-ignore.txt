@@ -5,3 +5,11 @@ POST /api/v1/projects/{project}/repositories added the new `opentofu_module` enu
 GET /api/v1/projects/{project}/repositories/{repositoryId} added the new `opentofu_module` enum value to the `profile` response property for the response status `200`
 GET /api/v1/projects/{project}/repository-inventory added the new `opentofu_module` enum value to the `items/items/observedKind` response property for the response status `200`
 POST /api/v1/projects/{project}/repository-inventory-reconciliations added the new `opentofu_module` enum value to the `items/observedKind` response property for the response status `200`
+GET /api/v1/projects/{project}/repositories added the new `helm_chart` enum value to the `items/items/profile` response property for the response status `200`
+GET /api/v1/projects/{project}/repositories added the new `wasm` enum value to the `items/items/profile` response property for the response status `200`
+POST /api/v1/projects/{project}/repositories added the new `helm_chart` enum value to the `profile` response property for the response status `201`
+POST /api/v1/projects/{project}/repositories added the new `wasm` enum value to the `profile` response property for the response status `201`
+GET /api/v1/projects/{project}/repositories/{repositoryId} added the new `helm_chart` enum value to the `profile` response property for the response status `200`
+GET /api/v1/projects/{project}/repositories/{repositoryId} added the new `wasm` enum value to the `profile` response property for the response status `200`
+GET /api/v1/projects/{project}/repository-inventory added the new `wasm` enum value to the `items/items/observedKind` response property for the response status `200`
+POST /api/v1/projects/{project}/repository-inventory-reconciliations added the new `wasm` enum value to the `items/observedKind` response property for the response status `200`

@@ -262,10 +262,13 @@ or total capacity belongs to host/provider monitoring.
   under the compatibility policy. Until then, a contract change to these enums
   needs a `.github/oasdiff-warn-ignore.txt` entry because `OpenAPI
   Compatibility` compares against `main`, not against a release.
-- A newly recognised artifact family is normally expressed as an artifact kind
-  or left to the per-manifest `artifactType` rather than as a new profile. Helm
-  charts are `helm_chart` kind under the `generic_oci` profile; do not add a
-  `helm_chart` or `wasm` profile without a product decision.
+- Profiles cover container images, OpenTofu modules, Helm charts, WebAssembly,
+  and SBOMs; anything else is `generic_oci` with its exact type in the
+  per-manifest `artifactType` and `observedKind`. Add a profile only for a
+  family a user would organise a repository around, and keep the profile and
+  kind names identical where one kind covers the whole family. WebAssembly
+  modules and components deliberately share one `wasm` kind: Grom does not read
+  the binary and the media types do not reliably separate them.
 - The classifier matches both `opentofu` and `terraform` in artifact and media
   types. OpenTofu is the product language and the enum value is
   `opentofu_module`, but terraform-named artifact types such as

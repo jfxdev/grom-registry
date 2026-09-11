@@ -95,7 +95,12 @@ func classifyByValue(value, source, relationship string) *ManifestClassification
 	case strings.Contains(lower, "opentofu") || strings.Contains(lower, "terraform"):
 		result.Kind, result.Profile = constants.ArtifactKindOpenTofuModule, constants.RepositoryProfileOpenTofu
 	case strings.Contains(lower, "helm"):
-		result.Kind, result.Profile = constants.ArtifactKindHelmChart, constants.RepositoryProfileGenericOCI
+		result.Kind, result.Profile = constants.ArtifactKindHelmChart, constants.RepositoryProfileHelmChart
+	// Matches application/wasm layers as well as the config and artifact types
+	// the WebAssembly toolchains stamp, such as application/vnd.wasm.config.v0+json
+	// and application/vnd.bytecodealliance.component.v1+wasm.
+	case strings.Contains(lower, "wasm"):
+		result.Kind, result.Profile = constants.ArtifactKindWASM, constants.RepositoryProfileWASM
 	case strings.Contains(lower, "cosign") || strings.Contains(lower, "notation") ||
 		strings.Contains(lower, "notary") || strings.Contains(lower, "signature") ||
 		strings.Contains(lower, "sigstore"):

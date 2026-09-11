@@ -49,6 +49,37 @@ describe('ArtifactPushBanner', () => {
     expect(wrapper.text()).not.toContain('docker push')
   })
 
+  it('offers helm commands for a Helm chart repository', () => {
+    const wrapper = mount(ArtifactPushBanner, {
+      props: {
+        registryHost: 'registry.example.test',
+        project: 'platform',
+        repository: 'charts/api',
+        profile: 'helm_chart' as const,
+      },
+    })
+
+    expect(wrapper.get('.terminal-command').text()).toContain(
+      'helm push chart.tgz oci://registry.example.test/platform/charts',
+    )
+    expect(wrapper.text()).not.toContain('docker push')
+  })
+
+  it('offers an ORAS push with the wasm media type for a WebAssembly repository', () => {
+    const wrapper = mount(ArtifactPushBanner, {
+      props: {
+        registryHost: 'registry.example.test',
+        project: 'platform',
+        repository: 'components/auth',
+        profile: 'wasm' as const,
+      },
+    })
+
+    const command = wrapper.get('.terminal-command').text()
+    expect(command).toContain('oras push registry.example.test/platform/components/auth:tag')
+    expect(command).toContain('module.wasm:application/wasm')
+  })
+
   it('falls back to ORAS for an unclassified generic artifact repository', () => {
     const wrapper = mount(ArtifactPushBanner, {
       props: {
