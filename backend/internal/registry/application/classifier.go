@@ -1,6 +1,7 @@
 package application
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -47,14 +48,32 @@ func ClassifyManifest(metadata ManifestMetadata) ManifestClassification {
 	}
 	confidence := constants.ClassificationConfidenceLow
 	kind := constants.ArtifactKindUnknownOCI
-	if metadata.ArtifactType != "" || strings.Contains(strings.ToLower(metadata.MediaType), "artifact") {
+	source := "media_type"
+	if metadata.ArtifactType != "" {
+		// An unrecognised but declared artifactType is still a deliberate
+		// statement of intent by the client, so report where the decision
+		// actually came from.
+		confidence = constants.ClassificationConfidenceMedium
+		kind = constants.ArtifactKindGenericOCI
+		source = "artifact_type"
+	} else if strings.Contains(strings.ToLower(metadata.MediaType), "artifact") {
 		confidence = constants.ClassificationConfidenceMedium
 		kind = constants.ArtifactKindGenericOCI
 	}
 	return ManifestClassification{
 		Kind: kind, Profile: constants.RepositoryProfileGenericOCI,
-		Relationship: relationship, Source: "media_type", Confidence: confidence,
+		Relationship: relationship, Source: source, Confidence: confidence,
 	}
+}
+
+// fallbackSignatureTagPattern matches the tag scheme sigstore uses when it
+// attaches a signature, attestation or SBOM without an OCI subject. Such a
+// manifest is tagged and carries an image config, so it would otherwise vote on
+// the repository profile and drag an artifact repository into mixed.
+var fallbackSignatureTagPattern = regexp.MustCompile(`^sha256-[0-9a-f]{64}\.(sig|att|sbom)$`)
+
+func IsFallbackSignatureTag(tag string) bool {
+	return fallbackSignatureTagPattern.MatchString(tag)
 }
 
 func classifyByValue(value, source, relationship string) *ManifestClassification {

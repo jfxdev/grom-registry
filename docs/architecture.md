@@ -9,13 +9,13 @@ and OCI storage. Grom does not store OCI payloads or reimplement the Docker
 Registry protocol.
 
 The supported deployment is one active Grom instance, using SQLite by default or
-PostgreSQL, local Distribution storage, and Docker image push and pull. Grom is
-the only public entry point.
+PostgreSQL, local Distribution storage, and push and pull of both Docker images
+and generic OCI artifacts. Grom is the only public entry point.
 
 ~~~mermaid
 flowchart LR
   Browser["Browser"] --> Grom["Grom: UI, API, authentication, and gateway"]
-  Client["Docker/OCI client"] --> Grom
+  Client["OCI client: Docker, ORAS, Helm"] --> Grom
   Grom --> DB[("SQLite or PostgreSQL")]
   Grom --> Distribution["Private CNCF Distribution"]
   Distribution --> Storage[("Local OCI storage")]
@@ -28,7 +28,7 @@ flowchart LR
 | Component | Responsibility |
 |---|---|
 | Grom | Serves the embedded Vue interface, management API, sessions, /auth/token, the streaming /v2/* gateway, live administrator installation diagnostics, and optional password-reset SMTP delivery. |
-| CNCF Distribution | Implements the OCI/Docker protocol and persists OCI content. |
+| CNCF Distribution | Implements the OCI distribution protocol, including the OCI 1.1 referrers API, and persists OCI content. |
 | SQLite or PostgreSQL | Stores control-plane data and audit history; migrations run before readiness. |
 | Backup agent | Creates and provides recovery points with no network, public ports, or Docker socket. |
 | Recovery UI | A separate mode of the same image, limited to loopback, which restores only empty volumes. |
@@ -102,9 +102,32 @@ never deletes OCI content.
 
 Grom stores manifest, tag, OCI-relationship, and platform metadata, not
 payloads. Reconciliation imports legacy content, updates active and untagged
-records, and keeps disappeared items as missing or deleted history. Profiles are
-inferred passively from tagged primary manifests; referrers such as signatures
-and SBOMs do not change profiles, policies, or authorization.
+records, and keeps disappeared items as missing or deleted history.
+
+A repository's content profile is one of `unknown`, `container_image`,
+`terraform_module`, `sbom`, `generic_oci`, or `mixed`. It is inferred passively
+from tagged primary manifests, from the manifest's `artifactType`, config media
+type, layer media types, and index descriptors in that order. Artifact families
+without a dedicated profile, such as Helm charts and WebAssembly modules, are
+`generic_oci`; their exact type stays visible in the per-manifest `artifactType`
+and `observedKind`. These values are closed enums in the public contract, so a
+newly recognised artifact family is classified as an artifact kind or reported
+through `artifactType`, never by adding a profile value.
+
+Referrers do not change profiles, policies, or authorization. Neither do
+sigstore's tag-based fallback artifacts (`sha256-<digest>.sig`, `.att`, `.sbom`),
+which are tagged primary manifests but describe another artifact rather than the
+repository's own content.
+
+Conflicting primary types produce `mixed` with `profileNeedsReview`. A single
+push never leaves `mixed`; a full inventory reconciliation recomputes the profile
+from the content actually present and is the supported way to recover once the
+conflicting artifact is gone.
+
+Only container images carry an operating system and architecture, which Grom
+reads from the image config blob. Every other leaf manifest is still measured
+from its config and layer descriptors, so a Terraform module or Helm chart
+reports a content size with no platform.
 
 Accounted usage is the logical sum of live, unique OCI descriptors in a scope.
 It is neither the physical volume size nor the space a garbage collection must

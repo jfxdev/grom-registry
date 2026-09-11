@@ -107,7 +107,7 @@ function closeSecret() {
     <div class="keys-header">
       <div>
         <h3 class="text-sm font-semibold">Access keys</h3>
-        <p class="mt-1 text-xs text-muted-foreground">Use <strong>{{ account.username }}</strong> as the Docker username and a key as the password.</p>
+        <p class="mt-1 text-xs text-muted-foreground">Use <strong>{{ account.username }}</strong> as the registry username and a key as the password. It works with Docker, ORAS, Helm and any other OCI client.</p>
       </div>
       <Button size="sm" :disabled="!canCreateKey" @click="openKeyDialog($event)"><Plus :size="15" /> New key</Button>
     </div>

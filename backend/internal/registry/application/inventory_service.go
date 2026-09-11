@@ -121,11 +121,21 @@ func (s *InventoryService) ObservePush(ctx context.Context, fullRepository, refe
 		s.markStorageStale(ctx, target.ID)
 		return err
 	}
-	if tag != "" && classification.Relationship == constants.ArtifactRelationshipPrimary &&
+	if votesOnProfile(tag, classification) &&
 		registrydomain.ApplyInferredProfile(target, classification.Profile, classification.Confidence, now) {
 		return s.store.SaveRepositoryProfile(ctx, target)
 	}
 	return nil
+}
+
+// votesOnProfile reports whether an observation may influence the repository
+// profile. Only tagged primary manifests vote, and sigstore's tag-based
+// fallback artifacts are excluded because they describe another artifact rather
+// than the repository's own content.
+func votesOnProfile(tag string, classification ManifestClassification) bool {
+	return tag != "" &&
+		classification.Relationship == constants.ArtifactRelationshipPrimary &&
+		!IsFallbackSignatureTag(tag)
 }
 
 func (s *InventoryService) Reconcile(
@@ -153,6 +163,16 @@ func (s *InventoryService) Reconcile(
 	digests := map[string]struct{}{}
 	observations := make([]registrydomain.ManifestObservation, 0, len(tags))
 	profileChanged := false
+	// A reconciliation replays every tagged manifest, so it is the one moment a
+	// repository can leave the absorbing mixed profile once the conflicting
+	// artifact is gone. Recompute from a clean slate and keep the previous value
+	// only to decide whether anything actually has to be persisted.
+	previousProfile := target.Profile
+	previousConfidence := target.ProfileConfidence
+	previousNeedsReview := target.ProfileNeedsReview
+	if target.Profile == constants.RepositoryProfileMixed {
+		registrydomain.ResetInferredProfile(target)
+	}
 	for _, tag := range tags {
 		metadata, fetchErr := s.distribution.FetchManifest(ctx, fullRepository, tag)
 		if fetchErr != nil {
@@ -166,7 +186,7 @@ func (s *InventoryService) Reconcile(
 			return nil, err
 		}
 		observations = append(observations, observed...)
-		if classification.Relationship == constants.ArtifactRelationshipPrimary &&
+		if votesOnProfile(tag, classification) &&
 			registrydomain.ApplyInferredProfile(target, classification.Profile, classification.Confidence, now) {
 			profileChanged = true
 		}
@@ -274,7 +294,9 @@ func (s *InventoryService) Reconcile(
 		s.markStorageStale(ctx, target.ID)
 		return nil, err
 	}
-	if profileChanged {
+	if profileChanged || target.Profile != previousProfile ||
+		target.ProfileConfidence != previousConfidence ||
+		target.ProfileNeedsReview != previousNeedsReview {
 		if err := s.store.SaveRepositoryProfile(ctx, target); err != nil {
 			return nil, err
 		}

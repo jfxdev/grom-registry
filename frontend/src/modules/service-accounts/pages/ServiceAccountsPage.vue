@@ -197,7 +197,7 @@ function confirmDisable() {
     <div v-if="modalOpen" class="modal-backdrop" @click.self="modalOpen = false">
       <form class="modal form-stack" @submit.prevent="create.mutate({ name, username, description })">
         <div class="flex items-start justify-between">
-          <div><h2 class="text-lg font-semibold">New service account</h2><p class="mt-1 text-sm text-muted-foreground">Use a lowercase username for Docker login.</p></div>
+          <div><h2 class="text-lg font-semibold">New service account</h2><p class="mt-1 text-sm text-muted-foreground">Use a lowercase username for registry login.</p></div>
           <Button variant="ghost" size="icon" @click="modalOpen = false"><X :size="18" /></Button>
         </div>
         <label class="field-label">Display name<Input v-model="name" required /></label>

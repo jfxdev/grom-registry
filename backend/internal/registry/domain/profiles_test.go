@@ -34,6 +34,35 @@ func TestApplyInferredProfileEvolution(t *testing.T) {
 	}
 }
 
+func TestResetInferredProfileLetsAReconciliationLeaveMixed(t *testing.T) {
+	now := time.Now().UTC()
+	repository := &Repository{
+		Profile:            constants.RepositoryProfileMixed,
+		ProfileSource:      constants.ProfileSourceInferred,
+		ProfileConfidence:  constants.ClassificationConfidenceHigh,
+		ProfileInferredAt:  &now,
+		ProfileNeedsReview: true,
+	}
+	if ApplyInferredProfile(repository, constants.RepositoryProfileTerraform, constants.ClassificationConfidenceHigh, now) {
+		t.Fatal("mixed must stay absorbing for a single observation")
+	}
+
+	ResetInferredProfile(repository)
+	if repository.Profile != constants.RepositoryProfileUnknown ||
+		repository.ProfileSource != constants.ProfileSourceNone ||
+		repository.ProfileConfidence != constants.ClassificationConfidenceNone ||
+		repository.ProfileInferredAt != nil || repository.ProfileNeedsReview {
+		t.Fatalf("unexpected reset profile: %#v", repository)
+	}
+
+	if !ApplyInferredProfile(repository, constants.RepositoryProfileTerraform, constants.ClassificationConfidenceHigh, now.Add(time.Minute)) {
+		t.Fatal("expected a replayed observation to infer the profile again")
+	}
+	if repository.Profile != constants.RepositoryProfileTerraform || repository.ProfileNeedsReview {
+		t.Fatalf("expected the repository to recover a specific profile: %#v", repository)
+	}
+}
+
 func TestStrongerInferenceReplacesAnUncertainSpecificProfile(t *testing.T) {
 	now := time.Now().UTC()
 	repository := &Repository{

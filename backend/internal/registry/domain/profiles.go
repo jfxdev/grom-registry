@@ -26,17 +26,25 @@ func ApplyInferredProfile(repository *Repository, candidate, confidence string, 
 		setInferredProfile(repository, candidate, confidence, inferredAt, false)
 		return true
 	}
-	if repository.Profile == constants.RepositoryProfileGenericOCI &&
-		confidenceRank(repository.ProfileConfidence) < confidenceRank(confidence) {
-		setInferredProfile(repository, candidate, confidence, inferredAt, false)
-		return true
-	}
 	if candidate == constants.RepositoryProfileGenericOCI &&
 		confidenceRank(confidence) <= confidenceRank(repository.ProfileConfidence) {
 		return false
 	}
 	setInferredProfile(repository, constants.RepositoryProfileMixed, constants.ClassificationConfidenceHigh, inferredAt, true)
 	return true
+}
+
+// ResetInferredProfile clears a repository's inferred profile so a full
+// reconciliation can recompute it from the content that is actually present.
+// ApplyInferredProfile treats mixed as absorbing, which is correct for a single
+// push but would otherwise leave a repository mixed forever after the
+// conflicting artifact is removed.
+func ResetInferredProfile(repository *Repository) {
+	repository.Profile = constants.RepositoryProfileUnknown
+	repository.ProfileSource = constants.ProfileSourceNone
+	repository.ProfileConfidence = constants.ClassificationConfidenceNone
+	repository.ProfileInferredAt = nil
+	repository.ProfileNeedsReview = false
 }
 
 func setInferredProfile(repository *Repository, profile, confidence string, inferredAt time.Time, needsReview bool) {
