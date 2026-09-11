@@ -206,7 +206,7 @@ func (s *TokenService) EvaluateManifestPut(ctx context.Context, fullRepository, 
 
 // splitScopeParameters expands the space-delimited scope form. Clients may send
 // one scope per query parameter or join several scopes into a single parameter
-// separated by spaces; oras-go, and therefore ORAS, Helm and Terraform, uses the
+// separated by spaces; oras-go, and therefore ORAS, Helm and OpenTofu, uses the
 // joined form whenever more than one repository is involved.
 func splitScopeParameters(scopes []string) []string {
 	expanded := make([]string, 0, len(scopes))

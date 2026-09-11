@@ -24,9 +24,9 @@ func TestClassifyManifest(t *testing.T) {
 			relationship: constants.ArtifactRelationshipPrimary, confidence: constants.ClassificationConfidenceHigh,
 		},
 		{
-			name:     "terraform artifact type",
+			name:     "terraform-named artifact type stays a module",
 			metadata: ManifestMetadata{ArtifactType: "application/vnd.cncf.oras.terraform.module.v1"},
-			kind:     constants.ArtifactKindTerraformModule, profile: constants.RepositoryProfileTerraform,
+			kind:     constants.ArtifactKindOpenTofuModule, profile: constants.RepositoryProfileOpenTofu,
 			relationship: constants.ArtifactRelationshipPrimary, confidence: constants.ClassificationConfidenceHigh,
 		},
 		{
@@ -60,7 +60,7 @@ func TestClassifyManifest(t *testing.T) {
 				ConfigMediaType: "application/vnd.oci.empty.v1+json",
 				LayerMediaTypes: []string{"archive/tar+gzip"},
 			},
-			kind: constants.ArtifactKindTerraformModule, profile: constants.RepositoryProfileTerraform,
+			kind: constants.ArtifactKindOpenTofuModule, profile: constants.RepositoryProfileOpenTofu,
 			relationship: constants.ArtifactRelationshipPrimary, confidence: constants.ClassificationConfidenceHigh,
 		},
 		{

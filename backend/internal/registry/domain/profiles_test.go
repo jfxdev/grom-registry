@@ -17,10 +17,10 @@ func TestApplyInferredProfileEvolution(t *testing.T) {
 	if !ApplyInferredProfile(repository, constants.RepositoryProfileGenericOCI, constants.ClassificationConfidenceLow, now) {
 		t.Fatal("expected initial inference")
 	}
-	if !ApplyInferredProfile(repository, constants.RepositoryProfileTerraform, constants.ClassificationConfidenceHigh, now.Add(time.Minute)) {
+	if !ApplyInferredProfile(repository, constants.RepositoryProfileOpenTofu, constants.ClassificationConfidenceHigh, now.Add(time.Minute)) {
 		t.Fatal("expected a stronger specific classification to replace generic OCI")
 	}
-	if repository.Profile != constants.RepositoryProfileTerraform || repository.ProfileNeedsReview {
+	if repository.Profile != constants.RepositoryProfileOpenTofu || repository.ProfileNeedsReview {
 		t.Fatalf("unexpected upgraded profile: %#v", repository)
 	}
 	if ApplyInferredProfile(repository, constants.RepositoryProfileGenericOCI, constants.ClassificationConfidenceLow, now.Add(2*time.Minute)) {
@@ -43,7 +43,7 @@ func TestResetInferredProfileLetsAReconciliationLeaveMixed(t *testing.T) {
 		ProfileInferredAt:  &now,
 		ProfileNeedsReview: true,
 	}
-	if ApplyInferredProfile(repository, constants.RepositoryProfileTerraform, constants.ClassificationConfidenceHigh, now) {
+	if ApplyInferredProfile(repository, constants.RepositoryProfileOpenTofu, constants.ClassificationConfidenceHigh, now) {
 		t.Fatal("mixed must stay absorbing for a single observation")
 	}
 
@@ -55,10 +55,10 @@ func TestResetInferredProfileLetsAReconciliationLeaveMixed(t *testing.T) {
 		t.Fatalf("unexpected reset profile: %#v", repository)
 	}
 
-	if !ApplyInferredProfile(repository, constants.RepositoryProfileTerraform, constants.ClassificationConfidenceHigh, now.Add(time.Minute)) {
+	if !ApplyInferredProfile(repository, constants.RepositoryProfileOpenTofu, constants.ClassificationConfidenceHigh, now.Add(time.Minute)) {
 		t.Fatal("expected a replayed observation to infer the profile again")
 	}
-	if repository.Profile != constants.RepositoryProfileTerraform || repository.ProfileNeedsReview {
+	if repository.Profile != constants.RepositoryProfileOpenTofu || repository.ProfileNeedsReview {
 		t.Fatalf("expected the repository to recover a specific profile: %#v", repository)
 	}
 }
@@ -70,10 +70,10 @@ func TestStrongerInferenceReplacesAnUncertainSpecificProfile(t *testing.T) {
 		ProfileSource:     constants.ProfileSourceInferred,
 		ProfileConfidence: constants.ClassificationConfidenceMedium,
 	}
-	if !ApplyInferredProfile(repository, constants.RepositoryProfileTerraform, constants.ClassificationConfidenceHigh, now) {
+	if !ApplyInferredProfile(repository, constants.RepositoryProfileOpenTofu, constants.ClassificationConfidenceHigh, now) {
 		t.Fatal("expected stronger evidence to replace an uncertain inference")
 	}
-	if repository.Profile != constants.RepositoryProfileTerraform || repository.ProfileNeedsReview {
+	if repository.Profile != constants.RepositoryProfileOpenTofu || repository.ProfileNeedsReview {
 		t.Fatalf("unexpected corrected profile: %#v", repository)
 	}
 }

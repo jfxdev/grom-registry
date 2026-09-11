@@ -105,7 +105,9 @@ payloads. Reconciliation imports legacy content, updates active and untagged
 records, and keeps disappeared items as missing or deleted history.
 
 A repository's content profile is one of `unknown`, `container_image`,
-`terraform_module`, `sbom`, `generic_oci`, or `mixed`. It is inferred passively
+`terraform_module` (OpenTofu modules), `sbom`, `generic_oci`, or `mixed`. The
+OpenTofu value reads `terraform_module` because the enum is frozen in the v1
+contract. It is inferred passively
 from tagged primary manifests, from the manifest's `artifactType`, config media
 type, layer media types, and index descriptors in that order. Artifact families
 without a dedicated profile, such as Helm charts and WebAssembly modules, are
@@ -126,7 +128,7 @@ conflicting artifact is gone.
 
 Only container images carry an operating system and architecture, which Grom
 reads from the image config blob. Every other leaf manifest is still measured
-from its config and layer descriptors, so a Terraform module or Helm chart
+from its config and layer descriptors, so an OpenTofu module or Helm chart
 reports a content size with no platform.
 
 Accounted usage is the logical sum of live, unique OCI descriptors in a scope.

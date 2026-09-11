@@ -9,7 +9,7 @@ import (
 )
 
 func TestScopeParametersAcceptTheSpaceDelimitedForm(t *testing.T) {
-	// oras-go, and therefore ORAS, Helm and Terraform, joins several scopes into
+	// oras-go, and therefore ORAS, Helm and OpenTofu, joins several scopes into
 	// one parameter separated by spaces whenever more than one repository is
 	// involved. Docker sends one parameter per scope. Both must parse alike.
 	joined := splitScopeParameters([]string{"repository:acme/modules:pull,push repository:acme/charts:pull"})

@@ -434,7 +434,7 @@ func (c *Client) fetchManifestTree(ctx context.Context, repository, reference, t
 	}
 	// Every leaf manifest records one self-referencing row so its content size is
 	// known. Operating-system and architecture are read from the config blob only
-	// for container images; a Terraform module, Helm chart or any other artifact
+	// for container images; an OpenTofu module, Helm chart or any other artifact
 	// keeps them empty and is still measured.
 	if len(document.Manifests) == 0 {
 		platform := registrydomain.ManifestPlatform{}

@@ -75,11 +75,11 @@ The generic-artifact journey in `backend/tests/registrye2e/generic_artifact_e2e_
 drives the real `oras` CLI, installed by `.github/workflows/registry-e2e.yml`
 from a checksum-pinned release. It uses `--plain-http` against the loopback
 stack and its own `--registry-config` file, never the shared Docker credential
-store; keep those two flags on every `oras` invocation. A real `terraform init`
-is deliberately not part of this journey: the isolated stack is plain-HTTP
-loopback and Terraform's OCI client expects HTTPS, so the journey proves the
-artifact ORAS publishes and Terraform consumes, and the README documents the
-Terraform side instead. Do not add TLS to the E2E stack just to run Terraform.
+store; keep those two flags on every `oras` invocation. A real `tofu init` is
+deliberately not part of this journey: the isolated stack is plain-HTTP loopback
+and OpenTofu's OCI client expects HTTPS, so the journey proves the artifact ORAS
+publishes and OpenTofu consumes, and the README documents the OpenTofu side
+instead. Do not add TLS to the E2E stack just to run OpenTofu.
 Keep `oras repo ls` and `oras manifest delete` out of scope: external clients
 never receive `delete`, and catalog scope is deliberately dropped because
 Distribution's catalog cannot be filtered per token.
@@ -250,9 +250,9 @@ or total capacity belongs to host/provider monitoring.
 - Deleting an image index may additionally delete only its untagged child manifests proven unreferenced by another live index, tag, or OCI referrer. Keep this distinct from forbidden OCI subject/referrer cascade deletion, expose the exact child set in the preview, and revalidate every digest before deletion.
 - Manual artifact deletion also blocks subjects with referrers and referrer artifacts. It must persist the operation, update inventory, and audit the outcome; do not bypass the application service from an HTTP handler.
 - Lifecycle manifest deletion and Distribution blob garbage collection remain separate operations.
-- Grom is a generic OCI registry, not only a container registry. Terraform and
-  OpenTofu modules, Helm charts, SBOMs, signatures, and arbitrary ORAS artifacts
-  are supported first-class content. The `/v2/*` gateway must stay a transparent
+- Grom is a generic OCI registry, not only a container registry. OpenTofu
+  modules, Helm charts, SBOMs, signatures, and arbitrary ORAS artifacts are
+  supported first-class content. The `/v2/*` gateway must stay a transparent
   stream with no method allowlist, media-type check, or body size limit, and
   `deploy/distribution/config.yml` must not gain a manifest `validation` block
   that would reject arbitrary artifact types.
@@ -261,7 +261,12 @@ or total capacity belongs to host/provider monitoring.
   recognised artifact family is expressed as an artifact kind or left to the
   per-manifest `artifactType`, never by adding a profile value. Do not add
   `helm_chart` or `wasm` profiles; Helm charts are `helm_chart` kind under the
-  `generic_oci` profile.
+  `generic_oci` profile. The OpenTofu module value likewise stays
+  `terraform_module` on the wire: the product language is OpenTofu, the enum
+  value is frozen, and the Go constants are named `RepositoryProfileOpenTofu` and
+  `ArtifactKindOpenTofuModule` over that frozen value. The classifier keeps
+  matching both `opentofu` and `terraform` in artifact and media types, because
+  terraform-named artifact types are already published.
 - Repository profiles are inferred passively from tagged primary OCI manifests. Referrers such as SBOMs and signatures never change the repository profile. Neither do sigstore's tag-based fallback artifacts (`sha256-<digest>.sig`, `.att`, `.sbom`), which are tagged primary manifests describing other content; `IsFallbackSignatureTag` excludes them from profile voting.
 - Passive profile inference must not enable policies or reject pushes. Conflicting specific primary types produce the `mixed` profile with `profileNeedsReview=true`. `mixed` stays absorbing for a single push; only a full inventory reconciliation may reset and recompute it, which is the supported escape from `mixed`.
 - Every leaf manifest records one self-referencing platform row so generic

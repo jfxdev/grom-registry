@@ -14,9 +14,9 @@ import (
 	openapi "github.com/jfxdev/grom/backend/internal/generated/openapi"
 )
 
-// terraformModuleArtifactType is what ORAS-based publishing tools stamp on a
-// Terraform or OpenTofu module package.
-const terraformModuleArtifactType = "application/vnd.opentofu.modulepkg"
+// openTofuModuleArtifactType is what ORAS-based publishing tools stamp on a
+// packaged OpenTofu module.
+const openTofuModuleArtifactType = "application/vnd.opentofu.modulepkg"
 
 type orasClient struct {
 	registry  string
@@ -59,7 +59,7 @@ func (o *orasClient) login(t *testing.T) {
 	}
 }
 
-// writeModulePackage writes a deterministic stand-in for a packaged Terraform
+// writeModulePackage writes a deterministic stand-in for a packaged OpenTofu
 // module and returns its directory and file name.
 func writeModulePackage(t *testing.T, name, contents string) (string, string) {
 	t.Helper()
@@ -113,7 +113,7 @@ func (o *orasClient) pull(t *testing.T, reference string) string {
 }
 
 // TestGenericOCIArtifactJourney proves Grom serves arbitrary OCI artifacts, not
-// only container images: a real ORAS client publishes a Terraform module into a
+// only container images: a real ORAS client publishes an OpenTofu module into a
 // repository that does not exist yet, the control plane classifies and measures
 // it, a fresh credential directory pulls it back byte for byte, and an attached
 // referrer is inventoried without changing the repository's profile.
@@ -133,11 +133,11 @@ func TestGenericOCIArtifactJourney(t *testing.T) {
 	const repository = "platform-modules/vpc"
 	client := newOrasClient(t, stack, writer)
 
-	moduleBody := "terraform-module-fixture\nvariable \"cidr\" {}\n"
+	moduleBody := "opentofu-module-fixture\nvariable \"cidr\" {}\n"
 	directory, file := writeModulePackage(t, "module.tgz", moduleBody)
 
 	// The repository does not exist yet: the first push must create it.
-	client.pushArtifact(t, repository+":1.0.0", terraformModuleArtifactType, directory, file)
+	client.pushArtifact(t, repository+":1.0.0", openTofuModuleArtifactType, directory, file)
 
 	repositories := admin.repositories(t, "platform-modules")
 	var module *openapi.Repository
@@ -152,8 +152,10 @@ func TestGenericOCIArtifactJourney(t *testing.T) {
 	if module.CreationSource != "push" {
 		t.Fatalf("expected the repository to record a push creation source, got %q", module.CreationSource)
 	}
+	// The generated identifier still reads TerraformModule: the enum value is
+	// frozen in the v1 contract even though the product language is OpenTofu.
 	if module.Profile != openapi.RepositoryProfileTerraformModule {
-		t.Fatalf("expected a terraform_module profile, got %q", module.Profile)
+		t.Fatalf("expected the OpenTofu module profile, got %q", module.Profile)
 	}
 	if module.ProfileNeedsReview {
 		t.Fatal("a single artifact type must not require profile review")
@@ -161,11 +163,11 @@ func TestGenericOCIArtifactJourney(t *testing.T) {
 
 	inventory := admin.inventory(t, "platform-modules", "vpc")
 	primary := findPrimaryManifest(t, inventory)
-	if primary.ArtifactType == nil || *primary.ArtifactType != terraformModuleArtifactType {
+	if primary.ArtifactType == nil || *primary.ArtifactType != openTofuModuleArtifactType {
 		t.Fatalf("expected the artifact type to be preserved verbatim, got %+v", primary.ArtifactType)
 	}
 	if primary.ObservedKind != openapi.ArtifactKindTerraformModule {
-		t.Fatalf("expected a terraform_module kind, got %q", primary.ObservedKind)
+		t.Fatalf("expected the OpenTofu module kind, got %q", primary.ObservedKind)
 	}
 	// Without the leaf-manifest measurement an artifact with no image config
 	// reports nothing at all, which is what this assertion guards.
@@ -174,7 +176,7 @@ func TestGenericOCIArtifactJourney(t *testing.T) {
 	}
 	for _, platform := range primary.Platforms {
 		if platform.Os != "" || platform.Architecture != "" {
-			t.Fatalf("a Terraform module must not claim a platform, got %+v", platform)
+			t.Fatalf("an OpenTofu module must not claim a platform, got %+v", platform)
 		}
 	}
 

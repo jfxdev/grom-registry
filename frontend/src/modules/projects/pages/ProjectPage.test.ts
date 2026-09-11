@@ -387,7 +387,7 @@ describe('ProjectPage membership management', () => {
     expect(screen.getAllByText('Container image').length).toBeGreaterThan(0)
   })
 
-  it('offers an ORAS pull command for a Terraform module repository', async () => {
+  it('offers an ORAS pull command for an OpenTofu module repository', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     mocks.listRepositories.mockResolvedValue([{
@@ -408,7 +408,7 @@ describe('ProjectPage membership management', () => {
     renderPage()
 
     expect(await screen.findByText('1.0.0')).toBeTruthy()
-    expect(screen.getAllByText('Terraform module').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('OpenTofu module').length).toBeGreaterThan(0)
     expect(screen.queryByRole('columnheader', { name: 'OS/ARCH' })).toBeNull()
 
     await fireEvent.click(screen.getByRole('button', { name: /Copy pull/ }))

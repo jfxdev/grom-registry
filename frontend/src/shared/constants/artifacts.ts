@@ -1,9 +1,11 @@
 import type { ArtifactKind, RepositoryProfile } from '@/shared/api/models'
 
+// The wire value stays terraform_module: RepositoryProfile is a closed enum in
+// the v1 contract, so only the label follows the product language.
 export const REPOSITORY_PROFILE_LABELS: Record<RepositoryProfile, string> = {
   unknown: 'Unknown',
   container_image: 'Container image',
-  terraform_module: 'Terraform module',
+  terraform_module: 'OpenTofu module',
   sbom: 'SBOM',
   generic_oci: 'Generic OCI artifact',
   mixed: 'Mixed',
@@ -12,7 +14,7 @@ export const REPOSITORY_PROFILE_LABELS: Record<RepositoryProfile, string> = {
 export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
   container_image: 'Container image',
   image_index: 'Image index',
-  terraform_module: 'Terraform module',
+  terraform_module: 'OpenTofu module',
   sbom_spdx: 'SBOM (SPDX)',
   sbom_cyclonedx: 'SBOM (CycloneDX)',
   signature: 'Signature',
@@ -69,13 +71,13 @@ const ORAS: ArtifactRecipe = {
   pullCommand: reference => `oras pull ${tagged(reference)}`,
 }
 
-const TERRAFORM: ArtifactRecipe = {
+const OPENTOFU: ArtifactRecipe = {
   title: 'Push a module',
-  description: 'Publish a Terraform or OpenTofu module package to this repository.',
+  description: 'Publish an OpenTofu module package to this repository.',
   pushCommand: reference =>
     `oras push ${tagged(reference)} \\\n  --artifact-type application/vnd.opentofu.modulepkg \\\n  module.tgz:archive/tar+gzip`,
   pullCommand: reference => `oras pull ${tagged(reference)}`,
-  note: 'Consume the module with an oci:// source in Terraform 1.14 or later, or in OpenTofu.',
+  note: 'Consume the module from an oci:// module source in OpenTofu.',
 }
 
 const HELM: ArtifactRecipe = {
@@ -93,7 +95,7 @@ function parentPath(path: string): string {
 const PROFILE_RECIPES: Record<RepositoryProfile, ArtifactRecipe> = {
   unknown: DOCKER,
   container_image: DOCKER,
-  terraform_module: TERRAFORM,
+  terraform_module: OPENTOFU,
   sbom: ORAS,
   generic_oci: ORAS,
   mixed: ORAS,

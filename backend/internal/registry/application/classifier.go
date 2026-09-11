@@ -89,8 +89,11 @@ func classifyByValue(value, source, relationship string) *ManifestClassification
 		result.Kind, result.Profile = constants.ArtifactKindSBOMCycloneDX, constants.RepositoryProfileSBOM
 	case strings.Contains(lower, "spdx") || strings.Contains(lower, "sbom"):
 		result.Kind, result.Profile = constants.ArtifactKindSBOMSPDX, constants.RepositoryProfileSBOM
-	case strings.Contains(lower, "terraform") || strings.Contains(lower, "opentofu"):
-		result.Kind, result.Profile = constants.ArtifactKindTerraformModule, constants.RepositoryProfileTerraform
+	// Both keywords stay matched: OpenTofu is the product language, but
+	// terraform-named artifact types are already published and must keep
+	// classifying as module packages.
+	case strings.Contains(lower, "opentofu") || strings.Contains(lower, "terraform"):
+		result.Kind, result.Profile = constants.ArtifactKindOpenTofuModule, constants.RepositoryProfileOpenTofu
 	case strings.Contains(lower, "helm"):
 		result.Kind, result.Profile = constants.ArtifactKindHelmChart, constants.RepositoryProfileGenericOCI
 	case strings.Contains(lower, "cosign") || strings.Contains(lower, "notation") ||

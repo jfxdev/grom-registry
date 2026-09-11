@@ -32,7 +32,7 @@ describe('ArtifactPushBanner', () => {
     expect(wrapper.get('button[aria-label="Copied"]').text()).toContain('Copied')
   })
 
-  it('offers an ORAS module push and a Terraform follow-up for a Terraform repository', () => {
+  it('offers an ORAS module push and an OpenTofu follow-up for an OpenTofu repository', () => {
     const wrapper = mount(ArtifactPushBanner, {
       props: {
         registryHost: 'registry.example.test',
@@ -45,7 +45,7 @@ describe('ArtifactPushBanner', () => {
     const command = wrapper.get('.terminal-command').text()
     expect(command).toContain('oras push registry.example.test/platform/modules/vpc:tag')
     expect(command).toContain('--artifact-type application/vnd.opentofu.modulepkg')
-    expect(wrapper.text()).toContain('oci:// source in Terraform 1.14')
+    expect(wrapper.text()).toContain('oci:// module source in OpenTofu')
     expect(wrapper.text()).not.toContain('docker push')
   })
 

@@ -41,7 +41,7 @@ jobs:
           docker compose version
 
       # The generic-artifact journey drives a real ORAS client, which is how
-      # Terraform modules, Helm charts and SBOMs are actually published.
+      # OpenTofu modules, Helm charts and SBOMs are actually published.
       - name: Install the ORAS CLI
         shell: bash
         env:

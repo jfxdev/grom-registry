@@ -461,7 +461,7 @@ function platformsForTag(tag: string): ManifestPlatform[] {
   return manifestForTag(tag)?.platforms ?? []
 }
 
-// Only container images carry an operating system and architecture. A Terraform
+// Only container images carry an operating system and architecture. An OpenTofu
 // module, Helm chart or any other artifact is measured but has no platform, so
 // the column is dropped rather than filled with separators.
 function hasPlatformDetail(tag: string): boolean {

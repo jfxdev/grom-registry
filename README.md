@@ -33,7 +33,7 @@ web interface for access, images, and recovery.
 - [Installation](#installation)
   - [Local quick start](#local-quick-start)
   - [Push an image](#push-an-image)
-  - [Push a Terraform module or other OCI artifact](#push-a-terraform-module-or-other-oci-artifact)
+  - [Push an OpenTofu module or other OCI artifact](#push-an-opentofu-module-or-other-oci-artifact)
   - [Deployment profiles](#deployment-profiles)
   - [Bind-mounted volumes](#bind-mounted-volumes)
 - [Operations](#operations)
@@ -52,7 +52,7 @@ web interface for access, images, and recovery.
 ### Features
 
 - Project-based push and pull for Docker images and generic OCI artifacts
-  such as Terraform modules, Helm charts, and SBOMs.
+  such as OpenTofu modules, Helm charts, and SBOMs.
 - Reader, Writer, and Admin roles.
 - Service accounts with reveal-once, revocable access keys.
 - Web management for users, projects, repositories, and policies.
@@ -103,7 +103,7 @@ docker tag my-image:latest localhost:8080/my-project/my-image:latest
 docker push localhost:8080/my-project/my-image:latest
 ```
 
-### Push a Terraform module or other OCI artifact
+### Push an OpenTofu module or other OCI artifact
 
 Grom stores any OCI artifact, not only container images. The same service
 account key works as the password for every OCI client.
@@ -115,14 +115,13 @@ oras push localhost:8080/my-project/my-module:1.0.0 \
   module.tgz:archive/tar+gzip
 ```
 
-Terraform 1.14 or later and OpenTofu can consume the module directly from an
-`oci://` module source; follow your tool's current documentation for the exact
-source syntax and credential configuration. Note that OCI clients normally
-require HTTPS, so a plain-HTTP `localhost` registry is for local experiments
-only.
+OpenTofu consumes the module directly from an `oci://` module source; follow
+the OpenTofu documentation for the exact source syntax and credential
+configuration. Note that OCI clients normally require HTTPS, so a plain-HTTP
+`localhost` registry is for local experiments only.
 
 Grom infers a repository's content profile from what is pushed, so the web UI
-shows `Terraform module` for this repository and offers ORAS commands rather
+shows `OpenTofu module` for this repository and offers ORAS commands rather
 than Docker ones. Helm charts (`helm push`), SBOMs, signatures, and arbitrary
 `oras push` artifacts work the same way; anything Grom does not recognise is
 kept and shown as a generic OCI artifact with its declared `artifactType`.

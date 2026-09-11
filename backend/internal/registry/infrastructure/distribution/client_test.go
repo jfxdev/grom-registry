@@ -569,7 +569,7 @@ func TestListReferrersTreatsAMissingSubjectAsEmpty(t *testing.T) {
 }
 
 func TestFetchManifestMeasuresGenericArtifactsWithoutAnImageConfig(t *testing.T) {
-	// An ORAS-pushed Terraform module carries the OCI empty config, so there is
+	// An ORAS-pushed OpenTofu module carries the OCI empty config, so there is
 	// no image config blob to read a platform from. It must still be measured.
 	moduleJSON := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","artifactType":"application/vnd.opentofu.modulepkg","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"sha256:empty","size":2},"layers":[{"mediaType":"archive/tar+gzip","digest":"sha256:module","size":4096}]}`
 	blobRequests := 0

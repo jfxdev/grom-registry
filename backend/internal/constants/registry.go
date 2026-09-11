@@ -17,10 +17,13 @@ const (
 
 	RepositoryProfileUnknown        = "unknown"
 	RepositoryProfileContainerImage = "container_image"
-	RepositoryProfileTerraform      = "terraform_module"
-	RepositoryProfileSBOM           = "sbom"
-	RepositoryProfileGenericOCI     = "generic_oci"
-	RepositoryProfileMixed          = "mixed"
+	// The OpenTofu module value reads terraform_module because RepositoryProfile
+	// is a closed enum in the v1 contract and renaming a value is a breaking
+	// change. The product language is OpenTofu; the wire value is frozen.
+	RepositoryProfileOpenTofu   = "terraform_module"
+	RepositoryProfileSBOM       = "sbom"
+	RepositoryProfileGenericOCI = "generic_oci"
+	RepositoryProfileMixed      = "mixed"
 
 	ProfileSourceNone     = "none"
 	ProfileSourceInferred = "inferred"
@@ -30,15 +33,15 @@ const (
 	ClassificationConfidenceMedium = "medium"
 	ClassificationConfidenceHigh   = "high"
 
-	ArtifactKindContainerImage  = "container_image"
-	ArtifactKindImageIndex      = "image_index"
-	ArtifactKindTerraformModule = "terraform_module"
-	ArtifactKindSBOMSPDX        = "sbom_spdx"
-	ArtifactKindSBOMCycloneDX   = "sbom_cyclonedx"
-	ArtifactKindSignature       = "signature"
-	ArtifactKindHelmChart       = "helm_chart"
-	ArtifactKindGenericOCI      = "generic_oci"
-	ArtifactKindUnknownOCI      = "unknown_oci"
+	ArtifactKindContainerImage = "container_image"
+	ArtifactKindImageIndex     = "image_index"
+	ArtifactKindOpenTofuModule = "terraform_module"
+	ArtifactKindSBOMSPDX       = "sbom_spdx"
+	ArtifactKindSBOMCycloneDX  = "sbom_cyclonedx"
+	ArtifactKindSignature      = "signature"
+	ArtifactKindHelmChart      = "helm_chart"
+	ArtifactKindGenericOCI     = "generic_oci"
+	ArtifactKindUnknownOCI     = "unknown_oci"
 
 	ArtifactRelationshipPrimary  = "primary"
 	ArtifactRelationshipReferrer = "referrer"
