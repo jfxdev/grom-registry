@@ -17,7 +17,9 @@ const (
 
 	RepositoryProfileUnknown        = "unknown"
 	RepositoryProfileContainerImage = "container_image"
-	RepositoryProfileTerraform      = "terraform_module"
+	RepositoryProfileOpenTofu       = "opentofu_module"
+	RepositoryProfileHelmChart      = "helm_chart"
+	RepositoryProfileWASM           = "wasm"
 	RepositoryProfileSBOM           = "sbom"
 	RepositoryProfileGenericOCI     = "generic_oci"
 	RepositoryProfileMixed          = "mixed"
@@ -30,15 +32,18 @@ const (
 	ClassificationConfidenceMedium = "medium"
 	ClassificationConfidenceHigh   = "high"
 
-	ArtifactKindContainerImage  = "container_image"
-	ArtifactKindImageIndex      = "image_index"
-	ArtifactKindTerraformModule = "terraform_module"
-	ArtifactKindSBOMSPDX        = "sbom_spdx"
-	ArtifactKindSBOMCycloneDX   = "sbom_cyclonedx"
-	ArtifactKindSignature       = "signature"
-	ArtifactKindHelmChart       = "helm_chart"
-	ArtifactKindGenericOCI      = "generic_oci"
-	ArtifactKindUnknownOCI      = "unknown_oci"
+	ArtifactKindContainerImage = "container_image"
+	ArtifactKindImageIndex     = "image_index"
+	ArtifactKindOpenTofuModule = "opentofu_module"
+	ArtifactKindHelmChart      = "helm_chart"
+	// WebAssembly modules and components share one kind: Grom does not inspect
+	// the binary, and the media types in use do not reliably separate them.
+	ArtifactKindWASM          = "wasm"
+	ArtifactKindSBOMSPDX      = "sbom_spdx"
+	ArtifactKindSBOMCycloneDX = "sbom_cyclonedx"
+	ArtifactKindSignature     = "signature"
+	ArtifactKindGenericOCI    = "generic_oci"
+	ArtifactKindUnknownOCI    = "unknown_oci"
 
 	ArtifactRelationshipPrimary  = "primary"
 	ArtifactRelationshipReferrer = "referrer"

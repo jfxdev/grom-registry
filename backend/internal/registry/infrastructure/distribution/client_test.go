@@ -475,6 +475,203 @@ func TestFetchManifestCalculatesLogicalPlatformSizesAndPersistsChildren(t *testi
 	}
 }
 
+func TestListReferrersFollowsDistributionPagination(t *testing.T) {
+	firstPage := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","artifactType":"application/vnd.dev.cosign.artifact.sig.v1+json","digest":"sha256:signature","size":11}]}`
+	secondPage := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","artifactType":"application/vnd.cyclonedx+json","digest":"sha256:sbom","size":22}]}`
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/v2/project/api/referrers/sha256:subject" {
+			return &http.Response{StatusCode: http.StatusNotFound, Status: "404 Not Found", Header: make(http.Header), Body: http.NoBody, Request: r}, nil
+		}
+		header := make(http.Header)
+		body := secondPage
+		if r.URL.Query().Get("last") == "" {
+			body = firstPage
+			header.Set("Link", `</v2/project/api/referrers/sha256:subject?last=sha256:signature>; rel="next"`)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+	})
+	temp := t.TempDir()
+	signer, err := signing.LoadOrCreate(temp+"/key.pem", temp+"/cert.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient("http://distribution.local", registryapp.NewTokenService(nil, nil, signer, time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = transport
+
+	referrers, err := client.ListReferrers(context.Background(), "project/api", "sha256:subject")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(referrers) != 2 {
+		t.Fatalf("expected referrers from both pages, got %#v", referrers)
+	}
+	if referrers[0].Digest != "sha256:signature" || referrers[1].Digest != "sha256:sbom" {
+		t.Fatalf("unexpected referrer order or content: %#v", referrers)
+	}
+	if referrers[1].ArtifactType != "application/vnd.cyclonedx+json" {
+		t.Fatalf("expected the second page to keep its artifact type: %#v", referrers[1])
+	}
+}
+
+func TestListReferrersFailsRatherThanUnderReportingAPartialPage(t *testing.T) {
+	firstPage := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:signature","size":11}]}`
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Query().Get("last") != "" {
+			return &http.Response{StatusCode: http.StatusNotFound, Status: "404 Not Found", Header: make(http.Header), Body: http.NoBody, Request: r}, nil
+		}
+		header := make(http.Header)
+		header.Set("Link", `</v2/project/api/referrers/sha256:subject?last=sha256:signature>; rel="next"`)
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(firstPage)), Request: r}, nil
+	})
+	temp := t.TempDir()
+	signer, err := signing.LoadOrCreate(temp+"/key.pem", temp+"/cert.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient("http://distribution.local", registryapp.NewTokenService(nil, nil, signer, time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = transport
+
+	// Referrers block deletion, so a truncated list must surface as an error
+	// rather than as "this subject has fewer referrers than it really has".
+	if _, err := client.ListReferrers(context.Background(), "project/api", "sha256:subject"); err == nil {
+		t.Fatal("expected a failed referrers page to fail the listing")
+	}
+}
+
+func TestListReferrersRejectsCyclicPagination(t *testing.T) {
+	page := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:signature","size":11}]}`
+	requests := 0
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requests++
+		header := make(http.Header)
+		// Always point back at the same page.
+		header.Set("Link", `</v2/project/api/referrers/sha256:subject?last=sha256:signature>; rel="next"`)
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(page)), Request: r}, nil
+	})
+	client := referrersTestClient(t, transport)
+
+	if _, err := client.ListReferrers(context.Background(), "project/api", "sha256:subject"); err == nil {
+		t.Fatal("expected a repeated pagination link to fail rather than loop")
+	}
+	if requests > 3 {
+		t.Fatalf("expected the loop to stop after revisiting a link, made %d requests", requests)
+	}
+}
+
+func TestListReferrersFailsWhenAPageAfterAnEmptyFirstPageIsMissing(t *testing.T) {
+	// An empty first page can still carry a next link, so the count of collected
+	// descriptors cannot stand in for "no page has been read yet".
+	emptyFirstPage := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}`
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Query().Get("last") != "" {
+			return &http.Response{StatusCode: http.StatusNotFound, Status: "404 Not Found", Header: make(http.Header), Body: http.NoBody, Request: r}, nil
+		}
+		header := make(http.Header)
+		header.Set("Link", `</v2/project/api/referrers/sha256:subject?last=sha256:cursor>; rel="next"`)
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(emptyFirstPage)), Request: r}, nil
+	})
+	client := referrersTestClient(t, transport)
+
+	if _, err := client.ListReferrers(context.Background(), "project/api", "sha256:subject"); err == nil {
+		t.Fatal("a truncated listing must not be reported as an empty one")
+	}
+}
+
+func referrersTestClient(t *testing.T, transport http.RoundTripper) *Client {
+	t.Helper()
+	temp := t.TempDir()
+	signer, err := signing.LoadOrCreate(temp+"/key.pem", temp+"/cert.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient("http://distribution.local", registryapp.NewTokenService(nil, nil, signer, time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = transport
+	return client
+}
+
+func TestListReferrersTreatsAMissingSubjectAsEmpty(t *testing.T) {
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusNotFound, Status: "404 Not Found", Header: make(http.Header), Body: http.NoBody, Request: r}, nil
+	})
+	temp := t.TempDir()
+	signer, err := signing.LoadOrCreate(temp+"/key.pem", temp+"/cert.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient("http://distribution.local", registryapp.NewTokenService(nil, nil, signer, time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = transport
+
+	referrers, err := client.ListReferrers(context.Background(), "project/api", "sha256:absent")
+	if err != nil {
+		t.Fatalf("a registry without the subject must not fail the caller: %v", err)
+	}
+	if len(referrers) != 0 {
+		t.Fatalf("expected no referrers, got %#v", referrers)
+	}
+}
+
+func TestFetchManifestMeasuresGenericArtifactsWithoutAnImageConfig(t *testing.T) {
+	// An ORAS-pushed OpenTofu module carries the OCI empty config, so there is
+	// no image config blob to read a platform from. It must still be measured.
+	moduleJSON := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","artifactType":"application/vnd.opentofu.modulepkg","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"sha256:empty","size":2},"layers":[{"mediaType":"archive/tar+gzip","digest":"sha256:module","size":4096}]}`
+	blobRequests := 0
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if strings.Contains(r.URL.Path, "/blobs/") {
+			blobRequests++
+			return &http.Response{StatusCode: http.StatusNotFound, Status: "404 Not Found", Header: make(http.Header), Body: http.NoBody, Request: r}, nil
+		}
+		if r.URL.Path != "/v2/project/modules/manifests/1.0.0" {
+			return &http.Response{StatusCode: http.StatusNotFound, Status: "404 Not Found", Header: make(http.Header), Body: http.NoBody, Request: r}, nil
+		}
+		header := make(http.Header)
+		header.Set("Docker-Content-Digest", "sha256:module-manifest")
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader(moduleJSON)), Request: r}, nil
+	})
+	temp := t.TempDir()
+	signer, err := signing.LoadOrCreate(temp+"/key.pem", temp+"/cert.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient("http://distribution.local", registryapp.NewTokenService(nil, nil, signer, time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = transport
+
+	metadata, err := client.FetchManifest(context.Background(), "project/modules", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blobRequests != 0 {
+		t.Fatalf("a non-image config must not be fetched as an image config, got %d blob requests", blobRequests)
+	}
+	if metadata.ArtifactType != "application/vnd.opentofu.modulepkg" {
+		t.Fatalf("expected the artifact type to survive verbatim: %#v", metadata)
+	}
+	if len(metadata.Platforms) != 1 {
+		t.Fatalf("expected one self-referencing row for the leaf artifact: %#v", metadata.Platforms)
+	}
+	platform := metadata.Platforms[0]
+	if platform.Digest != "sha256:module-manifest" || platform.CompressedSize != 4098 {
+		t.Fatalf("expected the artifact's own content size, got %#v", platform)
+	}
+	if platform.OS != "" || platform.Architecture != "" {
+		t.Fatalf("a generic artifact must not claim an operating system or architecture: %#v", platform)
+	}
+}
+
 func TestFetchManifestTreeRejectsExcessiveTraversal(t *testing.T) {
 	client := &Client{}
 	for name, traversal := range map[string]*manifestTraversal{

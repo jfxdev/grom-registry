@@ -432,10 +432,18 @@ func (c *Client) fetchManifestTree(ctx context.Context, repository, reference, t
 		platforms = append(platforms, platform)
 		children = append(children, *child)
 	}
-	if len(document.Manifests) == 0 && isImageConfigMediaType(document.Config.MediaType) && document.Config.Digest != "" {
-		platform, platformErr := c.fetchImagePlatform(ctx, repository, document.Config.Digest, token)
-		if platformErr != nil {
-			return nil, platformErr
+	// Every leaf manifest records one self-referencing row so its content size is
+	// known. Operating-system and architecture are read from the config blob only
+	// for container images; an OpenTofu module, Helm chart or any other artifact
+	// keeps them empty and is still measured.
+	if len(document.Manifests) == 0 {
+		platform := registrydomain.ManifestPlatform{}
+		if isImageConfigMediaType(document.Config.MediaType) && document.Config.Digest != "" {
+			imagePlatform, platformErr := c.fetchImagePlatform(ctx, repository, document.Config.Digest, token)
+			if platformErr != nil {
+				return nil, platformErr
+			}
+			platform = imagePlatform
 		}
 		platform.Digest = digest
 		platform.CompressedSize = compressedContentSize(document)
@@ -515,36 +523,75 @@ func (c *Client) ListReferrers(ctx context.Context, repository, digest string) (
 	if err != nil {
 		return nil, err
 	}
-	targetURL := c.baseURL.ResolveReference(&url.URL{Path: "/v2/" + repository + "/referrers/" + digest})
+	result := make([]registryapp.ManifestDescriptor, 0)
+	// Distribution paginates the referrers index with a Link header once a subject
+	// accumulates many referrers. Follow it so signatures and attestations beyond
+	// the first page are inventoried instead of silently dropped.
+	nextPath := "/v2/" + repository + "/referrers/" + digest
+	visited := make(map[string]struct{})
+	completedPages := 0
+	for nextPath != "" {
+		// A registry whose next link points back at a page already read would
+		// otherwise loop forever, appending the same descriptors until the caller's
+		// context expires.
+		if _, seen := visited[nextPath]; seen {
+			return nil, fmt.Errorf("distribution referrers pagination repeats %s", nextPath)
+		}
+		visited[nextPath] = struct{}{}
+		var payload referrersResponse
+		followPath, err := c.getReferrersPage(ctx, nextPath, token, &payload)
+		if err != nil {
+			// A registry without the referrers API, or without this subject,
+			// answers 404 on the very first request, which means no referrers. A
+			// 404 once a page has been read is not that: referrers block deletion,
+			// so returning the partial set would under-report them and weaken that
+			// guard. Completed pages are counted rather than descriptors, because
+			// an empty first page can still carry a next link.
+			var statusErr *responseStatusError
+			if completedPages == 0 && errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound {
+				return []registryapp.ManifestDescriptor{}, nil
+			}
+			return nil, err
+		}
+		completedPages++
+		for _, descriptor := range payload.Manifests {
+			result = append(result, registryapp.ManifestDescriptor{
+				Digest: descriptor.Digest, MediaType: descriptor.MediaType,
+				ArtifactType: descriptor.ArtifactType, Size: descriptor.Size,
+			})
+		}
+		nextPath = followPath
+	}
+	return result, nil
+}
+
+func (c *Client) getReferrersPage(ctx context.Context, path, token string, target any) (string, error) {
+	reference, err := url.Parse(path)
+	if err != nil {
+		return "", err
+	}
+	targetURL := c.baseURL.ResolveReference(reference)
+	if targetURL.Scheme != c.baseURL.Scheme || targetURL.Host != c.baseURL.Host {
+		return "", fmt.Errorf("distribution pagination link points to a different origin")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL.String(), nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.oci.image.index.v1+json")
 	response, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode == http.StatusNotFound {
-		return []registryapp.ManifestDescriptor{}, nil
-	}
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("distribution returned %s", response.Status)
+		return "", &responseStatusError{statusCode: response.StatusCode, status: response.Status}
 	}
-	var payload referrersResponse
-	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		return nil, err
+	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
+		return "", err
 	}
-	result := make([]registryapp.ManifestDescriptor, 0, len(payload.Manifests))
-	for _, descriptor := range payload.Manifests {
-		result = append(result, registryapp.ManifestDescriptor{
-			Digest: descriptor.Digest, MediaType: descriptor.MediaType,
-			ArtifactType: descriptor.ArtifactType, Size: descriptor.Size,
-		})
-	}
-	return result, nil
+	return nextLinkPath(response.Header.Get("Link"))
 }
 
 func (c *Client) RepositoryExists(ctx context.Context, repository string) (bool, error) {

@@ -33,6 +33,7 @@ web interface for access, images, and recovery.
 - [Installation](#installation)
   - [Local quick start](#local-quick-start)
   - [Push an image](#push-an-image)
+  - [Push an OpenTofu module or other OCI artifact](#push-an-opentofu-module-or-other-oci-artifact)
   - [Deployment profiles](#deployment-profiles)
   - [Bind-mounted volumes](#bind-mounted-volumes)
 - [Operations](#operations)
@@ -50,7 +51,8 @@ web interface for access, images, and recovery.
 
 ### Features
 
-- Project-based Docker image push and pull.
+- Project-based push and pull for Docker images and generic OCI artifacts
+  such as OpenTofu modules, Helm charts, WebAssembly modules, and SBOMs.
 - Reader, Writer, and Admin roles.
 - Service accounts with reveal-once, revocable access keys.
 - Web management for users, projects, repositories, and policies.
@@ -100,6 +102,36 @@ docker login localhost:8080
 docker tag my-image:latest localhost:8080/my-project/my-image:latest
 docker push localhost:8080/my-project/my-image:latest
 ```
+
+### Push an OpenTofu module or other OCI artifact
+
+Grom stores any OCI artifact, not only container images. The same service
+account key works as the password for every OCI client.
+
+```bash
+oras login --plain-http localhost:8080
+oras push --plain-http localhost:8080/my-project/my-module:1.0.0 \
+  --artifact-type application/vnd.opentofu.modulepkg \
+  module.tgz:archive/tar+gzip
+```
+
+`--plain-http` is needed only because the local quick start serves HTTP. Drop it
+against a deployment with HTTPS.
+
+OpenTofu consumes the module directly from an `oci://` module source; follow
+the OpenTofu documentation for the exact source syntax and credential
+configuration. Note that OCI clients normally require HTTPS, so a plain-HTTP
+`localhost` registry is for local experiments only.
+
+Grom infers a repository's content profile from what is pushed, so the web UI
+shows `OpenTofu module` for this repository and offers ORAS commands rather
+than Docker ones. Helm charts, WebAssembly modules and components, SBOMs,
+signatures, and arbitrary `oras push` artifacts work the same way, each with
+the commands its own tooling uses; anything Grom does not recognise is kept and
+shown as a generic OCI artifact with its declared `artifactType`.
+
+Artifacts attached with `oras attach` are inventoried as OCI referrers. They
+never change the repository profile and they block deletion of their subject.
 
 ### Deployment profiles
 
@@ -218,8 +250,8 @@ not require a comparison. Each later stable release requires CI to compare its
 OpenAPI contract with the previous stable contract. An incompatible change
 requires an approved exception, a documented migration path, and release
 notes. This policy covers the published management API and token endpoint;
-Docker is the supported registry-client compatibility surface. It does not
-claim generic OCI/ORAS, S3, or multi-instance support.
+Docker and ORAS-based OCI clients are the supported registry-client
+compatibility surface. It does not claim S3 or multi-instance support.
 
 ## Development
 
@@ -247,7 +279,7 @@ example `localhost:5000/grom-registry:local`.
 
 | Command | Coverage |
 |---|---|
-| `make test-registry-e2e` | Public Docker authorization, push/pull, policies, inventory, GC, and tag republishing. |
+| `make test-registry-e2e` | Public Docker and ORAS authorization, image and generic-artifact push/pull, policies, inventory, GC, and tag republishing. |
 | `make test-admin-e2e` | Browser-based administrator and first-push flows. |
 | `make test-boot-acceptance` | Boot, migrations, readiness, and API docs. |
 | `make test-backup-restore-e2e` | SQLite backup and recovery. |
@@ -271,10 +303,17 @@ never edit generated code directly.
 
 ## Supported scope
 
-The supported path is one active installation with local registry storage and
-Docker image push/pull. High availability, S3 storage, replication, enterprise
-identity, generic OCI/ORAS support, automatic retention purging, and full audit
-browsing are outside the supported platform scope.
+The supported path is one active installation with local registry storage,
+Docker image push/pull, and generic OCI artifact push/pull through ORAS-based
+clients. High availability, S3 storage, replication, enterprise identity,
+automatic retention purging, and full audit browsing are outside the supported
+platform scope.
+
+Registry clients never receive the OCI `delete` action, so `oras manifest
+delete` and equivalents are refused by design; delete artifacts through the web
+UI. Catalog listing (`oras repo ls`) is also not granted: the project is Grom's
+authorization boundary and Distribution's catalog cannot be filtered per
+token.
 
 ## References
 

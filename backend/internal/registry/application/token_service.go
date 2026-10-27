@@ -46,8 +46,9 @@ func (s *TokenService) Issue(ctx context.Context, subject string, principal foun
 	if service == "" {
 		service = s.service
 	}
-	access := make([]Access, 0, len(scopes))
-	for _, raw := range scopes {
+	requested := splitScopeParameters(scopes)
+	access := make([]Access, 0, len(requested))
+	for _, raw := range requested {
 		resourceType, name, actions, ok := parseScope(raw)
 		if !ok || resourceType != "repository" {
 			continue
@@ -201,6 +202,18 @@ func (s *TokenService) EvaluateManifestPut(ctx context.Context, fullRepository, 
 		return fmt.Errorf("project not found")
 	}
 	return s.repositories.EvaluateTagMutation(ctx, project.ID, repositoryName, tag, tagExists)
+}
+
+// splitScopeParameters expands the space-delimited scope form. Clients may send
+// one scope per query parameter or join several scopes into a single parameter
+// separated by spaces; oras-go, and therefore ORAS, Helm and OpenTofu, uses the
+// joined form whenever more than one repository is involved.
+func splitScopeParameters(scopes []string) []string {
+	expanded := make([]string, 0, len(scopes))
+	for _, raw := range scopes {
+		expanded = append(expanded, strings.Fields(raw)...)
+	}
+	return expanded
 }
 
 func parseScope(raw string) (string, string, []string, bool) {

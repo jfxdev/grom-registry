@@ -201,7 +201,7 @@ async function save() {
             <article class="retention-criterion-card" :class="{ disabled: !retentionCriterionEnabled(policy, 'expireAfterDaysEnabled', 'expireAfterDays') }">
               <div class="retention-criterion">
                 <strong>Expire after days</strong>
-                <small>Remove matching images after this age.</small>
+                <small>Remove matching artifacts after this age.</small>
                 <div class="retention-control">
                   <input class="field-control" type="number" min="1" max="3650" :disabled="!retentionCriterionEnabled(policy, 'expireAfterDaysEnabled', 'expireAfterDays')" :value="policy.expireAfterDays ?? ''" @input="setOptionalNumber(policy, 'expireAfterDays', inputValue($event))" />
                   <input class="retention-toggle" :checked="retentionCriterionEnabled(policy, 'expireAfterDaysEnabled', 'expireAfterDays')" type="checkbox" aria-label="Enable expire after days" @change="setRetentionCriterionEnabled(policy, 'expireAfterDaysEnabled', $event)" />
@@ -211,7 +211,7 @@ async function save() {
             <article class="retention-criterion-card" :class="{ disabled: !retentionCriterionEnabled(policy, 'keepLastEnabled', 'keepLast') }">
               <div class="retention-criterion">
                 <strong>Keep last</strong>
-                <small>Always retain this many of the newest images.</small>
+                <small>Always retain this many of the newest artifacts.</small>
                 <div class="retention-control">
                   <input class="field-control" type="number" min="1" max="10000" :disabled="!retentionCriterionEnabled(policy, 'keepLastEnabled', 'keepLast')" :value="policy.keepLast ?? ''" @input="setOptionalNumber(policy, 'keepLast', inputValue($event))" />
                   <input class="retention-toggle" :checked="retentionCriterionEnabled(policy, 'keepLastEnabled', 'keepLast')" type="checkbox" aria-label="Enable keep last" @change="setRetentionCriterionEnabled(policy, 'keepLastEnabled', $event)" />
@@ -221,7 +221,7 @@ async function save() {
             <article class="retention-criterion-card" :class="{ disabled: !retentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', 'untaggedGraceDays') }">
               <div class="retention-criterion">
                 <strong>Untagged grace days</strong>
-                <small>Clean untagged images after this grace period.</small>
+                <small>Clean untagged artifacts after this grace period.</small>
                 <div class="retention-control">
                   <input class="field-control" type="number" min="1" max="3650" :disabled="!retentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', 'untaggedGraceDays')" :value="policy.untaggedGraceDays ?? ''" @input="setOptionalNumber(policy, 'untaggedGraceDays', inputValue($event))" />
                   <input class="retention-toggle" :checked="retentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', 'untaggedGraceDays')" type="checkbox" aria-label="Enable untagged grace days" @change="setRetentionCriterionEnabled(policy, 'untaggedGraceDaysEnabled', $event)" />

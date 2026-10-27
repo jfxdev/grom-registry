@@ -16,7 +16,7 @@ Keep this file aligned with the code that actually exists.
 - Run backend and frontend checks: `make test`
 - Run the backend suite against PostgreSQL: `make test-postgres GROM_TEST_POSTGRES_URL=postgres://...`
 - Generate backend and frontend coverage reports: `make test-coverage`
-- Run the isolated real-Docker registry, session-revocation, and restart-preservation journeys: `make test-registry-e2e`
+- Run the isolated real-Docker registry, real-ORAS generic-artifact, session-revocation, and restart-preservation journeys: `make test-registry-e2e`
 - Upgrade a tagged GHCR release to a locally built candidate while preserving SQLite/local-registry state: `make test-release-upgrade-e2e`
 - Run the isolated browser-driven administrative first-push journey: `make test-admin-e2e`
 - Run the isolated boot, migration, readiness, and API-documentation journey: `make test-boot-acceptance`
@@ -70,6 +70,19 @@ recreate or inspect its volumes directly. It also streams an authenticated OCI
 blob upload for longer than the short-lived registry JWT and verifies the
 committed blob, so do not introduce body-read or response-write server timeouts
 that would terminate long uploads.
+
+The generic-artifact journey in `backend/tests/registrye2e/generic_artifact_e2e_test.go`
+drives the real `oras` CLI, installed by `.github/workflows/registry-e2e.yml`
+from a checksum-pinned release. It uses `--plain-http` against the loopback
+stack and its own `--registry-config` file, never the shared Docker credential
+store; keep those two flags on every `oras` invocation. A real `tofu init` is
+deliberately not part of this journey: the isolated stack is plain-HTTP loopback
+and OpenTofu's OCI client expects HTTPS, so the journey proves the artifact ORAS
+publishes and OpenTofu consumes, and the README documents the OpenTofu side
+instead. Do not add TLS to the E2E stack just to run OpenTofu.
+Keep `oras repo ls` and `oras manifest delete` out of scope: external clients
+never receive `delete`, and catalog scope is deliberately dropped because
+Distribution's catalog cannot be filtered per token.
 The garbage-collection journey must delete and collect a fixture, republish the
 same digest under the same tag, prove it is listed and pullable with fresh Docker
 credentials, then repeat with a different digest. The maintenance process must
@@ -237,8 +250,41 @@ or total capacity belongs to host/provider monitoring.
 - Deleting an image index may additionally delete only its untagged child manifests proven unreferenced by another live index, tag, or OCI referrer. Keep this distinct from forbidden OCI subject/referrer cascade deletion, expose the exact child set in the preview, and revalidate every digest before deletion.
 - Manual artifact deletion also blocks subjects with referrers and referrer artifacts. It must persist the operation, update inventory, and audit the outcome; do not bypass the application service from an HTTP handler.
 - Lifecycle manifest deletion and Distribution blob garbage collection remain separate operations.
-- Repository profiles are inferred passively from tagged primary OCI manifests. Referrers such as SBOMs and signatures never change the repository profile.
-- Passive profile inference must not enable policies or reject pushes. Conflicting specific primary types produce the `mixed` profile with `profileNeedsReview=true`.
+- Grom is a generic OCI registry, not only a container registry. OpenTofu
+  modules, Helm charts, SBOMs, signatures, and arbitrary ORAS artifacts are
+  supported first-class content. The `/v2/*` gateway must stay a transparent
+  stream with no method allowlist, media-type check, or body size limit, and
+  `deploy/distribution/config.yml` must not gain a manifest `validation` block
+  that would reject arbitrary artifact types.
+- `RepositoryProfile` and `ArtifactKind` are closed enums. No stable release
+  exists yet, so their values are still free to change; once the first tag ships
+  they are frozen, and adding or renaming a value becomes a breaking change
+  under the compatibility policy. Until then, a contract change to these enums
+  needs a `.github/oasdiff-warn-ignore.txt` entry because `OpenAPI
+  Compatibility` compares against `main`, not against a release.
+- Profiles cover container images, OpenTofu modules, Helm charts, WebAssembly,
+  and SBOMs; anything else is `generic_oci` with its exact type in the
+  per-manifest `artifactType` and `observedKind`. Add a profile only for a
+  family a user would organise a repository around, and keep the profile and
+  kind names identical where one kind covers the whole family. WebAssembly
+  modules and components deliberately share one `wasm` kind: Grom does not read
+  the binary and the media types do not reliably separate them.
+- The classifier matches both `opentofu` and `terraform` in artifact and media
+  types. OpenTofu is the product language and the enum value is
+  `opentofu_module`, but terraform-named artifact types such as
+  `application/vnd.cncf.oras.terraform.module.v1` exist in the wild and must
+  keep classifying as module packages.
+- Repository profiles are inferred passively from tagged primary OCI manifests. Referrers such as SBOMs and signatures never change the repository profile. Neither do sigstore's tag-based fallback artifacts (`sha256-<digest>.sig`, `.att`, `.sbom`), which are tagged primary manifests describing other content; `IsFallbackSignatureTag` excludes them from profile voting.
+- Passive profile inference must not enable policies or reject pushes. Conflicting specific primary types produce the `mixed` profile with `profileNeedsReview=true`. `mixed` stays absorbing for a single push; only a full inventory reconciliation may reset and recompute it, which is the supported escape from `mixed`.
+- Every leaf manifest records one self-referencing platform row so generic
+  artifacts report a content size. Operating system and architecture are read
+  from the image config blob only for container images; keep them empty for
+  other artifacts rather than inventing a platform, and keep the UI's OS/ARCH
+  column conditional on a real platform being present.
+- Registry token scopes accept both the repeated-parameter form Docker sends and
+  the single space-delimited parameter oras-go sends. Keep both working;
+  dropping the space-delimited form silently strips `push` and loses every scope
+  after the first.
 - Registry clients use API tokens, never web passwords.
 - Bootstrap creates the only initially defined administrator. Every
   later user is created as a regular user with a reveal-once registration link

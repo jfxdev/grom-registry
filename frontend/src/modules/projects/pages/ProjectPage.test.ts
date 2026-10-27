@@ -350,8 +350,10 @@ describe('ProjectPage membership management', () => {
     expect(await screen.findByText(/Different primary artifact types/)).toBeTruthy()
     expect(await screen.findByText('stable')).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Digest' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'OS/ARCH' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Compressed size' })).toBeTruthy()
+    // Nothing under this tag declares an operating system or architecture, so
+    // the platform column is dropped rather than filled with separators.
+    expect(screen.queryByRole('columnheader', { name: 'OS/ARCH' })).toBeNull()
     expect(await screen.findByText('Deletion history')).toBeTruthy()
     expect(await screen.findByText(/No reason/)).toBeTruthy()
     const inventory = screen.getByRole('button', { name: /Manifest inventory/ })
@@ -360,6 +362,60 @@ describe('ProjectPage membership management', () => {
     expect(screen.getByRole('dialog', { name: 'Manifest details' })).toBeTruthy()
     expect(screen.getAllByText('Active')).not.toHaveLength(0)
     expect(screen.getByText('sha256:subject')).toBeTruthy()
+  })
+
+  it('keeps the platform column for container images and drops Docker wording for artifact repositories', async () => {
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'api', description: '', status: 'active',
+      creationSource: 'push', profile: 'container_image', profileSource: 'inferred', profileConfidence: 'high',
+      profileNeedsReview: false, policyVersion: 1, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.listTags.mockResolvedValue({ name: 'payments/api', tags: ['stable'] })
+    mocks.listInventory.mockResolvedValue([{
+      id: 'manifest-1', digest: 'sha256:abc', mediaType: 'application/vnd.oci.image.manifest.v1+json', artifactType: '',
+      subjectDigest: '', observedKind: 'container_image', artifactRelationship: 'primary',
+      classificationSource: 'inferred', classificationConfidence: 'high', manifestSize: 42, state: 'active',
+      firstSeenAt: '2026-07-29T00:00:00Z', lastSeenAt: '2026-07-30T00:00:00Z', tags: ['stable'],
+      platforms: [{ digest: 'sha256:abc', os: 'linux', architecture: 'amd64', compressedSize: 1000 }],
+    }])
+    mocks.repositoryId = 'repository-1'
+
+    renderPage()
+
+    expect(await screen.findByText('stable')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'OS/ARCH' })).toBeTruthy()
+    expect(screen.getAllByText('Container image').length).toBeGreaterThan(0)
+  })
+
+  it('offers an ORAS pull command for an OpenTofu module repository', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'vpc', description: '', status: 'active',
+      creationSource: 'push', profile: 'opentofu_module', profileSource: 'inferred', profileConfidence: 'high',
+      profileNeedsReview: false, policyVersion: 1, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.listTags.mockResolvedValue({ name: 'payments/vpc', tags: ['1.0.0'] })
+    mocks.listInventory.mockResolvedValue([{
+      id: 'manifest-1', digest: 'sha256:module', mediaType: 'application/vnd.oci.image.manifest.v1+json',
+      artifactType: 'application/vnd.opentofu.modulepkg', subjectDigest: '', observedKind: 'opentofu_module',
+      artifactRelationship: 'primary', classificationSource: 'artifact_type', classificationConfidence: 'high',
+      manifestSize: 42, state: 'active', firstSeenAt: '2026-07-29T00:00:00Z', lastSeenAt: '2026-07-30T00:00:00Z',
+      tags: ['1.0.0'], platforms: [{ digest: 'sha256:module', os: '', architecture: '', compressedSize: 4098 }],
+    }])
+    mocks.repositoryId = 'repository-1'
+
+    renderPage()
+
+    expect(await screen.findByText('1.0.0')).toBeTruthy()
+    expect(screen.getAllByText('OpenTofu module').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('columnheader', { name: 'OS/ARCH' })).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: /Copy pull/ }))
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('oras pull'))
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining('docker pull'))
+    vi.unstubAllGlobals()
   })
 
   it('summarizes policies, latest push provenance, and push instructions', async () => {
@@ -392,7 +448,7 @@ describe('ProjectPage membership management', () => {
     expect(screen.getByRole('button', { name: /Manifest inventory/ }).getAttribute('aria-expanded')).toBe('true')
     expect(await screen.findByText('stable')).toBeTruthy()
     expect(await screen.findByText('Last pushed 1 day ago by release-bot')).toBeTruthy()
-    expect(screen.getByText('Removes tags matching pr-* older than 30 days. Always keeps the last 5 tags matching pr-*. Cleans untagged images after 7 days.')).toBeTruthy()
+    expect(screen.getByText('Removes tags matching pr-* older than 30 days. Always keeps the last 5 tags matching pr-*. Cleans untagged artifacts after 7 days.')).toBeTruthy()
     expect(screen.getByText('Protects tags matching stable from deletion, overwrite, automatic lifecycle cleanup.')).toBeTruthy()
     expect(screen.getByText('Blocks tag overwrite for tags matching v*.')).toBeTruthy()
     expect(screen.getByText('Only allows tags matching latest, v*.')).toBeTruthy()
@@ -500,7 +556,7 @@ describe('ProjectPage membership management', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Archive' }))
     expect(mocks.archiveRepository).not.toHaveBeenCalled()
     const archiveDialog = screen.getByRole('dialog', { name: 'Archive repository' })
-    expect(archiveDialog.textContent).toContain('New image pushes will be blocked')
+    expect(archiveDialog.textContent).toContain('New pushes will be blocked')
     await fireEvent.submit(within(archiveDialog).getByRole('button', { name: 'Archive repository' }).closest('form')!)
     await waitFor(() => expect(mocks.archiveRepository).toHaveBeenCalledWith('payments', 'repository-1'))
 

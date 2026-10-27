@@ -267,10 +267,17 @@ func (c *managementClient) exchangeToken(
 	ctx context.Context,
 	username, secret, repository string,
 ) (openapi.RegistryToken, int, error) {
-	query := url.Values{
+	return c.exchangeTokenWithQuery(ctx, username, secret, url.Values{
 		"service": {"grom-registry"},
 		"scope":   {"repository:" + repository + ":pull,push"},
-	}
+	})
+}
+
+func (c *managementClient) exchangeTokenWithQuery(
+	ctx context.Context,
+	username, secret string,
+	query url.Values,
+) (openapi.RegistryToken, int, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/auth/token?"+query.Encode(), nil)
 	if err != nil {
 		return openapi.RegistryToken{}, 0, err

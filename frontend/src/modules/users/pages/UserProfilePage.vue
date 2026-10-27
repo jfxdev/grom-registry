@@ -113,7 +113,7 @@ async function copyRegistryToken() { await navigator.clipboard.writeText(reveale
           <div><h2 class="text-lg font-semibold">Read-only registry tokens</h2><p class="mt-1 text-sm text-muted-foreground">Tokens can pull only from projects where you have explicit access.</p></div>
         </div>
         <form v-if="!hasActiveRegistryToken" class="form-stack mt-5" @submit.prevent="createRegistryToken.mutate()">
-          <label class="field-label">Token name<Input v-model="registryTokenName" required maxlength="120" placeholder="Local Docker" /></label>
+          <label class="field-label">Token name<Input v-model="registryTokenName" required maxlength="120" placeholder="Local registry client" /></label>
           <p v-if="registryTokenError" class="error-text" role="alert">{{ registryTokenError }}</p>
           <div class="flex justify-end"><Button type="submit" :loading="createRegistryToken.isPending.value">Create read-only token</Button></div>
         </form>

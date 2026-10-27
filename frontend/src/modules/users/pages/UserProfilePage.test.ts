@@ -95,7 +95,7 @@ describe('UserProfilePage', () => {
     mocks.createViewerRegistryToken.mockResolvedValue({ token: { id: 'token-1', publicId: 'public', name: 'Local Docker', createdAt: '2026-08-08T00:00:00Z' }, secret: 'grm_public_secret' })
     const wrapper = mountPage()
     await flushPromises()
-    await wrapper.get('input[placeholder="Local Docker"]').setValue('Local Docker')
+    await wrapper.get('input[placeholder="Local registry client"]').setValue('Local Docker')
     await wrapper.findAll('form').find((form) => form.text().includes('Create read-only token'))!.trigger('submit')
     await flushPromises()
     expect(mocks.createViewerRegistryToken).toHaveBeenCalledWith({ name: 'Local Docker' })
@@ -110,6 +110,6 @@ describe('UserProfilePage', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Revoke the active token before creating another one.')
-    expect(wrapper.find('input[placeholder="Local Docker"]').exists()).toBe(false)
+    expect(wrapper.find('input[placeholder="Local registry client"]').exists()).toBe(false)
   })
 })
