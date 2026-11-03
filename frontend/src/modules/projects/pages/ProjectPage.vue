@@ -540,6 +540,14 @@ function profileLabel(profile: Repository['profile']) {
   return repositoryProfileLabel(profile)
 }
 
+function repositoryProfileDescription(repository: Repository) {
+  const imported = repository.creationSource === 'pull_through'
+  if (repository.profileSource === 'inferred') {
+    return `${repository.profileConfidence} confidence · inferred from ${imported ? 'imported' : 'uploaded'} content`
+  }
+  return imported ? 'Waiting for the first identifiable import' : 'Waiting for the first identifiable upload'
+}
+
 function creationSourceLabel(source: Repository['creationSource']) {
   if (source === 'push') return 'Created by push'
   if (source === 'pull_through') return 'Imported by pull-through'
@@ -833,9 +841,7 @@ function policySummary(policy: Repository['policies'][number]) {
           <p class="eyebrow">Repository</p>
           <h1 id="repository-details-title" class="page-title">{{ selectedRepository.name }}</h1>
           <p class="page-description">
-            {{ selectedRepository.profileSource === 'inferred'
-              ? `${selectedRepository.profileConfidence} confidence · inferred from uploaded content`
-              : 'Waiting for the first identifiable upload' }}
+            {{ repositoryProfileDescription(selectedRepository) }}
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -1168,7 +1174,8 @@ function policySummary(policy: Repository['policies'][number]) {
         </div>
         <div v-if="isPullThrough" class="form-stack">
           <p class="text-sm text-muted-foreground">The first authorized pull imports the image. Local content has no automatic expiry.</p>
-          <code class="text-sm">docker pull {{ registryHost }}/{{ slug }}/{{ selectedRepository?.name || 'repository' }}:tag</code>
+          <p class="text-sm text-muted-foreground">Replace <code>&lt;tag&gt;</code> with an upstream tag such as <code>latest</code>, or use <code>@sha256:&lt;digest&gt;</code> to pull an exact digest.</p>
+          <code class="text-sm">docker pull {{ registryHost }}/{{ slug }}/{{ selectedRepository?.name || 'repository' }}:&lt;tag&gt;</code>
         </div>
         <ArtifactPushBanner
           v-else

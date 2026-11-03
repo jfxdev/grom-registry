@@ -766,7 +766,27 @@ describe('ProjectPage membership management', () => {
     await buttonWithText(wrapper, 'Instructions').trigger('click')
     expect(wrapper.text()).toContain('Pull instructions')
     expect(wrapper.text()).toContain('The first authorized pull imports the image.')
+    expect(wrapper.text()).toContain('Replace <tag> with an upstream tag')
+    expect(wrapper.text()).toContain('/payments/repository:<tag>')
     expect(wrapper.text()).not.toContain('Push an image')
+  })
+
+  it('describes the profile of an imported pull-through repository', async () => {
+    mocks.getProject.mockResolvedValue({
+      id: 'project-1', slug: 'payments', name: 'Payments', canManage: true,
+      mode: 'pull_through', upstream: 'dockerhub',
+    })
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'alpine', description: '', status: 'active',
+      creationSource: 'pull_through', profile: 'container_image', profileSource: 'inferred', profileConfidence: 'high',
+      profileNeedsReview: false, policyVersion: 1, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.repositoryId = 'repository-1'
+
+    renderPage()
+
+    expect(await screen.findByText('high confidence · inferred from imported content')).toBeTruthy()
+    expect(screen.queryByText(/inferred from uploaded content/)).toBeNull()
   })
 
   it('labels Writer as pull-only in pull-through projects', async () => {

@@ -1144,12 +1144,19 @@ export interface components {
             /** @description Whether the signed-in actor may manage this project. */
             canManage?: boolean;
         };
+        /** @description `upstream` is required when `mode` is `pull_through` and must be omitted otherwise. OpenAPI 3.0 cannot express this dependency, so the server enforces it and answers `400 invalid_project` when it is broken. */
         CreateProjectRequest: {
             name: string;
             slug: string;
-            /** @enum {string} */
+            /**
+             * @description Defaults to `standard`. `pull_through` requires `upstream`.
+             * @enum {string}
+             */
             mode?: "standard" | "pull_through";
-            /** @enum {string} */
+            /**
+             * @description Upstream registry of a `pull_through` project. Rejected for `standard` projects.
+             * @enum {string}
+             */
             upstream?: "dockerhub" | "ghcr";
         };
         /** @enum {string} */

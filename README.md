@@ -157,6 +157,9 @@ For private or authenticated upstream images, set the optional paired variables
 `GROM_PULL_THROUGH_DOCKERHUB_USERNAME`/`PASSWORD` or
 `GROM_PULL_THROUGH_GHCR_USERNAME`/`PASSWORD` in the deployment environment.
 Keep credentials out of the API, project settings, logs, and backup metadata.
+`GROM_PULL_THROUGH_MAX_CONCURRENT_IMPORTS` (default `4`) bounds how many upstream
+copies run at once; further imports wait for a free slot within the 15-minute
+import timeout. A project cannot be deleted while one of its imports is running.
 
 ### Deployment profiles
 

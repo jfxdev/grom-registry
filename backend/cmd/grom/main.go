@@ -90,7 +90,6 @@ func run(logger *slog.Logger) error {
 	projectService := projectapp.New(projectRepository)
 	registryRepository := registrystore.New(db)
 	repositoryService := registryapp.NewRepositoryService(registryRepository)
-	projectService.SetDeletionGuard(repositoryService)
 	auditService := auditapp.New(auditstore.New(db))
 	repositoryService.SetAuditRecorder(auditService)
 	inventoryService := registryapp.NewInventoryService(registryRepository)
@@ -201,6 +200,8 @@ func run(logger *slog.Logger) error {
 		projectService, repositoryService, registryTokens, distributionClient, upstreamCopier,
 		inventoryService.ObservePush, logger,
 	)
+	pullThroughService.SetMaxConcurrentImports(cfg.PullThroughMaxImports)
+	projectService.SetDeletionGuard(pullThroughService)
 	var registryMaintenanceClient *registrymaintenance.Client
 	if cfg.RegistryMaintenanceSocket != "" {
 		registryMaintenanceClient = registrymaintenance.NewClient(cfg.RegistryMaintenanceSocket)

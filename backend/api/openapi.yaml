@@ -2291,6 +2291,10 @@ components:
       type: object
       additionalProperties: false
       required: [name, slug]
+      description: >-
+        `upstream` is required when `mode` is `pull_through` and must be
+        omitted otherwise. OpenAPI 3.0 cannot express this dependency, so the
+        server enforces it and answers `400 invalid_project` when it is broken.
       properties:
         name:
           type: string
@@ -2301,9 +2305,11 @@ components:
         mode:
           type: string
           enum: [standard, pull_through]
+          description: Defaults to `standard`. `pull_through` requires `upstream`.
         upstream:
           type: string
           enum: [dockerhub, ghcr]
+          description: Upstream registry of a `pull_through` project. Rejected for `standard` projects.
     ProjectRole:
       type: string
       enum: [reader, writer, admin]

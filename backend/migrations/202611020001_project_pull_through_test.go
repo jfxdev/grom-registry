@@ -2,9 +2,11 @@ package migrations
 
 import (
 	"context"
+	"database/sql"
+	"strings"
 	"testing"
 
-	"database/sql"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
@@ -78,4 +80,22 @@ func TestProjectPullThroughMigrationFailsWithoutProjectsTable(t *testing.T) {
 	if err := preventProjectPullThroughRollback(ctx, db); err == nil {
 		t.Fatal("pull-through migration rollback was allowed")
 	}
+}
+
+func TestProjectPullThroughColumnCheckFollowsSearchPath(t *testing.T) {
+	ctx := context.Background()
+	db := openPostgresMigrationTestDB(t, ctx)
+	schema := "grom_pull_through_shadow_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	if _, err := db.ExecContext(ctx, "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = db.ExecContext(context.Background(), "DROP SCHEMA IF EXISTS "+schema+" CASCADE") })
+	// The empty schema becomes current_schema() while projects resolves to pg_temp.
+	if _, err := db.ExecContext(ctx, "SET search_path TO "+schema+", pg_temp"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, "CREATE TEMP TABLE projects (id TEXT PRIMARY KEY, slug TEXT NOT NULL, name TEXT NOT NULL, created_by TEXT NOT NULL, created_at TIMESTAMP NOT NULL)"); err != nil {
+		t.Fatal(err)
+	}
+	assertProjectPullThroughColumns(t, ctx, db)
 }

@@ -165,9 +165,10 @@ project already exists. Ordinary pull and Reader requests cannot do that through
 the token flow. In a pull-through project, an authorized manifest pull may create
 the logical repository and import OCI content through Grom's internal upstream
 service; the client still receives only pull permission. An archived repository
-blocks new push grants while preserving pull access. Project administrators can
-unarchive it to restore push grants. An archived pull-through repository keeps serving cached
-content but no longer imports new references from the upstream.
+blocks new push grants while preserving pull access. In a standard project,
+project administrators can unarchive it to restore push grants. Pull-through
+repositories never receive push: archiving one keeps serving cached content but
+stops imports from the upstream, and unarchiving only resumes those imports.
 
 ## Protections for sensitive operations
 

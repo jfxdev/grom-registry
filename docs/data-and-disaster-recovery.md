@@ -33,8 +33,8 @@ The backup agent's runtime socket is not recovery data.
 Pull-through projects store imported manifests, tags, configurations, layers,
 and blobs in the same registry-data volume as pushed content. They have no TTL
 or automatic expiry and are included in every recovery point. Tag updates can
-leave older manifests untagged, but only explicit lifecycle deletion and garbage
-collection remove that content. Upstream credentials remain deployment
+leave older manifests untagged, but only manual artifact deletion, explicit
+lifecycle deletion, and garbage collection remove that content. Upstream credentials remain deployment
 configuration and are not stored in the application database or recovery
 bundles.
 

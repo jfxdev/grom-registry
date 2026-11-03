@@ -356,6 +356,28 @@ func TestLoadPullThroughCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadPullThroughMaxConcurrentImports(t *testing.T) {
+	setRequiredEnvironment(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PullThroughMaxImports != 4 {
+		t.Fatalf("default pull-through import limit = %d, want 4", cfg.PullThroughMaxImports)
+	}
+
+	t.Setenv("GROM_PULL_THROUGH_MAX_CONCURRENT_IMPORTS", "2")
+	if cfg, err = Load(); err != nil || cfg.PullThroughMaxImports != 2 {
+		t.Fatalf("configured pull-through import limit = %d, err=%v", cfg.PullThroughMaxImports, err)
+	}
+	for _, invalid := range []string{"0", "-1", "many"} {
+		t.Setenv("GROM_PULL_THROUGH_MAX_CONCURRENT_IMPORTS", invalid)
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "positive integer") {
+			t.Fatalf("invalid pull-through import limit %q was accepted: %v", invalid, err)
+		}
+	}
+}
+
 func setRequiredEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("GROM_BOOTSTRAP_ADMIN_PASSWORD", "test-password")

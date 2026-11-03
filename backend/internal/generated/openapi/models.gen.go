@@ -1166,18 +1166,21 @@ type CreateLifecycleRunRequest struct {
 	Reason    string `json:"reason"`
 }
 
-// CreateProjectRequest defines model for CreateProjectRequest.
+// CreateProjectRequest `upstream` is required when `mode` is `pull_through` and must be omitted otherwise. OpenAPI 3.0 cannot express this dependency, so the server enforces it and answers `400 invalid_project` when it is broken.
 type CreateProjectRequest struct {
-	Mode     *CreateProjectRequestMode     `json:"mode,omitempty"`
-	Name     string                        `json:"name"`
-	Slug     string                        `json:"slug"`
+	// Mode Defaults to `standard`. `pull_through` requires `upstream`.
+	Mode *CreateProjectRequestMode `json:"mode,omitempty"`
+	Name string                    `json:"name"`
+	Slug string                    `json:"slug"`
+
+	// Upstream Upstream registry of a `pull_through` project. Rejected for `standard` projects.
 	Upstream *CreateProjectRequestUpstream `json:"upstream,omitempty"`
 }
 
-// CreateProjectRequestMode defines model for CreateProjectRequest.Mode.
+// CreateProjectRequestMode Defaults to `standard`. `pull_through` requires `upstream`.
 type CreateProjectRequestMode string
 
-// CreateProjectRequestUpstream defines model for CreateProjectRequest.Upstream.
+// CreateProjectRequestUpstream Upstream registry of a `pull_through` project. Rejected for `standard` projects.
 type CreateProjectRequestUpstream string
 
 // CreateRepositoryRequest defines model for CreateRepositoryRequest.

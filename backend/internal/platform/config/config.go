@@ -49,6 +49,7 @@ type Config struct {
 	RegistryMaintenanceSocket string
 	SMTP                      SMTPConfig
 	PullThroughCredentials    map[string]UpstreamCredential
+	PullThroughMaxImports     int
 }
 
 type UpstreamCredential struct {
@@ -123,6 +124,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	pullThroughMaxImports, err := positiveIntEnv("GROM_PULL_THROUGH_MAX_CONCURRENT_IMPORTS", constants.DefaultPullThroughMaxConcurrentImports)
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
 		HTTPAddress:               env("GROM_HTTP_ADDRESS", ":8080"),
 		DatabaseURL:               env("GROM_DATABASE_URL", "sqlite://"+dataDir+"/grom.db"),
@@ -149,6 +154,7 @@ func Load() (Config, error) {
 		RegistryMaintenanceSocket: env("GROM_REGISTRY_MAINTENANCE_SOCKET", ""),
 		SMTP:                      smtp,
 		PullThroughCredentials:    pullThroughCredentials,
+		PullThroughMaxImports:     pullThroughMaxImports,
 	}
 	if cfg.BootstrapEmail == "" || cfg.BootstrapUsername == "" || cfg.BootstrapPassword == "" {
 		return Config{}, fmt.Errorf("bootstrap administrator credentials cannot be empty")

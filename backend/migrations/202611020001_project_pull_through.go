@@ -38,12 +38,14 @@ func projectColumnExists(ctx context.Context, db *bun.DB, column string) (bool, 
 	var count int
 	switch db.Dialect().Name() {
 	case dialect.PG:
+		// to_regclass resolves projects through search_path exactly like the
+		// following ALTER TABLE, so an earlier schema cannot hide the table.
 		if err := db.NewRaw(`
 			SELECT COUNT(*)
-			FROM information_schema.columns
-			WHERE table_schema = current_schema()
-			  AND table_name = 'projects'
-			  AND column_name = ?
+			FROM pg_attribute
+			WHERE attrelid = to_regclass('projects')
+			  AND attname = ?
+			  AND NOT attisdropped
 		`, column).Scan(ctx, &count); err != nil {
 			return false, fmt.Errorf("inspect project %s column: %w", column, err)
 		}

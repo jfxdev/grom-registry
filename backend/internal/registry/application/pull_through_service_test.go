@@ -88,7 +88,21 @@ func newPullThroughTestService(t *testing.T, local *pullThroughLocal, upstream *
 		t.Fatal(err)
 	}
 	tokens := NewTokenService(nil, nil, signer, time.Minute)
-	return NewPullThroughService(nil, nil, tokens, local, upstream, nil, slog.Default()), tokens
+	repositories := NewRepositoryService(&pullThroughRepositoryStore{})
+	return NewPullThroughService(nil, repositories, tokens, local, upstream, nil, slog.Default()), tokens
+}
+
+// observeWith installs an observer that records successful observations in the
+// fake inventory, the way InventoryService.ObservePush does.
+func observeWith(service *PullThroughService, observe PullThroughObserver) {
+	store := service.repositories.store.(*pullThroughRepositoryStore)
+	service.observe = func(ctx context.Context, repository, reference, digest, actor string) error {
+		if err := observe(ctx, repository, reference, digest, actor); err != nil {
+			return err
+		}
+		store.markObserved(reference, digest)
+		return nil
+	}
 }
 
 func TestPullThroughTagLifecycleAndDigestImmutability(t *testing.T) {
@@ -96,12 +110,12 @@ func TestPullThroughTagLifecycleAndDigestImmutability(t *testing.T) {
 	upstream := &pullThroughUpstream{local: local, digest: "sha256:v1"}
 	service, tokens := newPullThroughTestService(t, local, upstream)
 	var observations []string
-	service.observe = func(_ context.Context, repository, reference, digest, actor string) error {
+	observeWith(service, func(_ context.Context, repository, reference, digest, actor string) error {
 		observations = append(observations, repository+"@"+reference+"="+digest+" by "+actor)
 		return nil
-	}
+	})
 
-	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, repository: "alpine", fullRepository: "dockerhub/alpine", reference: "latest"}); err != nil {
+	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, name: "alpine", fullRepository: "dockerhub/alpine", reference: "latest"}); err != nil {
 		t.Fatal(err)
 	}
 	if upstream.sourceRepository != "library/alpine" || upstream.localRepository != "dockerhub/alpine" || upstream.reference != "latest" {
@@ -114,7 +128,7 @@ func TestPullThroughTagLifecycleAndDigestImmutability(t *testing.T) {
 		t.Fatalf("first pull copies=%d observations=%d", upstream.copies, len(observations))
 	}
 
-	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, repository: "alpine", fullRepository: "dockerhub/alpine", reference: "latest"}); err != nil {
+	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, name: "alpine", fullRepository: "dockerhub/alpine", reference: "latest"}); err != nil {
 		t.Fatal(err)
 	}
 	if upstream.copies != 1 || upstream.resolves != 2 {
@@ -122,7 +136,7 @@ func TestPullThroughTagLifecycleAndDigestImmutability(t *testing.T) {
 	}
 
 	upstream.digest = "sha256:v2"
-	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, repository: "alpine", fullRepository: "dockerhub/alpine", reference: "latest"}); err != nil {
+	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, name: "alpine", fullRepository: "dockerhub/alpine", reference: "latest"}); err != nil {
 		t.Fatal(err)
 	}
 	if upstream.copies != 2 || local.digests["dockerhub/alpine@latest"] != "sha256:v2" {
@@ -131,14 +145,14 @@ func TestPullThroughTagLifecycleAndDigestImmutability(t *testing.T) {
 
 	upstream.digest = "sha256:upstream-must-not-be-read"
 	resolves := upstream.resolves
-	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, repository: "alpine", fullRepository: "dockerhub/alpine", reference: "sha256:v2"}); err != nil {
+	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, name: "alpine", fullRepository: "dockerhub/alpine", reference: "sha256:v2"}); err != nil {
 		t.Fatal(err)
 	}
 	if upstream.resolves != resolves || upstream.copies != 2 {
 		t.Fatal("an existing digest reference must remain local and immutable")
 	}
 
-	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, repository: "alpine", fullRepository: "dockerhub/alpine", reference: "sha256:missing"}); err != nil {
+	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, name: "alpine", fullRepository: "dockerhub/alpine", reference: "sha256:missing"}); err != nil {
 		t.Fatal(err)
 	}
 	if upstream.reference != "sha256:missing" || upstream.copies != 3 {
@@ -162,7 +176,7 @@ func TestPullThroughServesLocalTagWhenUpstreamFails(t *testing.T) {
 				upstream.resolveErr = nil
 			}
 			service, _ := newPullThroughTestService(t, local, upstream)
-			if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, repository: "alpine", fullRepository: "dockerhub/alpine", reference: "latest"}); err != nil {
+			if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamDockerHub, name: "alpine", fullRepository: "dockerhub/alpine", reference: "latest"}); err != nil {
 				t.Fatalf("local fallback failed: %v", err)
 			}
 			if local.digests["dockerhub/alpine@latest"] != "sha256:v1" {
@@ -178,7 +192,7 @@ func TestPullThroughWithoutLocalCopyReturnsUpstreamFailure(t *testing.T) {
 	upstream := &pullThroughUpstream{local: local, resolveErr: want}
 	service, _ := newPullThroughTestService(t, local, upstream)
 
-	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamGHCR, repository: "owner/image", fullRepository: "ghcr/owner/image", reference: "latest"}); !errors.Is(err, want) {
+	if err := service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamGHCR, name: "owner/image", fullRepository: "ghcr/owner/image", reference: "latest"}); !errors.Is(err, want) {
 		t.Fatalf("expected upstream error, got %v", err)
 	}
 	if upstream.copies != 0 {
@@ -193,16 +207,16 @@ func TestPullThroughConcurrentFirstPullCopiesOnce(t *testing.T) {
 	}
 	service, _ := newPullThroughTestService(t, local, upstream)
 	observations := 0
-	service.observe = func(context.Context, string, string, string, string) error {
+	observeWith(service, func(context.Context, string, string, string, string) error {
 		observations++
 		return nil
-	}
+	})
 
 	const callers = 8
 	errs := make(chan error, callers)
 	for range callers {
 		go func() {
-			errs <- service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamGHCR, repository: "owner/image", fullRepository: "ghcr/owner/image", reference: "latest"})
+			errs <- service.ensure(context.Background(), pullThroughTarget{upstream: constants.ProjectUpstreamGHCR, name: "owner/image", fullRepository: "ghcr/owner/image", reference: "latest"})
 		}()
 	}
 	select {
@@ -235,11 +249,38 @@ func (s *pullThroughProjectStore) FindProjectBySlug(context.Context, string) (*p
 
 type pullThroughRepositoryStore struct {
 	registrydomain.Store
+	mu         sync.Mutex
 	repository *registrydomain.Repository
-	deleted    int
+	observed   map[string]bool
+	hasRows    bool
+}
+
+func (s *pullThroughRepositoryStore) markObserved(reference, digest string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.observed == nil {
+		s.observed = map[string]bool{}
+	}
+	s.observed[reference+"="+digest] = true
+}
+
+func (s *pullThroughRepositoryStore) ManifestObserved(_ context.Context, _ foundation.ID, tag, digest string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	reference := tag
+	if reference == "" {
+		reference = digest
+	}
+	return s.observed[reference+"="+digest], nil
+}
+
+func (s *pullThroughRepositoryStore) ProjectHasRepositories(context.Context, foundation.ID) (bool, error) {
+	return s.hasRows, nil
 }
 
 func (s *pullThroughRepositoryStore) FindRepository(context.Context, foundation.ID, string) (*registrydomain.Repository, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.repository == nil {
 		return nil, sql.ErrNoRows
 	}
@@ -247,17 +288,13 @@ func (s *pullThroughRepositoryStore) FindRepository(context.Context, foundation.
 }
 
 func (s *pullThroughRepositoryStore) EnsureRepository(_ context.Context, repository *registrydomain.Repository) (*registrydomain.Repository, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.repository != nil {
 		return s.repository, false, nil
 	}
 	s.repository = repository
 	return repository, true, nil
-}
-
-func (s *pullThroughRepositoryStore) DeleteRepository(context.Context, foundation.ID) error {
-	s.deleted++
-	s.repository = nil
-	return nil
 }
 
 type pullThroughAudit struct {
@@ -385,15 +422,15 @@ func TestPullThroughRetriesFailedObservation(t *testing.T) {
 	service, _ := newPullThroughTestService(t, local, upstream)
 	failures := 1
 	var observed []string
-	service.observe = func(_ context.Context, repository, reference, digest, _ string) error {
+	observeWith(service, func(_ context.Context, repository, reference, digest, _ string) error {
 		if failures > 0 {
 			failures--
 			return errors.New("inventory unavailable")
 		}
 		observed = append(observed, repository+"@"+reference+"="+digest)
 		return nil
-	}
-	target := pullThroughTarget{upstream: constants.ProjectUpstreamGHCR, repository: "owner/image", fullRepository: "ghcr/owner/image", reference: "latest"}
+	})
+	target := pullThroughTarget{upstream: constants.ProjectUpstreamGHCR, name: "owner/image", fullRepository: "ghcr/owner/image", reference: "latest"}
 
 	if err := service.ensure(context.Background(), target); err != nil {
 		t.Fatalf("observation failure must not fail the pull: %v", err)
@@ -421,7 +458,7 @@ func TestPullThroughCopySurvivesLeaderCancellation(t *testing.T) {
 	var copyCtx context.Context
 	service, tokens := newPullThroughTestService(t, local, upstream)
 	service.upstream = &contextCapturingUpstream{pullThroughUpstream: upstream, captured: &copyCtx}
-	target := pullThroughTarget{upstream: constants.ProjectUpstreamGHCR, repository: "owner/image", fullRepository: "ghcr/owner/image", reference: "latest"}
+	target := pullThroughTarget{upstream: constants.ProjectUpstreamGHCR, name: "owner/image", fullRepository: "ghcr/owner/image", reference: "latest"}
 
 	started := time.Now()
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -455,26 +492,32 @@ func (u *contextCapturingUpstream) Copy(ctx context.Context, upstream, sourceRep
 	return u.pullThroughUpstream.Copy(ctx, upstream, sourceRepository, localRepository, reference, token)
 }
 
-func TestEnsureFromPullThroughAuditsCreationAndRetriesAfterAuditFailure(t *testing.T) {
+func TestEnsureFromPullThroughKeepsRepositoryAndRetriesFailedAudit(t *testing.T) {
 	store := &pullThroughRepositoryStore{}
 	service := NewRepositoryService(store)
 	audit := &pullThroughAudit{err: errors.New("audit unavailable")}
 	service.SetAuditRecorder(audit)
 
-	if _, _, err := service.EnsureFromPullThrough(context.Background(), foundation.ID("project"), "alpine"); err == nil {
-		t.Fatal("audit failure was not reported")
+	first, created, err := service.EnsureFromPullThrough(context.Background(), foundation.ID("project"), " Alpine ")
+	if err == nil || !created || first == nil {
+		t.Fatalf("audit failure was not reported for the created repository: created=%t err=%v", created, err)
 	}
-	if store.repository != nil || store.deleted != 1 {
-		t.Fatalf("audit failure left the repository behind: repository=%#v deleted=%d", store.repository, store.deleted)
+	if store.repository == nil || store.repository.Name != "alpine" || store.repository.CreationSource != constants.RepositoryCreationPullThrough {
+		t.Fatalf("audit failure removed or changed the repository: %#v", store.repository)
+	}
+	if err := service.RecordPendingCreationAudit(context.Background(), first.ID); err == nil {
+		t.Fatal("audit retry succeeded while the recorder still fails")
 	}
 
 	audit.err = nil
-	repository, created, err := service.EnsureFromPullThrough(context.Background(), foundation.ID("project"), " Alpine ")
-	if err != nil || !created || repository.Name != "alpine" || repository.CreationSource != constants.RepositoryCreationPullThrough {
-		t.Fatalf("retry did not create the repository: repository=%#v created=%t err=%v", repository, created, err)
+	if err := service.RecordPendingCreationAudit(context.Background(), first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RecordPendingCreationAudit(context.Background(), first.ID); err != nil {
+		t.Fatal(err)
 	}
 	if len(audit.actions) != 1 || audit.actions[0] != constants.AuditRepositoryCreatedFromPullThrough {
-		t.Fatalf("unexpected audit actions: %v", audit.actions)
+		t.Fatalf("creation audit was not recorded exactly once: %v", audit.actions)
 	}
 	if _, created, err := service.EnsureFromPullThrough(context.Background(), foundation.ID("project"), "alpine"); err != nil || created {
 		t.Fatalf("existing repository was recreated: created=%t err=%v", created, err)
@@ -484,6 +527,109 @@ func TestEnsureFromPullThroughAuditsCreationAndRetriesAfterAuditFailure(t *testi
 	}
 	if _, _, err := service.EnsureFromPullThrough(context.Background(), foundation.ID("project"), "Bad Name!"); err == nil {
 		t.Fatal("invalid repository name was accepted")
+	}
+}
+
+func TestPullThroughRetriesCreationAuditOnLaterPull(t *testing.T) {
+	repositoryStore := &pullThroughRepositoryStore{}
+	service, _, _, _ := newPullThroughProjectService(t, repositoryStore)
+	audit := &pullThroughAudit{err: errors.New("audit unavailable")}
+	service.repositories.SetAuditRecorder(audit)
+
+	if _, err := service.Ensure(context.Background(), "dockerhub/alpine", "latest"); err == nil {
+		t.Fatal("creation audit failure was not reported")
+	}
+	if repositoryStore.repository == nil {
+		t.Fatal("audit failure removed the imported repository")
+	}
+	audit.err = nil
+	if _, err := service.Ensure(context.Background(), "dockerhub/alpine", "latest"); err != nil {
+		t.Fatal(err)
+	}
+	if len(audit.actions) != 1 {
+		t.Fatalf("later pull did not record the pending creation audit: %v", audit.actions)
+	}
+}
+
+func TestPullThroughLimitsConcurrentImportsAndGuardsProjectDeletion(t *testing.T) {
+	local := &pullThroughLocal{digests: map[string]string{}}
+	upstream := &pullThroughUpstream{local: local, digest: "sha256:v1", copyStarted: make(chan struct{}), copyRelease: make(chan struct{})}
+	service, _ := newPullThroughTestService(t, local, upstream)
+	service.SetMaxConcurrentImports(1)
+	project := foundation.ID("project")
+
+	if busy, err := service.ProjectHasRepositories(context.Background(), project); err != nil || busy {
+		t.Fatalf("idle project reported repositories: busy=%t err=%v", busy, err)
+	}
+	first := make(chan error, 1)
+	go func() {
+		first <- service.ensure(context.Background(), pullThroughTarget{projectID: project, upstream: constants.ProjectUpstreamGHCR, name: "owner/one", fullRepository: "ghcr/owner/one", reference: "latest"})
+	}()
+	<-upstream.copyStarted
+	if busy, err := service.ProjectHasRepositories(context.Background(), project); err != nil || !busy {
+		t.Fatalf("project deletion was not blocked during an import: busy=%t err=%v", busy, err)
+	}
+
+	waiting, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	release, err := service.beginImport(waiting, foundation.ID("other"))
+	if !errors.Is(err, context.DeadlineExceeded) || release != nil {
+		t.Fatalf("import beyond the limit did not wait for a slot: err=%v", err)
+	}
+	if busy, _ := service.ProjectHasRepositories(context.Background(), foundation.ID("other")); busy {
+		t.Fatal("abandoned import kept blocking project deletion")
+	}
+
+	close(upstream.copyRelease)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if busy, err := service.ProjectHasRepositories(context.Background(), project); err != nil || busy {
+		t.Fatalf("finished import kept blocking project deletion: busy=%t err=%v", busy, err)
+	}
+	service.repositories.store.(*pullThroughRepositoryStore).hasRows = true
+	if busy, err := service.ProjectHasRepositories(context.Background(), project); err != nil || !busy {
+		t.Fatalf("repository rows did not block project deletion: busy=%t err=%v", busy, err)
+	}
+	service.SetMaxConcurrentImports(0)
+	if cap(service.imports) != 1 {
+		t.Fatal("a non-positive limit replaced the import limit")
+	}
+}
+
+func TestPullThroughCallerWithNewerDigestDoesNotJoinOlderImport(t *testing.T) {
+	local := &pullThroughLocal{digests: map[string]string{}}
+	upstream := &pullThroughUpstream{local: local, digest: "sha256:v1", copyStarted: make(chan struct{}), copyRelease: make(chan struct{})}
+	service, _ := newPullThroughTestService(t, local, upstream)
+	target := pullThroughTarget{upstream: constants.ProjectUpstreamGHCR, name: "owner/image", fullRepository: "ghcr/owner/image", reference: "latest"}
+
+	first := make(chan error, 1)
+	go func() { first <- service.ensure(context.Background(), target) }()
+	<-upstream.copyStarted
+	upstream.mu.Lock()
+	upstream.digest = "sha256:v2"
+	secondStarted := make(chan struct{})
+	upstream.copyStarted = secondStarted
+	upstream.mu.Unlock()
+
+	second := make(chan error, 1)
+	go func() { second <- service.ensure(context.Background(), target) }()
+	select {
+	case <-secondStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("caller with a newer digest did not start its own import")
+	}
+	close(upstream.copyRelease)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-second; err != nil {
+		t.Fatal(err)
+	}
+	upstream.mu.Lock()
+	defer upstream.mu.Unlock()
+	if upstream.copies != 2 {
+		t.Fatalf("caller with a newer digest joined the older import: copies=%d", upstream.copies)
 	}
 }
 

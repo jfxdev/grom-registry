@@ -21,6 +21,7 @@ type Store interface {
 	UpsertDiscoveredRepository(ctx context.Context, repository *Repository) error
 	SetRepositoryStatus(ctx context.Context, repositoryID foundation.ID, status string) error
 	RepositoryHasLiveManifests(ctx context.Context, repositoryID foundation.ID) (bool, error)
+	ManifestObserved(ctx context.Context, repositoryID foundation.ID, tag, digest string) (bool, error)
 	DeleteRepository(ctx context.Context, repositoryID foundation.ID) error
 	SaveRepositoryProfile(ctx context.Context, repository *Repository) error
 	ReplaceRepositoryPolicies(ctx context.Context, repositoryID foundation.ID, expectedVersion int, policies []Policy, updatedAt time.Time) (int, error)
