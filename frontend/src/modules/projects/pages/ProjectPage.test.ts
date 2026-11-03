@@ -768,4 +768,29 @@ describe('ProjectPage membership management', () => {
     expect(wrapper.text()).toContain('The first authorized pull imports the image.')
     expect(wrapper.text()).not.toContain('Push an image')
   })
+
+  it('labels Writer as pull-only in pull-through projects', async () => {
+    mocks.getProject.mockResolvedValue({
+      id: 'project-1', slug: 'payments', name: 'Payments', canManage: true,
+      mode: 'pull_through', upstream: 'dockerhub',
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Project settings"]').trigger('click')
+    await buttonWithText(wrapper, 'Add member').trigger('click')
+    const memberForm = wrapper.get('form[aria-labelledby="add-member-title"]')
+    const writer = memberForm.get('option[value="writer"]')
+    expect(writer.text()).toBe('Writer · pull')
+  })
+
+  it('labels Writer with push in standard projects', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Project settings"]').trigger('click')
+    await buttonWithText(wrapper, 'Add member').trigger('click')
+    const memberForm = wrapper.get('form[aria-labelledby="add-member-title"]')
+    expect(memberForm.get('option[value="writer"]').text()).toBe('Writer · pull and push')
+  })
 })

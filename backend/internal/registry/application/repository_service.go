@@ -159,9 +159,26 @@ func (s *RepositoryService) EnsureFromPullThrough(
 			"name":      name,
 			"source":    constants.RepositoryCreationPullThrough,
 		}); err != nil {
-		return repository, true, err
+		// The row is still empty because inventory is observed afterwards.
+		// Removing it lets the next pull create it again and retry the audit.
+		if deleteErr := s.store.DeleteRepository(ctx, repository.ID); deleteErr != nil {
+			return nil, false, errors.Join(err, deleteErr)
+		}
+		return nil, false, err
 	}
 	return repository, true, nil
+}
+
+func (s *RepositoryService) FindByName(
+	ctx context.Context,
+	projectID foundation.ID,
+	name string,
+) (*registrydomain.Repository, error) {
+	repository, err := s.store.FindRepository(ctx, projectID, strings.ToLower(strings.TrimSpace(name)))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return repository, err
 }
 
 func (s *RepositoryService) List(

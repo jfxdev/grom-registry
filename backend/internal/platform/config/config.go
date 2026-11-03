@@ -166,17 +166,16 @@ func Load() (Config, error) {
 func pullThroughCredentialsFromEnv() (map[string]UpstreamCredential, error) {
 	credentials := make(map[string]UpstreamCredential)
 	for _, item := range []struct {
-		upstream    string
-		usernameKey string
-		passwordKey string
+		upstream  string
+		envPrefix string
 	}{
-		{upstream: constants.ProjectUpstreamDockerHub, usernameKey: "GROM_PULL_THROUGH_DOCKERHUB_USERNAME", passwordKey: "GROM_PULL_THROUGH_DOCKERHUB_PASSWORD"},
-		{upstream: constants.ProjectUpstreamGHCR, usernameKey: "GROM_PULL_THROUGH_GHCR_USERNAME", passwordKey: "GROM_PULL_THROUGH_GHCR_PASSWORD"},
+		{upstream: constants.ProjectUpstreamDockerHub, envPrefix: "GROM_PULL_THROUGH_DOCKERHUB"},
+		{upstream: constants.ProjectUpstreamGHCR, envPrefix: "GROM_PULL_THROUGH_GHCR"},
 	} {
-		username := strings.TrimSpace(os.Getenv(item.usernameKey))
-		password := os.Getenv(item.passwordKey)
+		username := strings.TrimSpace(os.Getenv(item.envPrefix + "_USERNAME"))
+		password := os.Getenv(item.envPrefix + "_PASSWORD")
 		if (username == "") != (password == "") {
-			return nil, fmt.Errorf("%s and %s must be configured together", item.usernameKey, item.passwordKey)
+			return nil, fmt.Errorf("%s_USERNAME and %s_PASSWORD must be configured together", item.envPrefix, item.envPrefix)
 		}
 		if username != "" {
 			credentials[item.upstream] = UpstreamCredential{Username: username, Password: password}

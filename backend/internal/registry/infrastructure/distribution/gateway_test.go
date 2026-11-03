@@ -185,6 +185,7 @@ func TestGatewayMapsPullThroughFailures(t *testing.T) {
 		code   string
 	}{
 		{name: "missing", err: registryapp.ErrUpstreamManifestNotFound, status: http.StatusNotFound, code: "MANIFEST_UNKNOWN"},
+		{name: "archived", err: registryapp.ErrRepositoryArchived, status: http.StatusNotFound, code: "MANIFEST_UNKNOWN"},
 		{name: "timeout", err: context.DeadlineExceeded, status: http.StatusGatewayTimeout, code: "UPSTREAM_TIMEOUT"},
 		{name: "unavailable", err: errors.New("upstream unavailable"), status: http.StatusBadGateway, code: "UPSTREAM_UNAVAILABLE"},
 	} {
@@ -208,6 +209,36 @@ func TestGatewayMapsPullThroughFailures(t *testing.T) {
 
 			if response.Code != test.status || !strings.Contains(response.Body.String(), test.code) {
 				t.Fatalf("unexpected upstream failure response: status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestManifestTargetsSplitAtLastManifestsSegment(t *testing.T) {
+	for _, test := range []struct {
+		method     string
+		path       string
+		repository string
+		reference  string
+		ok         bool
+	}{
+		{method: http.MethodGet, path: "/v2/team/app/manifests/latest", repository: "team/app", reference: "latest", ok: true},
+		{method: http.MethodHead, path: "/v2/team/manifests/app/manifests/latest", repository: "team/manifests/app", reference: "latest", ok: true},
+		{method: http.MethodPut, path: "/v2/team/manifests/app/manifests/sha256:abc", repository: "team/manifests/app", reference: "sha256:abc", ok: true},
+		{method: http.MethodGet, path: "/v2/team/app/manifests/", ok: false},
+		{method: http.MethodGet, path: "/v2/manifests/latest", ok: false},
+		{method: http.MethodGet, path: "/v2/team/app/blobs/sha256:abc", ok: false},
+		{method: http.MethodPost, path: "/v2/team/app/manifests/latest", ok: false},
+	} {
+		t.Run(test.method+" "+test.path, func(t *testing.T) {
+			request := httptest.NewRequest(test.method, test.path, nil)
+			target := manifestReadTarget
+			if test.method == http.MethodPut {
+				target = manifestPutTarget
+			}
+			repository, reference, ok := target(request)
+			if ok != test.ok || repository != test.repository || reference != test.reference {
+				t.Fatalf("target = %q %q %t, want %q %q %t", repository, reference, ok, test.repository, test.reference, test.ok)
 			}
 		})
 	}

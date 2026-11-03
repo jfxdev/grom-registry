@@ -62,3 +62,20 @@ func assertProjectPullThroughColumns(t *testing.T, ctx context.Context, db *bun.
 		t.Fatalf("expected legacy project defaults, got mode=%q upstream=%q", mode, upstream)
 	}
 }
+
+func TestProjectPullThroughMigrationFailsWithoutProjectsTable(t *testing.T) {
+	ctx := context.Background()
+	sqlDB, err := sql.Open(sqliteshim.ShimName, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db := bun.NewDB(sqlDB, sqlitedialect.New())
+	t.Cleanup(func() { _ = db.Close() })
+	if err := ensureProjectPullThroughColumns(ctx, db); err == nil {
+		t.Fatal("migration succeeded without a projects table")
+	}
+	if err := preventProjectPullThroughRollback(ctx, db); err == nil {
+		t.Fatal("pull-through migration rollback was allowed")
+	}
+}

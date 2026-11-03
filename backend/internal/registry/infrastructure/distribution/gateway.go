@@ -105,6 +105,8 @@ func (g *policyGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						switch {
 						case errors.Is(err, registryapp.ErrUpstreamManifestNotFound):
 							status, code, message = http.StatusNotFound, "MANIFEST_UNKNOWN", "Upstream manifest not found"
+						case errors.Is(err, registryapp.ErrRepositoryArchived):
+							status, code, message = http.StatusNotFound, "MANIFEST_UNKNOWN", "Manifest is not cached in this archived repository"
 						case errors.Is(err, context.DeadlineExceeded):
 							status, code, message = http.StatusGatewayTimeout, "UPSTREAM_TIMEOUT", "Upstream synchronization timed out"
 						}
@@ -143,24 +145,14 @@ func manifestReadTarget(r *http.Request) (string, string, bool) {
 	if (r.Method != http.MethodGet && r.Method != http.MethodHead) || !strings.HasPrefix(r.URL.Path, "/v2/") {
 		return "", "", false
 	}
-	target := strings.TrimPrefix(r.URL.Path, "/v2/")
-	repository, reference, ok := strings.Cut(target, "/manifests/")
-	if !ok || repository == "" || reference == "" || strings.Contains(reference, "/") {
-		return "", "", false
-	}
-	return repository, reference, true
+	return manifestTarget(strings.TrimPrefix(r.URL.Path, "/v2/"))
 }
 
 func manifestPutTarget(r *http.Request) (string, string, bool) {
 	if r.Method != http.MethodPut || !strings.HasPrefix(r.URL.Path, "/v2/") {
 		return "", "", false
 	}
-	target := strings.TrimPrefix(r.URL.Path, "/v2/")
-	repository, reference, ok := strings.Cut(target, "/manifests/")
-	if !ok || repository == "" || reference == "" || strings.Contains(reference, "/") {
-		return "", "", false
-	}
-	return repository, reference, true
+	return manifestTarget(strings.TrimPrefix(r.URL.Path, "/v2/"))
 }
 
 func writeGatewayError(w http.ResponseWriter, status int, code, message string) {
@@ -169,4 +161,18 @@ func writeGatewayError(w http.ResponseWriter, status int, code, message string) 
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"errors": []map[string]string{{"code": code, "message": message}},
 	})
+}
+
+// manifestTarget splits at the last /manifests/ segment because repository
+// paths may contain a "manifests" component while references never contain "/".
+func manifestTarget(target string) (string, string, bool) {
+	index := strings.LastIndex(target, "/manifests/")
+	if index < 0 {
+		return "", "", false
+	}
+	repository, reference := target[:index], target[index+len("/manifests/"):]
+	if repository == "" || reference == "" || strings.Contains(reference, "/") {
+		return "", "", false
+	}
+	return repository, reference, true
 }

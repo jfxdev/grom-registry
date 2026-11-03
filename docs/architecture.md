@@ -95,7 +95,16 @@ reference first. A missing manifest, or a tag whose upstream digest changed, is
 copied synchronously from the configured Docker Hub or GHCR upstream into private
 Distribution storage before the client request continues. Docker Hub's unqualified
 image names map to the `library` namespace. Concurrent imports of one reference
-are serialized, while pulls by digest remain immutable. If an upstream refresh
+are serialized, while pulls by digest remain immutable. The shared import is
+detached from the first caller's cancellation, bounded by a 15-minute timeout,
+and uses an internal token whose lifetime covers that timeout. The logical
+repository and its creation audit event are written only after content exists
+locally, so a missing upstream image never leaves an empty repository; if the
+audit write fails, the new row is removed so the next pull retries both. A
+failed inventory observation is retried in memory on the next pull of the same
+reference; a restart drops that retry and a manual inventory reconciliation
+recovers it. An archived pull-through repository serves only cached content and
+never contacts the upstream. If an upstream refresh
 fails and the tag already exists locally, Grom serves the local copy. Imported
 content and its logical repository persist without pull-through TTL or automatic
 expiry; existing backup and recovery include both. Optional upstream credentials

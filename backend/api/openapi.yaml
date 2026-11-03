@@ -1834,6 +1834,7 @@ components:
         - projects.membership_upserted
         - projects.membership_removed
         - registry.repository_created_from_push
+        - registry.repository_created_from_pull_through
         - registry.repository_policies_updated
         - registry.repository_archived
         - registry.repository_unarchived

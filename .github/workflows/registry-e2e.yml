@@ -18,7 +18,7 @@ concurrency:
 jobs:
   registry-e2e:
     name: Registry E2E (Docker)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:

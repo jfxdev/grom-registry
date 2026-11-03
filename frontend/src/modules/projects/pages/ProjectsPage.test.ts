@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { APIError } from '@/shared/api/client'
+import { projectModeValues, projectUpstreamValues } from '@/shared/api/generated/schema'
+import { PROJECT_UPSTREAM_LABELS } from '@/shared/constants'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -206,5 +208,18 @@ describe('ProjectsPage', () => {
       mode: 'pull_through',
       upstream: 'ghcr',
     }, expect.anything())
+  })
+
+  it('offers every server-defined project type and upstream', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button').trigger('click')
+    const modes = wrapper.get('select[aria-label="Project type"]').findAll('option').map((option) => option.element.value)
+    expect(modes).toEqual([...projectModeValues])
+    await wrapper.get('select[aria-label="Project type"]').setValue('pull_through')
+    const upstreams = wrapper.get('select[aria-label="Upstream registry"]').findAll('option')
+    expect(upstreams.map((option) => option.element.value)).toEqual([...projectUpstreamValues])
+    expect(upstreams.map((option) => option.text())).toEqual(projectUpstreamValues.map((value) => PROJECT_UPSTREAM_LABELS[value]))
   })
 })

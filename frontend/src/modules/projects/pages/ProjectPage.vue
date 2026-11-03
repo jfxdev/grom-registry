@@ -144,6 +144,7 @@ const canManage = computed(() =>
   session.user?.systemViewer !== true && project.data.value?.canManage === true,
 )
 const isPullThrough = computed(() => project.data.value?.mode === 'pull_through')
+const writerRoleLabel = computed(() => (isPullThrough.value ? 'Writer · pull' : 'Writer · pull and push'))
 
 async function handleRepositoryCreated() {
   repositoryModal.value = false
@@ -1318,7 +1319,7 @@ function policySummary(policy: Repository['policies'][number]) {
         <div class="flex items-start justify-between"><div><h2 id="add-member-title" class="text-lg font-semibold">Add service account</h2><p class="mt-1 text-sm text-muted-foreground">Membership controls token access immediately.</p></div><Button variant="ghost" size="icon" type="button" @click="closeMemberModal"><X :size="18" /></Button></div>
         <label v-if="session.user?.systemAdmin" class="field-label">Principal type<select v-model="memberKind" class="field-control text-sm" @change="changeMemberKind"><option value="service_account">Service account</option><option value="user">User</option></select></label>
         <label class="field-label">Principal<select v-model="memberId" class="field-control text-sm"><option v-for="principal in availablePrincipals" :key="principal.id" :value="principal.id">{{ 'name' in principal ? principal.name : principal.email }} · {{ principal.username }}</option></select></label>
-        <label class="field-label">Role<select v-model="memberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">Writer · pull and push</option><option value="admin">Admin · manage project</option></select></label>
+        <label class="field-label">Role<select v-model="memberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">{{ writerRoleLabel }}</option><option value="admin">Admin · manage project</option></select></label>
         <p v-if="memberError" class="error-text" role="alert">{{ memberError }}</p>
         <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="closeMemberModal">Cancel</Button><Button type="submit" :disabled="!canManage || !memberId || addMember.isPending.value">Add member</Button></div>
       </form>
@@ -1337,7 +1338,7 @@ function policySummary(policy: Repository['policies'][number]) {
           <div><p class="text-sm font-semibold">{{ memberToEdit.principalName }}</p><p class="mt-1 text-xs text-muted-foreground">{{ memberToEdit.principalDetail }}</p></div>
           <PrincipalTypeBadge :kind="memberToEdit.principalKind" />
         </div>
-        <label class="field-label">Role<select v-model="editedMemberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">Writer · pull and push</option><option value="admin">Admin · manage project</option></select></label>
+        <label class="field-label">Role<select v-model="editedMemberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">{{ writerRoleLabel }}</option><option value="admin">Admin · manage project</option></select></label>
         <p v-if="memberError" class="error-text" role="alert">{{ memberError }}</p>
         <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="closeChangeMemberRoleModal">Cancel</Button><Button type="submit" :disabled="changeMemberRole.isPending.value">{{ changeMemberRole.isPending.value ? 'Saving…' : 'Save role' }}</Button></div>
       </form>

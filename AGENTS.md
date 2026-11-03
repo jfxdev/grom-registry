@@ -116,6 +116,11 @@ The mandatory GitHub status checks are `Backend Tests`, `PostgreSQL Tests`,
 `main` branch ruleset; the workflows also handle merge queues through
 `merge_group`. Keep govulncheck's output in `text` mode because its JSON and
 SARIF modes do not fail the job when vulnerabilities are found.
+Every workflow pins `runs-on: ubuntu-24.04` instead of `ubuntu-latest`. On
+ubuntu-26.04 Playwright cannot install Chromium, and Docker's containerd image
+store changes push denial messages and index-based storage accounting that the
+registry E2E asserts. Move to a newer runner only in a dedicated change that
+adapts those journeys.
 `.github/workflows/codeql.yml` scans Go and JavaScript/TypeScript separately
 with CodeQL on pull requests, `main`, merge queues, and a weekly schedule. It
 must retain `security-events: write`, scan both languages, and use a manual Go

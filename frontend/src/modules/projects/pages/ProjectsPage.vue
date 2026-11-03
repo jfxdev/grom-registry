@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { useSessionStore } from '@/modules/auth/store/session'
 import { APIError } from '@/shared/api/client'
+import { projectModeValues, projectUpstreamValues } from '@/shared/api/generated/schema'
 import type { AccountedStorageUsage, Project } from '@/shared/api/models'
 import { ActionButton, Button, CancelButton } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { PaginationControls } from '@/shared/components/ui/pagination'
-import { ROUTES } from '@/shared/constants'
+import { PROJECT_MODE_LABELS, PROJECT_UPSTREAM_LABELS, ROUTES } from '@/shared/constants'
 import { pageItems, useCursorPagination } from '@/shared/lib/pagination'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ArrowUpRight, Box, Plus, Search, X } from '@lucide/vue'
@@ -204,14 +205,12 @@ function formatBytes(bytes: number | null | undefined) {
         <label class="field-label">Slug<Input v-model="slug" required placeholder="payments" @input="onSlugInput" @blur="onSlugBlur" /></label>
         <label class="field-label">Project type
           <select v-model="mode" class="field-control text-sm" aria-label="Project type">
-            <option value="standard">Standard · push and pull</option>
-            <option value="pull_through">Pull-through · read-only mirror</option>
+            <option v-for="value in projectModeValues" :key="value" :value="value">{{ PROJECT_MODE_LABELS[value] }}</option>
           </select>
         </label>
         <label v-if="mode === 'pull_through'" class="field-label">Upstream registry
           <select v-model="upstream" class="field-control text-sm" aria-label="Upstream registry">
-            <option value="dockerhub">Docker Hub</option>
-            <option value="ghcr">GitHub Container Registry</option>
+            <option v-for="value in projectUpstreamValues" :key="value" :value="value">{{ PROJECT_UPSTREAM_LABELS[value] }}</option>
           </select>
         </label>
         <p v-if="mode === 'pull_through'" class="text-sm text-muted-foreground">Images are imported on the first authorized pull and retained locally without automatic expiry.</p>
