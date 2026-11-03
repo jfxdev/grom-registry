@@ -222,6 +222,26 @@ func (s *Store) RepositoryHasLiveManifests(ctx context.Context, repositoryID fou
 		Exists(ctx)
 }
 
+// ManifestObserved reports whether inventory records digest as live and, when
+// tag is set, whether that attached tag currently points to it.
+func (s *Store) ManifestObserved(ctx context.Context, repositoryID foundation.ID, tag, digest string) (bool, error) {
+	if tag == "" {
+		return s.db.NewSelect().Model((*manifestModel)(nil)).
+			Where("repository_id = ?", repositoryID.String()).
+			Where("digest = ?", digest).
+			Where("state NOT IN (?, ?)", constants.InventoryStateDeleted, constants.InventoryStateMissing).
+			Exists(ctx)
+	}
+	return s.db.NewSelect().TableExpr("registry_tags AS rt").
+		Join("JOIN registry_manifests AS rm ON rm.id = rt.manifest_id").
+		Where("rt.repository_id = ?", repositoryID.String()).
+		Where("rt.name = ?", tag).
+		Where("rt.detached_at IS NULL").
+		Where("rm.digest = ?", digest).
+		Where("rm.state NOT IN (?, ?)", constants.InventoryStateDeleted, constants.InventoryStateMissing).
+		Exists(ctx)
+}
+
 func (s *Store) DeleteRepository(ctx context.Context, repositoryID foundation.ID) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		var projectID string

@@ -11,9 +11,10 @@ const (
 	RepositoryStatusActive   = "active"
 	RepositoryStatusArchived = "archived"
 
-	RepositoryCreationManual     = "manual"
-	RepositoryCreationPush       = "push"
-	RepositoryCreationReconciled = "reconciled"
+	RepositoryCreationManual      = "manual"
+	RepositoryCreationPush        = "push"
+	RepositoryCreationReconciled  = "reconciled"
+	RepositoryCreationPullThrough = "pull_through"
 
 	RepositoryProfileUnknown        = "unknown"
 	RepositoryProfileContainerImage = "container_image"

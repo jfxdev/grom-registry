@@ -1,10 +1,15 @@
 package application
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/jfxdev/grom/backend/internal/constants"
+	"github.com/jfxdev/grom/backend/internal/foundation"
+	projectapp "github.com/jfxdev/grom/backend/internal/projects/application"
+	projectdomain "github.com/jfxdev/grom/backend/internal/projects/domain"
 	"github.com/jfxdev/grom/backend/internal/registry/infrastructure/signing"
 )
 
@@ -50,5 +55,54 @@ func TestTokenServiceSubjectReturnsVerifiedRegistrySubject(t *testing.T) {
 	}
 	if subject, ok := service.Subject("not-a-token"); ok || subject != "" {
 		t.Fatalf("expected invalid token to have no subject, got %q, %t", subject, ok)
+	}
+}
+
+type tokenProjectStore struct {
+	projectdomain.Repository
+	project    *projectdomain.Project
+	membership *projectdomain.Membership
+}
+
+func (s *tokenProjectStore) FindProjectBySlug(context.Context, string) (*projectdomain.Project, error) {
+	return s.project, nil
+}
+
+func (s *tokenProjectStore) FindMembership(context.Context, foundation.ID, foundation.PrincipalRef) (*projectdomain.Membership, error) {
+	return s.membership, nil
+}
+
+func TestTokenServicePullThroughProjectsNeverGrantExternalPush(t *testing.T) {
+	signer, err := signing.LoadOrCreate(filepath.Join(t.TempDir(), "key.pem"), filepath.Join(t.TempDir(), "cert.pem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{constants.ProjectModeStandard, constants.ProjectModePullThrough} {
+		for _, role := range []string{constants.RoleReader, constants.RoleWriter, constants.RoleAdmin} {
+			t.Run(mode+"/"+role, func(t *testing.T) {
+				store := &tokenProjectStore{
+					project:    &projectdomain.Project{ID: "project", Slug: "mirror", Mode: mode},
+					membership: &projectdomain.Membership{ProjectID: "project", Role: role},
+				}
+				service := NewTokenService(projectapp.New(store), nil, signer, time.Minute)
+				raw, _, _, err := service.Issue(context.Background(), "registry-client", foundation.PrincipalRef{
+					Kind: constants.PrincipalServiceAccount, ID: "account",
+				}, "", []string{"repository:mirror/library/alpine:pull,push,delete"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !service.HasAccess(raw, "mirror/library/alpine", constants.RegistryActionPull) {
+					t.Fatal("project member did not receive pull")
+				}
+				if service.HasAccess(raw, "mirror/library/alpine", constants.RegistryActionDelete) {
+					t.Fatal("external principal received delete")
+				}
+				push := service.HasAccess(raw, "mirror/library/alpine", constants.RegistryActionPush)
+				expectedPush := mode == constants.ProjectModeStandard && role != constants.RoleReader
+				if push != expectedPush {
+					t.Fatalf("push access=%t, expected %t", push, expectedPush)
+				}
+			})
+		}
 	}
 }

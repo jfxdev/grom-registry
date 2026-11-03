@@ -3,6 +3,7 @@ package distribution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -13,10 +14,16 @@ import (
 	registryapp "github.com/jfxdev/grom/backend/internal/registry/application"
 )
 
+type PullThroughSynchronizer interface {
+	Ensure(ctx context.Context, repository, reference string) (bool, error)
+}
+
 type policyGateway struct {
-	next   http.Handler
-	tokens *registryapp.TokenService
-	client *Client
+	next        http.Handler
+	tokens      *registryapp.TokenService
+	client      *Client
+	pullThrough PullThroughSynchronizer
+	logger      *slog.Logger
 }
 
 type ManifestObserver func(ctx context.Context, repository, reference, digest, actor string) error
@@ -25,6 +32,7 @@ func NewGateway(
 	target *url.URL,
 	tokens *registryapp.TokenService,
 	client *Client,
+	pullThrough PullThroughSynchronizer,
 	observer ManifestObserver,
 	logger *slog.Logger,
 ) http.Handler {
@@ -34,7 +42,7 @@ func NewGateway(
 	proxy := &httputil.ReverseProxy{Rewrite: rewriteProxyRequest(target)}
 	proxy.ModifyResponse = manifestObservationResponseModifier(tokens, observer, logger)
 	proxy.FlushInterval = -1
-	return &policyGateway{next: proxy, tokens: tokens, client: client}
+	return &policyGateway{next: proxy, tokens: tokens, client: client, pullThrough: pullThrough, logger: logger}
 }
 
 func manifestObservationResponseModifier(
@@ -82,6 +90,35 @@ func rewriteProxyRequest(target *url.URL) func(*httputil.ProxyRequest) {
 }
 
 func (g *policyGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if g.pullThrough != nil {
+		repository, reference, isManifestRead := manifestReadTarget(r)
+		if isManifestRead {
+			rawToken, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if ok && g.tokens.HasAccess(rawToken, repository, constants.RegistryActionPull) {
+				handled, err := g.pullThrough.Ensure(r.Context(), repository, reference)
+				if handled {
+					if err != nil {
+						if g.logger != nil {
+							g.logger.ErrorContext(r.Context(), "synchronize pull-through manifest", "repository", repository, "reference", reference, "error", err)
+						}
+						status, code, message := http.StatusBadGateway, "UPSTREAM_UNAVAILABLE", "Upstream registry is unavailable"
+						switch {
+						case errors.Is(err, registryapp.ErrUpstreamManifestNotFound):
+							status, code, message = http.StatusNotFound, "MANIFEST_UNKNOWN", "Upstream manifest not found"
+						case errors.Is(err, registryapp.ErrRepositoryArchived):
+							status, code, message = http.StatusNotFound, "MANIFEST_UNKNOWN", "Manifest is not cached in this archived repository"
+						case errors.Is(err, context.DeadlineExceeded):
+							status, code, message = http.StatusGatewayTimeout, "UPSTREAM_TIMEOUT", "Upstream synchronization timed out"
+						}
+						writeGatewayError(w, status, code, message)
+						return
+					}
+					g.next.ServeHTTP(w, r)
+					return
+				}
+			}
+		}
+	}
 	repository, reference, isManifestPut := manifestPutTarget(r)
 	if !isManifestPut || strings.Contains(reference, ":") {
 		g.next.ServeHTTP(w, r)
@@ -104,16 +141,18 @@ func (g *policyGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	g.next.ServeHTTP(w, r)
 }
 
+func manifestReadTarget(r *http.Request) (string, string, bool) {
+	if (r.Method != http.MethodGet && r.Method != http.MethodHead) || !strings.HasPrefix(r.URL.Path, "/v2/") {
+		return "", "", false
+	}
+	return manifestTarget(strings.TrimPrefix(r.URL.Path, "/v2/"))
+}
+
 func manifestPutTarget(r *http.Request) (string, string, bool) {
 	if r.Method != http.MethodPut || !strings.HasPrefix(r.URL.Path, "/v2/") {
 		return "", "", false
 	}
-	target := strings.TrimPrefix(r.URL.Path, "/v2/")
-	repository, reference, ok := strings.Cut(target, "/manifests/")
-	if !ok || repository == "" || reference == "" || strings.Contains(reference, "/") {
-		return "", "", false
-	}
-	return repository, reference, true
+	return manifestTarget(strings.TrimPrefix(r.URL.Path, "/v2/"))
 }
 
 func writeGatewayError(w http.ResponseWriter, status int, code, message string) {
@@ -122,4 +161,18 @@ func writeGatewayError(w http.ResponseWriter, status int, code, message string) 
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"errors": []map[string]string{{"code": code, "message": message}},
 	})
+}
+
+// manifestTarget splits at the last /manifests/ segment because repository
+// paths may contain a "manifests" component while references never contain "/".
+func manifestTarget(target string) (string, string, bool) {
+	index := strings.LastIndex(target, "/manifests/")
+	if index < 0 {
+		return "", "", false
+	}
+	repository, reference := target[:index], target[index+len("/manifests/"):]
+	if repository == "" || reference == "" || strings.Contains(reference, "/") {
+		return "", "", false
+	}
+	return repository, reference, true
 }

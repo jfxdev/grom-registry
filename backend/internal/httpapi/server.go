@@ -1093,14 +1093,16 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Name string `json:"name"`
-		Slug string `json:"slug"`
+		Name     string `json:"name"`
+		Slug     string `json:"slug"`
+		Mode     string `json:"mode"`
+		Upstream string `json:"upstream"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
 	user := userFromContext(r.Context())
-	project, err := s.projects.Create(r.Context(), principalForUser(user), user.SystemAdmin, input.Name, input.Slug)
+	project, err := s.projects.Create(r.Context(), principalForUser(user), user.SystemAdmin, input.Name, input.Slug, input.Mode, input.Upstream)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_project", err.Error())
 		return

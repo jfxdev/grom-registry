@@ -152,12 +152,18 @@ func (s *TokenService) IssueCatalog(subject string) (string, error) {
 }
 
 func (s *TokenService) IssueInternal(subject string, access []Access) (string, error) {
+	return s.IssueInternalWithTTL(subject, access, s.ttl)
+}
+
+// IssueInternalWithTTL signs an internal token for work that can outlive the
+// registry token TTL, such as a pull-through import.
+func (s *TokenService) IssueInternalWithTTL(subject string, access []Access, ttl time.Duration) (string, error) {
 	now := time.Now().UTC()
 	claims := RegistryClaims{
 		Access: access,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer: s.issuer, Subject: subject, Audience: jwt.ClaimStrings{s.service},
-			ExpiresAt: jwt.NewNumericDate(now.Add(s.ttl)), NotBefore: jwt.NewNumericDate(now.Add(-5 * time.Second)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)), NotBefore: jwt.NewNumericDate(now.Add(-5 * time.Second)),
 			IssuedAt: jwt.NewNumericDate(now), ID: uuid.NewString(),
 		},
 	}

@@ -750,4 +750,67 @@ describe('ProjectPage membership management', () => {
     expect(await screen.findByText('Project still contains repositories')).toBeTruthy()
     expect(screen.getByRole('dialog', { name: 'Delete project' })).toBeTruthy()
   })
+
+  it('presents pull-through projects as read-only mirrors', async () => {
+    mocks.getProject.mockResolvedValue({
+      id: 'project-1', slug: 'payments', name: 'Payments', canManage: true,
+      mode: 'pull_through', upstream: 'dockerhub',
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Pull-through · dockerhub')
+    expect(wrapper.text()).toContain('The first authorized pull creates one automatically.')
+    expect(wrapper.findAll('button').some((button) => button.text().includes('New repository'))).toBe(false)
+
+    await buttonWithText(wrapper, 'Instructions').trigger('click')
+    expect(wrapper.text()).toContain('Pull instructions')
+    expect(wrapper.text()).toContain('The first authorized pull imports the image.')
+    expect(wrapper.text()).toContain('Replace <tag> with an upstream tag')
+    expect(wrapper.text()).toContain('/payments/repository:<tag>')
+    expect(wrapper.text()).not.toContain('Push an image')
+  })
+
+  it('describes the profile of an imported pull-through repository', async () => {
+    mocks.getProject.mockResolvedValue({
+      id: 'project-1', slug: 'payments', name: 'Payments', canManage: true,
+      mode: 'pull_through', upstream: 'dockerhub',
+    })
+    mocks.listRepositories.mockResolvedValue([{
+      id: 'repository-1', projectId: 'project-1', name: 'alpine', description: '', status: 'active',
+      creationSource: 'pull_through', profile: 'container_image', profileSource: 'inferred', profileConfidence: 'high',
+      profileNeedsReview: false, policyVersion: 1, policies: [], createdAt: '2026-07-29T00:00:00Z', updatedAt: '2026-07-29T00:00:00Z',
+    }])
+    mocks.repositoryId = 'repository-1'
+
+    renderPage()
+
+    expect(await screen.findByText('high confidence · inferred from imported content')).toBeTruthy()
+    expect(screen.queryByText(/inferred from uploaded content/)).toBeNull()
+  })
+
+  it('labels Writer as pull-only in pull-through projects', async () => {
+    mocks.getProject.mockResolvedValue({
+      id: 'project-1', slug: 'payments', name: 'Payments', canManage: true,
+      mode: 'pull_through', upstream: 'dockerhub',
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Project settings"]').trigger('click')
+    await buttonWithText(wrapper, 'Add member').trigger('click')
+    const memberForm = wrapper.get('form[aria-labelledby="add-member-title"]')
+    const writer = memberForm.get('option[value="writer"]')
+    expect(writer.text()).toBe('Writer · pull')
+  })
+
+  it('labels Writer with push in standard projects', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Project settings"]').trigger('click')
+    await buttonWithText(wrapper, 'Add member').trigger('click')
+    const memberForm = wrapper.get('form[aria-labelledby="add-member-title"]')
+    expect(memberForm.get('option[value="writer"]').text()).toBe('Writer · pull and push')
+  })
 })

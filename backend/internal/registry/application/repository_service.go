@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jfxdev/grom/backend/internal/constants"
@@ -27,6 +28,9 @@ type RepositoryService struct {
 	store         registrydomain.Store
 	existingProbe func(context.Context, string) (bool, error)
 	audit         AuditRecorder
+	// pendingCreationAudits maps a pull-through repository ID to the creation
+	// event that could not be recorded yet.
+	pendingCreationAudits sync.Map
 }
 
 func NewRepositoryService(store registrydomain.Store) *RepositoryService {
@@ -130,6 +134,74 @@ func (s *RepositoryService) EnsureFromPush(
 		return repository, true, err
 	}
 	return repository, true, nil
+}
+
+func (s *RepositoryService) EnsureFromPullThrough(
+	ctx context.Context,
+	projectID foundation.ID,
+	name string,
+) (*registrydomain.Repository, bool, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !repositoryNamePattern.MatchString(name) || len(name) > 255 {
+		return nil, false, fmt.Errorf("repository path must use lowercase path segments")
+	}
+	now := time.Now().UTC()
+	repository, created, err := s.store.EnsureRepository(ctx, &registrydomain.Repository{
+		ID: foundation.NewID(), ProjectID: projectID, Name: name,
+		Status: constants.RepositoryStatusEmpty, CreationSource: constants.RepositoryCreationPullThrough,
+		Profile: constants.RepositoryProfileUnknown, ProfileSource: constants.ProfileSourceNone,
+		ProfileConfidence: constants.ClassificationConfidenceNone,
+		Policies:          []registrydomain.Policy{}, AccountedUsage: foundation.PendingStorageUsage(), CreatedAt: now, UpdatedAt: now,
+	})
+	if err != nil || !created || s.audit == nil {
+		return repository, created, err
+	}
+	s.pendingCreationAudits.Store(repository.ID, pullThroughCreationAudit{projectID: projectID, name: name})
+	return repository, true, s.RecordPendingCreationAudit(ctx, repository.ID)
+}
+
+type pullThroughCreationAudit struct {
+	projectID foundation.ID
+	name      string
+}
+
+// RecordPendingCreationAudit writes the creation event of a pull-through
+// repository whose earlier audit write failed. The row is kept, because a
+// concurrent pull may already have observed manifests into it, and every later
+// pull retries the event. Pending events live in memory, so a restart drops them.
+func (s *RepositoryService) RecordPendingCreationAudit(ctx context.Context, repositoryID foundation.ID) error {
+	pending, ok := s.pendingCreationAudits.LoadAndDelete(repositoryID)
+	if !ok || s.audit == nil {
+		return nil
+	}
+	audit, _ := pending.(pullThroughCreationAudit)
+	actor := foundation.PrincipalRef{Kind: "system", ID: foundation.ID("grom")}
+	if err := s.audit.Record(ctx, actor, constants.AuditRepositoryCreatedFromPullThrough,
+		constants.AuditResourceRepository, repositoryID, map[string]any{
+			"projectId": audit.projectID,
+			"name":      audit.name,
+			"source":    constants.RepositoryCreationPullThrough,
+		}); err != nil {
+		s.pendingCreationAudits.Store(repositoryID, audit)
+		return err
+	}
+	return nil
+}
+
+func (s *RepositoryService) ManifestObserved(ctx context.Context, repositoryID foundation.ID, tag, digest string) (bool, error) {
+	return s.store.ManifestObserved(ctx, repositoryID, tag, digest)
+}
+
+func (s *RepositoryService) FindByName(
+	ctx context.Context,
+	projectID foundation.ID,
+	name string,
+) (*registrydomain.Repository, error) {
+	repository, err := s.store.FindRepository(ctx, projectID, strings.ToLower(strings.TrimSpace(name)))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return repository, err
 }
 
 func (s *RepositoryService) List(

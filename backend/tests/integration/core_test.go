@@ -75,7 +75,7 @@ func TestSQLiteRestartPreservesCoreState(t *testing.T) {
 		t.Fatal(err)
 	}
 	projectService := projectapp.New(projectstore.New(db))
-	project, err := projectService.Create(ctx, foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: admin.ID}, true, "Restart", "restart")
+	project, err := projectService.Create(ctx, foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: admin.ID}, true, "Restart", "restart", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,12 +165,12 @@ func runRepositoryPersistenceFlow(
 
 	if _, err := projectService.Create(ctx, foundation.PrincipalRef{
 		Kind: constants.PrincipalUser, ID: developer.ID,
-	}, false, "Unauthorized", "unauthorized"); err == nil {
+	}, false, "Unauthorized", "unauthorized", "", ""); err == nil {
 		t.Fatal("expected project creation to require an administrator")
 	}
 	project, err := projectService.Create(ctx, foundation.PrincipalRef{
 		Kind: constants.PrincipalUser, ID: admin.ID,
-	}, true, "Payments", "payments")
+	}, true, "Payments", "payments", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +457,7 @@ func runRepositoryPersistenceFlow(
 	}
 	emptyProject, err := projectService.Create(ctx, foundation.PrincipalRef{
 		Kind: constants.PrincipalUser, ID: admin.ID,
-	}, true, "Disposable", "disposable")
+	}, true, "Disposable", "disposable", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

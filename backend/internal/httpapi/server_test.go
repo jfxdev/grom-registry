@@ -746,6 +746,59 @@ func TestCreateProjectRequiresAdministrator(t *testing.T) {
 	}
 }
 
+type createProjectRepository struct {
+	projectdomain.Repository
+	created *projectdomain.Project
+}
+
+func (r *createProjectRepository) CreateProject(_ context.Context, project *projectdomain.Project, _ *projectdomain.Membership) error {
+	r.created = project
+	return nil
+}
+
+func TestCreateProjectValidatesAndPersistsPullThroughConfiguration(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		body     string
+		status   int
+		mode     string
+		upstream string
+	}{
+		{name: "standard default", body: `{"name":"Payments","slug":"payments"}`, status: http.StatusCreated, mode: constants.ProjectModeStandard},
+		{name: "Docker Hub", body: `{"name":"Docker","slug":"docker","mode":"pull_through","upstream":"dockerhub"}`, status: http.StatusCreated, mode: constants.ProjectModePullThrough, upstream: constants.ProjectUpstreamDockerHub},
+		{name: "GHCR", body: `{"name":"GHCR","slug":"ghcr","mode":"pull_through","upstream":"ghcr"}`, status: http.StatusCreated, mode: constants.ProjectModePullThrough, upstream: constants.ProjectUpstreamGHCR},
+		{name: "missing upstream", body: `{"name":"Docker","slug":"docker","mode":"pull_through"}`, status: http.StatusBadRequest},
+		{name: "standard with upstream", body: `{"name":"Payments","slug":"payments","mode":"standard","upstream":"dockerhub"}`, status: http.StatusBadRequest},
+		{name: "unknown mode", body: `{"name":"Payments","slug":"payments","mode":"mirror"}`, status: http.StatusBadRequest},
+		{name: "unknown property", body: `{"name":"Payments","slug":"payments","retired":true}`, status: http.StatusBadRequest},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repository := new(createProjectRepository)
+			server := &Server{projects: projectapp.New(repository)}
+			request := httptest.NewRequest(http.MethodPost, "http://backend/api/v1/projects", strings.NewReader(test.body))
+			request = request.WithContext(context.WithValue(request.Context(), currentUserKey{}, &identitydomain.User{
+				ID: foundation.NewID(), SystemAdmin: true,
+			}))
+			response := httptest.NewRecorder()
+
+			server.createProject(response, request)
+
+			if response.Code != test.status {
+				t.Fatalf("expected status %d, got %d: %s", test.status, response.Code, response.Body.String())
+			}
+			if test.status != http.StatusCreated {
+				if repository.created != nil {
+					t.Fatal("invalid project must not be persisted")
+				}
+				return
+			}
+			if repository.created == nil || repository.created.Mode != test.mode || repository.created.Upstream != test.upstream {
+				t.Fatalf("unexpected persisted project: %#v", repository.created)
+			}
+		})
+	}
+}
+
 func TestDeleteProjectRequiresAdministrator(t *testing.T) {
 	server := &Server{}
 	request := httptest.NewRequest(http.MethodDelete, "http://backend/api/v1/projects/payments", nil)

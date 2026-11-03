@@ -919,7 +919,7 @@ export interface components {
             nextCursor?: string;
         };
         /** @enum {string} */
-        AuditAction: "identity.login_succeeded" | "identity.login_failed" | "identity.registry_auth_failed" | "identity.user_created" | "identity.user_promoted_to_system_admin" | "identity.user_promoted_to_system_viewer" | "identity.user_disabled" | "identity.user_updated" | "identity.user_reactivated" | "identity.service_account_created" | "identity.service_account_disabled" | "identity.access_key_created" | "identity.access_key_revoked" | "identity.user_password_changed" | "identity.user_password_reset_link_created" | "identity.user_password_reset_completed" | "projects.project_created" | "projects.project_delete_requested" | "projects.project_deleted" | "projects.membership_upserted" | "projects.membership_removed" | "registry.repository_created_from_push" | "registry.repository_policies_updated" | "registry.repository_archived" | "registry.repository_unarchived" | "registry.repository_removed" | "registry.artifact_deletion_started" | "registry.artifact_deletion_completed" | "registry.artifact_deletion_failed" | "registry.lifecycle_preview_created" | "registry.lifecycle_run_started" | "registry.lifecycle_item_deleted" | "registry.lifecycle_item_skipped" | "registry.lifecycle_item_failed" | "registry.lifecycle_run_completed" | "registry.lifecycle_run_failed" | "platform.restore_completed" | "platform.backup_created" | "platform.backup_delete_requested" | "platform.backup_deleted" | "platform.garbage_collection_started" | "platform.garbage_collection_completed" | "platform.garbage_collection_failed";
+        AuditAction: "identity.login_succeeded" | "identity.login_failed" | "identity.registry_auth_failed" | "identity.user_created" | "identity.user_promoted_to_system_admin" | "identity.user_promoted_to_system_viewer" | "identity.user_disabled" | "identity.user_updated" | "identity.user_reactivated" | "identity.service_account_created" | "identity.service_account_disabled" | "identity.access_key_created" | "identity.access_key_revoked" | "identity.user_password_changed" | "identity.user_password_reset_link_created" | "identity.user_password_reset_completed" | "projects.project_created" | "projects.project_delete_requested" | "projects.project_deleted" | "projects.membership_upserted" | "projects.membership_removed" | "registry.repository_created_from_push" | "registry.repository_created_from_pull_through" | "registry.repository_policies_updated" | "registry.repository_archived" | "registry.repository_unarchived" | "registry.repository_removed" | "registry.artifact_deletion_started" | "registry.artifact_deletion_completed" | "registry.artifact_deletion_failed" | "registry.lifecycle_preview_created" | "registry.lifecycle_run_started" | "registry.lifecycle_item_deleted" | "registry.lifecycle_item_skipped" | "registry.lifecycle_item_failed" | "registry.lifecycle_run_completed" | "registry.lifecycle_run_failed" | "platform.restore_completed" | "platform.backup_created" | "platform.backup_delete_requested" | "platform.backup_deleted" | "platform.garbage_collection_started" | "platform.garbage_collection_completed" | "platform.garbage_collection_failed";
         /** @enum {string} */
         AuditResourceKind: "authentication" | "user" | "service_account" | "project" | "membership" | "registry_repository" | "artifact_deletion" | "lifecycle_run" | "backup" | "garbage_collection";
         AuditEvent: {
@@ -1132,6 +1132,10 @@ export interface components {
             id: string;
             slug: string;
             name: string;
+            /** @enum {string} */
+            mode: "standard" | "pull_through";
+            /** @enum {string} */
+            upstream?: "dockerhub" | "ghcr";
             /** Format: uuid */
             createdBy: string;
             /** Format: date-time */
@@ -1140,9 +1144,20 @@ export interface components {
             /** @description Whether the signed-in actor may manage this project. */
             canManage?: boolean;
         };
+        /** @description `upstream` is required when `mode` is `pull_through` and must be omitted otherwise. OpenAPI 3.0 cannot express this dependency, so the server enforces it and answers `400 invalid_project` when it is broken. */
         CreateProjectRequest: {
             name: string;
             slug: string;
+            /**
+             * @description Defaults to `standard`. `pull_through` requires `upstream`.
+             * @enum {string}
+             */
+            mode?: "standard" | "pull_through";
+            /**
+             * @description Upstream registry of a `pull_through` project. Rejected for `standard` projects.
+             * @enum {string}
+             */
+            upstream?: "dockerhub" | "ghcr";
         };
         /** @enum {string} */
         ProjectRole: "reader" | "writer" | "admin";
@@ -1217,7 +1232,7 @@ export interface components {
              * @description How the logical repository was first registered in Grom.
              * @enum {string}
              */
-            creationSource: "manual" | "push" | "reconciled";
+            creationSource: "manual" | "push" | "reconciled" | "pull_through";
             profile: components["schemas"]["RepositoryProfile"];
             /** @enum {string} */
             profileSource: "none" | "inferred";
@@ -3219,15 +3234,19 @@ export const storageDiagnosticStatusValues: ReadonlyArray<FlattenedDeepRequired<
 export const backupDiagnosticStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupDiagnostic"]["status"]> = ["available", "unavailable"];
 export const backupStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupStatus"]> = ["starting", "quiescing", "creating", "complete", "failed"];
 export const backupOverviewPageSizeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BackupOverview"]["pageSize"]> = [5];
-export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["identity.login_succeeded", "identity.login_failed", "identity.registry_auth_failed", "identity.user_created", "identity.user_promoted_to_system_admin", "identity.user_promoted_to_system_viewer", "identity.user_disabled", "identity.user_updated", "identity.user_reactivated", "identity.service_account_created", "identity.service_account_disabled", "identity.access_key_created", "identity.access_key_revoked", "identity.user_password_changed", "identity.user_password_reset_link_created", "identity.user_password_reset_completed", "projects.project_created", "projects.project_delete_requested", "projects.project_deleted", "projects.membership_upserted", "projects.membership_removed", "registry.repository_created_from_push", "registry.repository_policies_updated", "registry.repository_archived", "registry.repository_unarchived", "registry.repository_removed", "registry.artifact_deletion_started", "registry.artifact_deletion_completed", "registry.artifact_deletion_failed", "registry.lifecycle_preview_created", "registry.lifecycle_run_started", "registry.lifecycle_item_deleted", "registry.lifecycle_item_skipped", "registry.lifecycle_item_failed", "registry.lifecycle_run_completed", "registry.lifecycle_run_failed", "platform.restore_completed", "platform.backup_created", "platform.backup_delete_requested", "platform.backup_deleted", "platform.garbage_collection_started", "platform.garbage_collection_completed", "platform.garbage_collection_failed"];
+export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["identity.login_succeeded", "identity.login_failed", "identity.registry_auth_failed", "identity.user_created", "identity.user_promoted_to_system_admin", "identity.user_promoted_to_system_viewer", "identity.user_disabled", "identity.user_updated", "identity.user_reactivated", "identity.service_account_created", "identity.service_account_disabled", "identity.access_key_created", "identity.access_key_revoked", "identity.user_password_changed", "identity.user_password_reset_link_created", "identity.user_password_reset_completed", "projects.project_created", "projects.project_delete_requested", "projects.project_deleted", "projects.membership_upserted", "projects.membership_removed", "registry.repository_created_from_push", "registry.repository_created_from_pull_through", "registry.repository_policies_updated", "registry.repository_archived", "registry.repository_unarchived", "registry.repository_removed", "registry.artifact_deletion_started", "registry.artifact_deletion_completed", "registry.artifact_deletion_failed", "registry.lifecycle_preview_created", "registry.lifecycle_run_started", "registry.lifecycle_item_deleted", "registry.lifecycle_item_skipped", "registry.lifecycle_item_failed", "registry.lifecycle_run_completed", "registry.lifecycle_run_failed", "platform.restore_completed", "platform.backup_created", "platform.backup_delete_requested", "platform.backup_deleted", "platform.garbage_collection_started", "platform.garbage_collection_completed", "platform.garbage_collection_failed"];
 export const auditResourceKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditResourceKind"]> = ["authentication", "user", "service_account", "project", "membership", "registry_repository", "artifact_deletion", "lifecycle_run", "backup", "garbage_collection"];
 export const passwordResetDeliveryDeliveryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PasswordResetDelivery"]["delivery"]> = ["email", "link"];
 export const passwordResetDeliveryFallbackReasonValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PasswordResetDelivery"]["fallbackReason"]> = ["smtp_delivery_failed"];
 export const principalKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PrincipalKind"]> = ["user", "service_account"];
+export const projectModeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Project"]["mode"]> = ["standard", "pull_through"];
+export const projectUpstreamValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Project"]["upstream"]> = ["dockerhub", "ghcr"];
+export const createProjectRequestModeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["CreateProjectRequest"]["mode"]> = ["standard", "pull_through"];
+export const createProjectRequestUpstreamValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["CreateProjectRequest"]["upstream"]> = ["dockerhub", "ghcr"];
 export const projectRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProjectRole"]> = ["reader", "writer", "admin"];
 export const repositoryStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryStatus"]> = ["empty", "active", "archived"];
 export const repositoryPolicyTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryPolicyType"]> = ["tag_protection", "immutability", "retention", "tag_naming", "manual_deletion"];
-export const repositoryCreationSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Repository"]["creationSource"]> = ["manual", "push", "reconciled"];
+export const repositoryCreationSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Repository"]["creationSource"]> = ["manual", "push", "reconciled", "pull_through"];
 export const repositoryProfileSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Repository"]["profileSource"]> = ["none", "inferred"];
 export const accountedStorageUsageStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AccountedStorageUsage"]["status"]> = ["ready", "pending", "stale", "unavailable"];
 export const artifactDeletionStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ArtifactDeletion"]["status"]> = ["running", "completed", "failed"];

@@ -39,18 +39,36 @@ func (s *Service) Create(
 	ctx context.Context,
 	actor foundation.PrincipalRef,
 	systemAdmin bool,
-	name, slug string,
+	name, slug, mode, upstream string,
 ) (*projectdomain.Project, error) {
 	if !systemAdmin {
 		return nil, errors.New("administrator permission required")
 	}
 	slug = strings.ToLower(strings.TrimSpace(slug))
 	name = strings.TrimSpace(name)
+	mode = strings.TrimSpace(mode)
+	upstream = strings.TrimSpace(upstream)
+	if mode == "" {
+		mode = constants.ProjectModeStandard
+	}
 	if name == "" || !slugPattern.MatchString(slug) {
 		return nil, fmt.Errorf("project name and a valid lowercase slug are required")
 	}
+	switch mode {
+	case constants.ProjectModeStandard:
+		if upstream != "" {
+			return nil, fmt.Errorf("standard projects cannot define an upstream")
+		}
+	case constants.ProjectModePullThrough:
+		if upstream != constants.ProjectUpstreamDockerHub && upstream != constants.ProjectUpstreamGHCR {
+			return nil, fmt.Errorf("pull-through projects require the dockerhub or ghcr upstream")
+		}
+	default:
+		return nil, fmt.Errorf("project mode is invalid")
+	}
 	project := &projectdomain.Project{
-		ID: foundation.NewID(), Slug: slug, Name: name, CreatedBy: actor.ID, CreatedAt: time.Now().UTC(), AccountedUsage: foundation.PendingStorageUsage(),
+		ID: foundation.NewID(), Slug: slug, Name: name, Mode: mode, Upstream: upstream,
+		CreatedBy: actor.ID, CreatedAt: time.Now().UTC(), AccountedUsage: foundation.PendingStorageUsage(),
 	}
 	membership := &projectdomain.Membership{
 		ProjectID: project.ID, PrincipalKind: actor.Kind, PrincipalID: actor.ID,
@@ -184,7 +202,7 @@ func (s *Service) AllowedActions(ctx context.Context, principal foundation.Princ
 		case constants.RegistryActionPull:
 			allowed = append(allowed, action)
 		case constants.RegistryActionPush:
-			if membership.Role == constants.RoleWriter || membership.Role == constants.RoleAdmin {
+			if project.Mode != constants.ProjectModePullThrough && (membership.Role == constants.RoleWriter || membership.Role == constants.RoleAdmin) {
 				allowed = append(allowed, action)
 			}
 		}

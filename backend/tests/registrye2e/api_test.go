@@ -216,9 +216,17 @@ func (c *managementClient) tags(t *testing.T, project, repository string) openap
 
 func (c *managementClient) inventory(t *testing.T, project, repository string) []openapi.ManifestInventory {
 	t.Helper()
+	return c.inventoryQuery(t, project, repository, "")
+}
+
+func (c *managementClient) inventoryQuery(t *testing.T, project, repository, query string) []openapi.ManifestInventory {
+	t.Helper()
 	var response json.RawMessage
 	path := "/api/v1/projects/" + url.PathEscape(project) + "/repository-inventory?repository=" +
 		url.QueryEscape(repository)
+	if query != "" {
+		path += "&q=" + url.QueryEscape(query)
+	}
 	c.doJSON(t, http.MethodGet, path, nil, &response, http.StatusOK)
 	if len(response) > 0 && response[0] == '[' {
 		var inventory []openapi.ManifestInventory

@@ -1,5 +1,6 @@
 import { apiRequest } from '@/shared/api/client'
 import type {
+  CreateProjectRequest,
   CreateRepositoryRequest,
   ArtifactDeletion,
   ArtifactDeletionPage,
@@ -33,7 +34,7 @@ export const projectKeys = {
 
 export const listProjects = (cursor = '') => apiRequest<ProjectPage>(`/api/v1/projects${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
 export const getProject = (slug: string) => apiRequest<Project>(`/api/v1/projects/${encodeURIComponent(slug)}`)
-export const createProject = (input: { name: string; slug: string }) =>
+export const createProject = (input: CreateProjectRequest) =>
   apiRequest<Project>('/api/v1/projects', { method: 'POST', body: JSON.stringify(input) })
 export const deleteProject = (slug: string) =>
   apiRequest<void>(`/api/v1/projects/${encodeURIComponent(slug)}`, { method: 'DELETE' })

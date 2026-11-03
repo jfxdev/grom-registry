@@ -48,6 +48,13 @@ type Config struct {
 	BackupAgentSocket         string
 	RegistryMaintenanceSocket string
 	SMTP                      SMTPConfig
+	PullThroughCredentials    map[string]UpstreamCredential
+	PullThroughMaxImports     int
+}
+
+type UpstreamCredential struct {
+	Username string
+	Password string
 }
 
 type SMTPTLSMode string
@@ -113,6 +120,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	pullThroughCredentials, err := pullThroughCredentialsFromEnv()
+	if err != nil {
+		return Config{}, err
+	}
+	pullThroughMaxImports, err := positiveIntEnv("GROM_PULL_THROUGH_MAX_CONCURRENT_IMPORTS", constants.DefaultPullThroughMaxConcurrentImports)
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
 		HTTPAddress:               env("GROM_HTTP_ADDRESS", ":8080"),
 		DatabaseURL:               env("GROM_DATABASE_URL", "sqlite://"+dataDir+"/grom.db"),
@@ -138,6 +153,8 @@ func Load() (Config, error) {
 		BackupAgentSocket:         env("GROM_BACKUP_AGENT_SOCKET", ""),
 		RegistryMaintenanceSocket: env("GROM_REGISTRY_MAINTENANCE_SOCKET", ""),
 		SMTP:                      smtp,
+		PullThroughCredentials:    pullThroughCredentials,
+		PullThroughMaxImports:     pullThroughMaxImports,
 	}
 	if cfg.BootstrapEmail == "" || cfg.BootstrapUsername == "" || cfg.BootstrapPassword == "" {
 		return Config{}, fmt.Errorf("bootstrap administrator credentials cannot be empty")
@@ -150,6 +167,27 @@ func Load() (Config, error) {
 	}
 	cfg.InsecureHTTP = insecureHTTP
 	return cfg, nil
+}
+
+func pullThroughCredentialsFromEnv() (map[string]UpstreamCredential, error) {
+	credentials := make(map[string]UpstreamCredential)
+	for _, item := range []struct {
+		upstream  string
+		envPrefix string
+	}{
+		{upstream: constants.ProjectUpstreamDockerHub, envPrefix: "GROM_PULL_THROUGH_DOCKERHUB"},
+		{upstream: constants.ProjectUpstreamGHCR, envPrefix: "GROM_PULL_THROUGH_GHCR"},
+	} {
+		username := strings.TrimSpace(os.Getenv(item.envPrefix + "_USERNAME"))
+		password := os.Getenv(item.envPrefix + "_PASSWORD")
+		if (username == "") != (password == "") {
+			return nil, fmt.Errorf("%s_USERNAME and %s_PASSWORD must be configured together", item.envPrefix, item.envPrefix)
+		}
+		if username != "" {
+			credentials[item.upstream] = UpstreamCredential{Username: username, Password: password}
+		}
+	}
+	return credentials, nil
 }
 
 func smtpConfigFromEnv() (SMTPConfig, error) {

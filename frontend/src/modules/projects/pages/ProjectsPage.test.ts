@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { APIError } from '@/shared/api/client'
+import { projectModeValues, projectUpstreamValues } from '@/shared/api/generated/schema'
+import { PROJECT_UPSTREAM_LABELS } from '@/shared/constants'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -184,5 +186,40 @@ describe('ProjectsPage', () => {
     expect(wrapper.text()).toContain('Accounting pending')
     expect(wrapper.text()).toContain('1 KB (stale)')
     expect(wrapper.text()).toContain('Accounting unavailable')
+  })
+
+  it('creates a pull-through project with the selected upstream', async () => {
+    mocks.createProject.mockResolvedValue({})
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button').trigger('click')
+    const [nameInput, slugInput] = wrapper.get('form').findAll('input')
+    await nameInput!.setValue('GitHub mirrors')
+    await slugInput!.setValue('ghcr')
+    await wrapper.get('select[aria-label="Project type"]').setValue('pull_through')
+    await wrapper.get('select[aria-label="Upstream registry"]').setValue('ghcr')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(mocks.createProject).toHaveBeenNthCalledWith(1, {
+      name: 'GitHub mirrors',
+      slug: 'ghcr',
+      mode: 'pull_through',
+      upstream: 'ghcr',
+    }, expect.anything())
+  })
+
+  it('offers every server-defined project type and upstream', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('button').trigger('click')
+    const modes = wrapper.get('select[aria-label="Project type"]').findAll('option').map((option) => option.element.value)
+    expect(modes).toEqual([...projectModeValues])
+    await wrapper.get('select[aria-label="Project type"]').setValue('pull_through')
+    const upstreams = wrapper.get('select[aria-label="Upstream registry"]').findAll('option')
+    expect(upstreams.map((option) => option.element.value)).toEqual([...projectUpstreamValues])
+    expect(upstreams.map((option) => option.text())).toEqual(projectUpstreamValues.map((value) => PROJECT_UPSTREAM_LABELS[value]))
   })
 })

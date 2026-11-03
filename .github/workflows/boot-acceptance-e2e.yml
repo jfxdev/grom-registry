@@ -17,7 +17,7 @@ concurrency:
 jobs:
   boot-acceptance-e2e:
     name: Boot Acceptance E2E (Docker)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 18
     steps:
       - name: Check out repository

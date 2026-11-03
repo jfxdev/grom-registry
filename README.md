@@ -34,6 +34,7 @@ web interface for access, images, and recovery.
   - [Local quick start](#local-quick-start)
   - [Push an image](#push-an-image)
   - [Push an OpenTofu module or other OCI artifact](#push-an-opentofu-module-or-other-oci-artifact)
+  - [Pull through Docker Hub or GHCR](#pull-through-docker-hub-or-ghcr)
   - [Deployment profiles](#deployment-profiles)
   - [Bind-mounted volumes](#bind-mounted-volumes)
 - [Operations](#operations)
@@ -53,6 +54,7 @@ web interface for access, images, and recovery.
 
 - Project-based push and pull for Docker images and generic OCI artifacts
   such as OpenTofu modules, Helm charts, WebAssembly modules, and SBOMs.
+- Persistent, read-only pull-through projects for Docker Hub and GHCR.
 - Reader, Writer, and Admin roles.
 - Service accounts with reveal-once, revocable access keys.
 - Web management for users, projects, repositories, and policies.
@@ -132,6 +134,32 @@ shown as a generic OCI artifact with its declared `artifactType`.
 
 Artifacts attached with `oras attach` are inventoried as OCI referrers. They
 never change the repository profile and they block deletion of their subject.
+
+### Pull through Docker Hub or GHCR
+
+Create a project with the **Pull through** type and choose Docker Hub or GHCR.
+Assign a Reader membership and registry credential as usual, then pull through
+the project slug:
+
+```bash
+docker login localhost:8080
+docker pull localhost:8080/dockerhub/alpine:latest
+docker pull localhost:8080/ghcr/jfxdev/grom-registry:v1.0.6
+```
+
+The first pull imports the complete OCI image or multi-platform index into
+Grom's private Distribution storage. Tags check upstream for digest changes;
+digest pulls are immutable. If upstream is unavailable, an existing local tag
+continues to work. Imported content has no pull-through TTL and is included in
+normal backups. Push remains disabled for every external role in these projects.
+
+For private or authenticated upstream images, set the optional paired variables
+`GROM_PULL_THROUGH_DOCKERHUB_USERNAME`/`PASSWORD` or
+`GROM_PULL_THROUGH_GHCR_USERNAME`/`PASSWORD` in the deployment environment.
+Keep credentials out of the API, project settings, logs, and backup metadata.
+`GROM_PULL_THROUGH_MAX_CONCURRENT_IMPORTS` (default `4`) bounds how many upstream
+copies run at once; further imports wait for a free slot within the 15-minute
+import timeout. A project cannot be deleted while one of its imports is running.
 
 ### Deployment profiles
 
@@ -280,6 +308,7 @@ example `localhost:5000/grom-registry:local`.
 | Command | Coverage |
 |---|---|
 | `make test-registry-e2e` | Public Docker and ORAS authorization, image and generic-artifact push/pull, policies, inventory, GC, and tag republishing. |
+| `make test-pull-through-e2e` | Real Docker Hub/GHCR imports, local digest pulls, restart persistence, and push denial; requires upstream network access. |
 | `make test-admin-e2e` | Browser-based administrator and first-push flows. |
 | `make test-boot-acceptance` | Boot, migrations, readiness, and API docs. |
 | `make test-backup-restore-e2e` | SQLite backup and recovery. |

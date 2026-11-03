@@ -11,6 +11,8 @@ type projectModel struct {
 	ID            string    `bun:"id,pk"`
 	Slug          string    `bun:"slug,notnull,unique"`
 	Name          string    `bun:"name,notnull"`
+	Mode          string    `bun:"mode,notnull"`
+	Upstream      string    `bun:"upstream,notnull"`
 	CreatedBy     string    `bun:"created_by,notnull"`
 	CreatedAt     time.Time `bun:"created_at,notnull"`
 }

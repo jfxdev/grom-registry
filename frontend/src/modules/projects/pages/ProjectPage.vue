@@ -143,6 +143,8 @@ const accounts = useQuery({ queryKey: serviceAccountKeys.list(), queryFn: () => 
 const canManage = computed(() =>
   session.user?.systemViewer !== true && project.data.value?.canManage === true,
 )
+const isPullThrough = computed(() => project.data.value?.mode === 'pull_through')
+const writerRoleLabel = computed(() => (isPullThrough.value ? 'Writer · pull' : 'Writer · pull and push'))
 
 async function handleRepositoryCreated() {
   repositoryModal.value = false
@@ -538,6 +540,21 @@ function profileLabel(profile: Repository['profile']) {
   return repositoryProfileLabel(profile)
 }
 
+function repositoryProfileDescription(repository: Repository) {
+  const imported = repository.creationSource === 'pull_through'
+  if (repository.profileSource === 'inferred') {
+    return `${repository.profileConfidence} confidence · inferred from ${imported ? 'imported' : 'uploaded'} content`
+  }
+  return imported ? 'Waiting for the first identifiable import' : 'Waiting for the first identifiable upload'
+}
+
+function creationSourceLabel(source: Repository['creationSource']) {
+  if (source === 'push') return 'Created by push'
+  if (source === 'pull_through') return 'Imported by pull-through'
+  if (source === 'reconciled') return 'Reconciled from Distribution'
+  return 'Created manually'
+}
+
 const policyTypeLabels: Record<string, string> = {
   retention: 'Retention',
   tag_protection: 'Tag protection',
@@ -609,9 +626,9 @@ function policySummary(policy: Repository['policies'][number]) {
         <p class="mt-1 text-xs text-muted-foreground">Shared descriptors count once in this project. Physical installation storage is shown in Installation.</p>
       </div>
       <div class="flex items-center gap-2">
-        <Badge tone="success">Active</Badge>
+        <Badge tone="success">{{ isPullThrough ? `Pull-through · ${project.data.value?.upstream}` : 'Active' }}</Badge>
         <Button variant="outline" size="sm" @click="pushInstructionsOpen = true"><Terminal :size="14" /> Instructions</Button>
-        <Button v-if="canManage" size="sm" @click="repositoryModal = true"><Plus :size="15" /> New repository</Button>
+        <Button v-if="canManage && !isPullThrough" size="sm" @click="repositoryModal = true"><Plus :size="15" /> New repository</Button>
         <Button
           v-if="canManage"
           variant="outline"
@@ -654,7 +671,7 @@ function policySummary(policy: Repository['policies'][number]) {
           <div>
             <Box class="mx-auto mb-3 text-accent" :size="28" />
             <p class="font-medium text-foreground">No repositories yet</p>
-            <p class="mt-2 text-sm">A Writer or Admin can create one automatically with the first push.</p>
+            <p class="mt-2 text-sm">{{ isPullThrough ? 'The first authorized pull creates one automatically.' : 'A Writer or Admin can create one automatically with the first push.' }}</p>
           </div>
         </div>
         <div v-else class="table-shell mt-5">
@@ -668,8 +685,7 @@ function policySummary(policy: Repository['policies'][number]) {
                 {{ profileLabel(repository.profile) }}
               </Badge>
               <p class="text-xs text-muted-foreground">
-                {{ repository.policies.length }} policies · {{ repository.status }}
-                <template v-if="repository.creationSource === 'push'"> · created by push</template>
+                {{ repository.policies.length }} policies · {{ repository.status }} · {{ creationSourceLabel(repository.creationSource).toLowerCase() }}
               </p>
               <p class="text-xs text-muted-foreground">{{ accountedUsageLabel(repository.accountedUsage) }} accounted<span v-if="repository.accountedUsage?.status === 'stale'"> · stale</span></p>
             </div>
@@ -825,9 +841,7 @@ function policySummary(policy: Repository['policies'][number]) {
           <p class="eyebrow">Repository</p>
           <h1 id="repository-details-title" class="page-title">{{ selectedRepository.name }}</h1>
           <p class="page-description">
-            {{ selectedRepository.profileSource === 'inferred'
-              ? `${selectedRepository.profileConfidence} confidence · inferred from uploaded content`
-              : 'Waiting for the first identifiable upload' }}
+            {{ repositoryProfileDescription(selectedRepository) }}
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -873,7 +887,7 @@ function policySummary(policy: Repository['policies'][number]) {
           <div>
             <p class="overview-label">Status</p>
             <p class="overview-value capitalize">{{ selectedRepository.status }}</p>
-            <p class="overview-detail">{{ selectedRepository.creationSource === 'push' ? 'Created by push' : 'Created manually' }}</p>
+            <p class="overview-detail">{{ creationSourceLabel(selectedRepository.creationSource) }}</p>
           </div>
         </Card>
         <Card class="overview-card">
@@ -1152,13 +1166,19 @@ function policySummary(policy: Repository['policies'][number]) {
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="eyebrow">Registry client</p>
-            <h2 id="push-instructions-title" class="text-lg font-semibold">Push instructions</h2>
+            <h2 id="push-instructions-title" class="text-lg font-semibold">{{ isPullThrough ? 'Pull instructions' : 'Push instructions' }}</h2>
           </div>
           <Button variant="ghost" size="icon" aria-label="Close push instructions" @click="pushInstructionsOpen = false">
             <X :size="18" />
           </Button>
         </div>
+        <div v-if="isPullThrough" class="form-stack">
+          <p class="text-sm text-muted-foreground">The first authorized pull imports the image. Local content has no automatic expiry.</p>
+          <p class="text-sm text-muted-foreground">Replace <code>&lt;tag&gt;</code> with an upstream tag such as <code>latest</code>, or use <code>@sha256:&lt;digest&gt;</code> to pull an exact digest.</p>
+          <code class="text-sm">docker pull {{ registryHost }}/{{ slug }}/{{ selectedRepository?.name || 'repository' }}:&lt;tag&gt;</code>
+        </div>
         <ArtifactPushBanner
+          v-else
           :registry-host="registryHost"
           :project="slug"
           :repository="selectedRepository?.name"
@@ -1306,7 +1326,7 @@ function policySummary(policy: Repository['policies'][number]) {
         <div class="flex items-start justify-between"><div><h2 id="add-member-title" class="text-lg font-semibold">Add service account</h2><p class="mt-1 text-sm text-muted-foreground">Membership controls token access immediately.</p></div><Button variant="ghost" size="icon" type="button" @click="closeMemberModal"><X :size="18" /></Button></div>
         <label v-if="session.user?.systemAdmin" class="field-label">Principal type<select v-model="memberKind" class="field-control text-sm" @change="changeMemberKind"><option value="service_account">Service account</option><option value="user">User</option></select></label>
         <label class="field-label">Principal<select v-model="memberId" class="field-control text-sm"><option v-for="principal in availablePrincipals" :key="principal.id" :value="principal.id">{{ 'name' in principal ? principal.name : principal.email }} · {{ principal.username }}</option></select></label>
-        <label class="field-label">Role<select v-model="memberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">Writer · pull and push</option><option value="admin">Admin · manage project</option></select></label>
+        <label class="field-label">Role<select v-model="memberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">{{ writerRoleLabel }}</option><option value="admin">Admin · manage project</option></select></label>
         <p v-if="memberError" class="error-text" role="alert">{{ memberError }}</p>
         <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="closeMemberModal">Cancel</Button><Button type="submit" :disabled="!canManage || !memberId || addMember.isPending.value">Add member</Button></div>
       </form>
@@ -1325,7 +1345,7 @@ function policySummary(policy: Repository['policies'][number]) {
           <div><p class="text-sm font-semibold">{{ memberToEdit.principalName }}</p><p class="mt-1 text-xs text-muted-foreground">{{ memberToEdit.principalDetail }}</p></div>
           <PrincipalTypeBadge :kind="memberToEdit.principalKind" />
         </div>
-        <label class="field-label">Role<select v-model="editedMemberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">Writer · pull and push</option><option value="admin">Admin · manage project</option></select></label>
+        <label class="field-label">Role<select v-model="editedMemberRole" class="field-control text-sm"><option value="reader">Reader · pull</option><option value="writer">{{ writerRoleLabel }}</option><option value="admin">Admin · manage project</option></select></label>
         <p v-if="memberError" class="error-text" role="alert">{{ memberError }}</p>
         <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="closeChangeMemberRoleModal">Cancel</Button><Button type="submit" :disabled="changeMemberRole.isPending.value">{{ changeMemberRole.isPending.value ? 'Saving…' : 'Save role' }}</Button></div>
       </form>
