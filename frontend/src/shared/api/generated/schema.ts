@@ -1132,6 +1132,10 @@ export interface components {
             id: string;
             slug: string;
             name: string;
+            /** @enum {string} */
+            mode: "standard" | "pull_through";
+            /** @enum {string} */
+            upstream?: "dockerhub" | "ghcr";
             /** Format: uuid */
             createdBy: string;
             /** Format: date-time */
@@ -1143,6 +1147,10 @@ export interface components {
         CreateProjectRequest: {
             name: string;
             slug: string;
+            /** @enum {string} */
+            mode?: "standard" | "pull_through";
+            /** @enum {string} */
+            upstream?: "dockerhub" | "ghcr";
         };
         /** @enum {string} */
         ProjectRole: "reader" | "writer" | "admin";
@@ -1217,7 +1225,7 @@ export interface components {
              * @description How the logical repository was first registered in Grom.
              * @enum {string}
              */
-            creationSource: "manual" | "push" | "reconciled";
+            creationSource: "manual" | "push" | "reconciled" | "pull_through";
             profile: components["schemas"]["RepositoryProfile"];
             /** @enum {string} */
             profileSource: "none" | "inferred";
@@ -3224,10 +3232,14 @@ export const auditResourceKindValues: ReadonlyArray<FlattenedDeepRequired<compon
 export const passwordResetDeliveryDeliveryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PasswordResetDelivery"]["delivery"]> = ["email", "link"];
 export const passwordResetDeliveryFallbackReasonValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PasswordResetDelivery"]["fallbackReason"]> = ["smtp_delivery_failed"];
 export const principalKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PrincipalKind"]> = ["user", "service_account"];
+export const projectModeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Project"]["mode"]> = ["standard", "pull_through"];
+export const projectUpstreamValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Project"]["upstream"]> = ["dockerhub", "ghcr"];
+export const createProjectRequestModeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["CreateProjectRequest"]["mode"]> = ["standard", "pull_through"];
+export const createProjectRequestUpstreamValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["CreateProjectRequest"]["upstream"]> = ["dockerhub", "ghcr"];
 export const projectRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProjectRole"]> = ["reader", "writer", "admin"];
 export const repositoryStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryStatus"]> = ["empty", "active", "archived"];
 export const repositoryPolicyTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RepositoryPolicyType"]> = ["tag_protection", "immutability", "retention", "tag_naming", "manual_deletion"];
-export const repositoryCreationSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Repository"]["creationSource"]> = ["manual", "push", "reconciled"];
+export const repositoryCreationSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Repository"]["creationSource"]> = ["manual", "push", "reconciled", "pull_through"];
 export const repositoryProfileSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Repository"]["profileSource"]> = ["none", "inferred"];
 export const accountedStorageUsageStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AccountedStorageUsage"]["status"]> = ["ready", "pending", "stale", "unavailable"];
 export const artifactDeletionStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ArtifactDeletion"]["status"]> = ["running", "completed", "failed"];

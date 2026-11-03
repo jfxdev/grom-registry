@@ -10,6 +10,8 @@ type Project struct {
 	ID             foundation.ID                    `json:"id"`
 	Slug           string                           `json:"slug"`
 	Name           string                           `json:"name"`
+	Mode           string                           `json:"mode"`
+	Upstream       string                           `json:"upstream,omitempty"`
 	CreatedBy      foundation.ID                    `json:"createdBy"`
 	CreatedAt      time.Time                        `json:"createdAt"`
 	AccountedUsage foundation.AccountedStorageUsage `json:"accountedUsage"`

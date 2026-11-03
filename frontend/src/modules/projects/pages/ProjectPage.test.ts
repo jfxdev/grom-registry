@@ -750,4 +750,22 @@ describe('ProjectPage membership management', () => {
     expect(await screen.findByText('Project still contains repositories')).toBeTruthy()
     expect(screen.getByRole('dialog', { name: 'Delete project' })).toBeTruthy()
   })
+
+  it('presents pull-through projects as read-only mirrors', async () => {
+    mocks.getProject.mockResolvedValue({
+      id: 'project-1', slug: 'payments', name: 'Payments', canManage: true,
+      mode: 'pull_through', upstream: 'dockerhub',
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Pull-through · dockerhub')
+    expect(wrapper.text()).toContain('The first authorized pull creates one automatically.')
+    expect(wrapper.findAll('button').some((button) => button.text().includes('New repository'))).toBe(false)
+
+    await buttonWithText(wrapper, 'Instructions').trigger('click')
+    expect(wrapper.text()).toContain('Pull instructions')
+    expect(wrapper.text()).toContain('The first authorized pull imports the image.')
+    expect(wrapper.text()).not.toContain('Push an image')
+  })
 })

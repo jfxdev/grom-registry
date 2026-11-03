@@ -2260,7 +2260,7 @@ components:
           description: Reveal-once API token restricted to registry pull access.
     Project:
       type: object
-      required: [id, slug, name, createdBy, createdAt, accountedUsage]
+      required: [id, slug, name, mode, createdBy, createdAt, accountedUsage]
       properties:
         id:
           type: string
@@ -2269,6 +2269,12 @@ components:
           type: string
         name:
           type: string
+        mode:
+          type: string
+          enum: [standard, pull_through]
+        upstream:
+          type: string
+          enum: [dockerhub, ghcr]
         createdBy:
           type: string
           format: uuid
@@ -2282,6 +2288,7 @@ components:
           description: Whether the signed-in actor may manage this project.
     CreateProjectRequest:
       type: object
+      additionalProperties: false
       required: [name, slug]
       properties:
         name:
@@ -2290,6 +2297,12 @@ components:
         slug:
           type: string
           pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        mode:
+          type: string
+          enum: [standard, pull_through]
+        upstream:
+          type: string
+          enum: [dockerhub, ghcr]
     ProjectRole:
       type: string
       enum: [reader, writer, admin]
@@ -2432,7 +2445,7 @@ components:
           $ref: "#/components/schemas/RepositoryStatus"
         creationSource:
           type: string
-          enum: [manual, push, reconciled]
+          enum: [manual, push, reconciled, pull_through]
           description: How the logical repository was first registered in Grom.
         profile:
           $ref: "#/components/schemas/RepositoryProfile"

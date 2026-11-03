@@ -102,6 +102,7 @@ func (r *Repository) FindMembership(ctx context.Context, projectID foundation.ID
 func fromProject(project *projectdomain.Project) *projectModel {
 	return &projectModel{
 		ID: project.ID.String(), Slug: project.Slug, Name: project.Name,
+		Mode: project.Mode, Upstream: project.Upstream,
 		CreatedBy: project.CreatedBy.String(), CreatedAt: project.CreatedAt,
 	}
 }
@@ -109,6 +110,7 @@ func fromProject(project *projectdomain.Project) *projectModel {
 func toProject(model *projectModel) *projectdomain.Project {
 	return &projectdomain.Project{
 		ID: foundation.ID(model.ID), Slug: model.Slug, Name: model.Name,
+		Mode: model.Mode, Upstream: model.Upstream,
 		CreatedBy: foundation.ID(model.CreatedBy), CreatedAt: model.CreatedAt,
 	}
 }

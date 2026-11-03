@@ -381,6 +381,42 @@ func (e ClassificationConfidence) Valid() bool {
 	}
 }
 
+// Defines values for CreateProjectRequestMode.
+const (
+	CreateProjectRequestModePullThrough CreateProjectRequestMode = "pull_through"
+	CreateProjectRequestModeStandard    CreateProjectRequestMode = "standard"
+)
+
+// Valid indicates whether the value is a known member of the CreateProjectRequestMode enum.
+func (e CreateProjectRequestMode) Valid() bool {
+	switch e {
+	case CreateProjectRequestModePullThrough:
+		return true
+	case CreateProjectRequestModeStandard:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateProjectRequestUpstream.
+const (
+	CreateProjectRequestUpstreamDockerhub CreateProjectRequestUpstream = "dockerhub"
+	CreateProjectRequestUpstreamGhcr      CreateProjectRequestUpstream = "ghcr"
+)
+
+// Valid indicates whether the value is a known member of the CreateProjectRequestUpstream enum.
+func (e CreateProjectRequestUpstream) Valid() bool {
+	switch e {
+	case CreateProjectRequestUpstreamDockerhub:
+		return true
+	case CreateProjectRequestUpstreamGhcr:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DatabaseDiagnosticKind.
 const (
 	DatabaseDiagnosticKindPostgres DatabaseDiagnosticKind = "postgres"
@@ -678,6 +714,42 @@ func (e PrincipalKind) Valid() bool {
 	}
 }
 
+// Defines values for ProjectMode.
+const (
+	ProjectModePullThrough ProjectMode = "pull_through"
+	ProjectModeStandard    ProjectMode = "standard"
+)
+
+// Valid indicates whether the value is a known member of the ProjectMode enum.
+func (e ProjectMode) Valid() bool {
+	switch e {
+	case ProjectModePullThrough:
+		return true
+	case ProjectModeStandard:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProjectUpstream.
+const (
+	ProjectUpstreamDockerhub ProjectUpstream = "dockerhub"
+	ProjectUpstreamGhcr      ProjectUpstream = "ghcr"
+)
+
+// Valid indicates whether the value is a known member of the ProjectUpstream enum.
+func (e ProjectUpstream) Valid() bool {
+	switch e {
+	case ProjectUpstreamDockerhub:
+		return true
+	case ProjectUpstreamGhcr:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProjectRole.
 const (
 	Admin  ProjectRole = "admin"
@@ -701,19 +773,22 @@ func (e ProjectRole) Valid() bool {
 
 // Defines values for RepositoryCreationSource.
 const (
-	Manual     RepositoryCreationSource = "manual"
-	Push       RepositoryCreationSource = "push"
-	Reconciled RepositoryCreationSource = "reconciled"
+	RepositoryCreationSourceManual      RepositoryCreationSource = "manual"
+	RepositoryCreationSourcePullThrough RepositoryCreationSource = "pull_through"
+	RepositoryCreationSourcePush        RepositoryCreationSource = "push"
+	RepositoryCreationSourceReconciled  RepositoryCreationSource = "reconciled"
 )
 
 // Valid indicates whether the value is a known member of the RepositoryCreationSource enum.
 func (e RepositoryCreationSource) Valid() bool {
 	switch e {
-	case Manual:
+	case RepositoryCreationSourceManual:
 		return true
-	case Push:
+	case RepositoryCreationSourcePullThrough:
 		return true
-	case Reconciled:
+	case RepositoryCreationSourcePush:
+		return true
+	case RepositoryCreationSourceReconciled:
 		return true
 	default:
 		return false
@@ -1090,9 +1165,17 @@ type CreateLifecycleRunRequest struct {
 
 // CreateProjectRequest defines model for CreateProjectRequest.
 type CreateProjectRequest struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	Mode     *CreateProjectRequestMode     `json:"mode,omitempty"`
+	Name     string                        `json:"name"`
+	Slug     string                        `json:"slug"`
+	Upstream *CreateProjectRequestUpstream `json:"upstream,omitempty"`
 }
+
+// CreateProjectRequestMode defines model for CreateProjectRequest.Mode.
+type CreateProjectRequestMode string
+
+// CreateProjectRequestUpstream defines model for CreateProjectRequest.Upstream.
+type CreateProjectRequestUpstream string
 
 // CreateRepositoryRequest defines model for CreateRepositoryRequest.
 type CreateRepositoryRequest struct {
@@ -1427,9 +1510,17 @@ type Project struct {
 	CreatedAt time.Time          `json:"createdAt"`
 	CreatedBy openapi_types.UUID `json:"createdBy"`
 	Id        openapi_types.UUID `json:"id"`
+	Mode      ProjectMode        `json:"mode"`
 	Name      string             `json:"name"`
 	Slug      string             `json:"slug"`
+	Upstream  *ProjectUpstream   `json:"upstream,omitempty"`
 }
+
+// ProjectMode defines model for Project.Mode.
+type ProjectMode string
+
+// ProjectUpstream defines model for Project.Upstream.
+type ProjectUpstream string
 
 // ProjectPage defines model for ProjectPage.
 type ProjectPage struct {

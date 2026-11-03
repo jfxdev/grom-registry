@@ -17,6 +17,7 @@ Keep this file aligned with the code that actually exists.
 - Run the backend suite against PostgreSQL: `make test-postgres GROM_TEST_POSTGRES_URL=postgres://...`
 - Generate backend and frontend coverage reports: `make test-coverage`
 - Run the isolated real-Docker registry, real-ORAS generic-artifact, session-revocation, and restart-preservation journeys: `make test-registry-e2e`
+- Run the network-dependent Docker Hub/GHCR pull-through journey: `make test-pull-through-e2e`
 - Upgrade a tagged GHCR release to a locally built candidate while preserving SQLite/local-registry state: `make test-release-upgrade-e2e`
 - Run the isolated browser-driven administrative first-push journey: `make test-admin-e2e`
 - Run the isolated boot, migration, readiness, and API-documentation journey: `make test-boot-acceptance`
@@ -45,10 +46,12 @@ The runtime `grom` account is fixed at UID 100 and GID 101. Keep the Dockerfile,
 restored-volume ownership, and backup-agent socket group aligned; changing these
 IDs requires an explicit volume-ownership migration.
 
-`make test-registry-e2e` and `make test-admin-e2e` require an accessible Docker
-daemon and Docker Compose. Each owns only its unique Compose project, loopback
-port, temporary Docker credential directories, and exact test image tags; never
-replace cleanup with a broad Docker prune. The administrative journey drives
+`make test-registry-e2e`, `make test-pull-through-e2e`, and `make test-admin-e2e`
+require an accessible Docker daemon and Docker Compose. The pull-through journey
+also requires access to public Docker Hub and GHCR; keep it separate from the
+network-independent registry journey. Each owns only its unique Compose project,
+loopback port, temporary Docker credential directories, and exact test image tags;
+never replace cleanup with a broad Docker prune. The administrative journey drives
 the frontend embedded in the container through Playwright; it disables browser
 traces, screenshots, and video because it handles a reveal-once access key.
 Keep its scenarios independent and wait for each browser-visible state caused
@@ -238,7 +241,8 @@ or total capacity belongs to host/provider monitoring.
 - CNCF Distribution remains the unmodified OCI/Docker registry engine.
 - Grom is the only public entry point; the Distribution port stays private.
 - The first repository path segment is the immutable project authorization boundary.
-- Only administrators create projects. When a Writer or Admin registry principal requests push scope inside an existing project, Grom idempotently creates a missing empty logical repository and grants push in the same token so the first push can succeed. Pull never creates repositories. Existing Distribution repositories are reconciled as active repositories without policies.
+- Only administrators create projects. In a standard project, when a Writer or Admin registry principal requests push scope, Grom idempotently creates a missing empty logical repository and grants push in the same token so the first push can succeed. Pull never creates repositories through the token flow. Existing Distribution repositories are reconciled as active repositories without policies.
+- Docker Hub and GHCR pull-through projects are read-only for all external principals. An authorized manifest pull may synchronously import the full OCI image or index into private Distribution storage and create its logical repository with `pull_through` origin. Preserve media types and digests, serialize duplicate imports, serve an existing local tag when upstream refresh fails, and never add TTL-based or automatic retention. Optional upstream credentials come only from paired deployment environment variables and must never enter API responses, logs, audit metadata, or backups.
 - Only administrators delete projects. Project deletion is allowed only when no logical repositories remain; never orphan Distribution content or erase repository inventory through project deletion.
 - Repository archival blocks future pushes but preserves pull access and OCI content. Removing an archived logical repository must verify both empty live inventory and absence from Distribution's catalog; it never deletes OCI content and must be audited.
 - Repository behavior policies are isolated through their owning repository and project. Global policy presets are read-only form recommendations and never inherited runtime rules.

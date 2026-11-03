@@ -387,7 +387,7 @@ func observationComplete(
 	repositoryOK := false
 	for _, repository := range repositories {
 		if repository.Name == "app" &&
-			repository.CreationSource == openapi.Push &&
+			repository.CreationSource == openapi.RepositoryCreationSourcePush &&
 			repository.Status == openapi.RepositoryStatusActive &&
 			repository.Profile == openapi.RepositoryProfileContainerImage {
 			repositoryOK = true

@@ -335,6 +335,27 @@ func TestLoadStrictProfileRejectsInsecureSMTPTransport(t *testing.T) {
 	}
 }
 
+func TestLoadPullThroughCredentials(t *testing.T) {
+	setRequiredEnvironment(t)
+	t.Setenv("GROM_PULL_THROUGH_DOCKERHUB_USERNAME", "docker-user")
+	t.Setenv("GROM_PULL_THROUGH_DOCKERHUB_PASSWORD", "docker-token")
+	t.Setenv("GROM_PULL_THROUGH_GHCR_USERNAME", "github-user")
+	t.Setenv("GROM_PULL_THROUGH_GHCR_PASSWORD", "github-token")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.PullThroughCredentials) != 2 || cfg.PullThroughCredentials["dockerhub"].Password != "docker-token" || cfg.PullThroughCredentials["ghcr"].Username != "github-user" {
+		t.Fatalf("unexpected pull-through credentials: %#v", cfg.PullThroughCredentials)
+	}
+
+	t.Setenv("GROM_PULL_THROUGH_GHCR_PASSWORD", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "must be configured together") {
+		t.Fatalf("expected incomplete credential pair to fail, got %v", err)
+	}
+}
+
 func setRequiredEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("GROM_BOOTSTRAP_ADMIN_PASSWORD", "test-password")
@@ -348,4 +369,8 @@ func setRequiredEnvironment(t *testing.T) {
 	t.Setenv("GROM_AUTH_FAILURE_LIMIT", "5")
 	t.Setenv("GROM_AUTH_FAILURE_WINDOW", "5m")
 	t.Setenv("GROM_AUTH_BLOCK_DURATION", "15m")
+	t.Setenv("GROM_PULL_THROUGH_DOCKERHUB_USERNAME", "")
+	t.Setenv("GROM_PULL_THROUGH_DOCKERHUB_PASSWORD", "")
+	t.Setenv("GROM_PULL_THROUGH_GHCR_USERNAME", "")
+	t.Setenv("GROM_PULL_THROUGH_GHCR_PASSWORD", "")
 }

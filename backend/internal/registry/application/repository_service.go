@@ -132,6 +132,38 @@ func (s *RepositoryService) EnsureFromPush(
 	return repository, true, nil
 }
 
+func (s *RepositoryService) EnsureFromPullThrough(
+	ctx context.Context,
+	projectID foundation.ID,
+	name string,
+) (*registrydomain.Repository, bool, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !repositoryNamePattern.MatchString(name) || len(name) > 255 {
+		return nil, false, fmt.Errorf("repository path must use lowercase path segments")
+	}
+	now := time.Now().UTC()
+	repository, created, err := s.store.EnsureRepository(ctx, &registrydomain.Repository{
+		ID: foundation.NewID(), ProjectID: projectID, Name: name,
+		Status: constants.RepositoryStatusEmpty, CreationSource: constants.RepositoryCreationPullThrough,
+		Profile: constants.RepositoryProfileUnknown, ProfileSource: constants.ProfileSourceNone,
+		ProfileConfidence: constants.ClassificationConfidenceNone,
+		Policies:          []registrydomain.Policy{}, AccountedUsage: foundation.PendingStorageUsage(), CreatedAt: now, UpdatedAt: now,
+	})
+	if err != nil || !created || s.audit == nil {
+		return repository, created, err
+	}
+	actor := foundation.PrincipalRef{Kind: "system", ID: foundation.ID("grom")}
+	if err := s.audit.Record(ctx, actor, constants.AuditRepositoryCreatedFromPullThrough,
+		constants.AuditResourceRepository, repository.ID, map[string]any{
+			"projectId": projectID,
+			"name":      name,
+			"source":    constants.RepositoryCreationPullThrough,
+		}); err != nil {
+		return repository, true, err
+	}
+	return repository, true, nil
+}
+
 func (s *RepositoryService) List(
 	ctx context.Context,
 	projectID foundation.ID,

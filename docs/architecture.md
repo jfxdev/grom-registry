@@ -64,7 +64,7 @@ Bun implementations live in the owning context.
 | Area | Current entities and behaviour |
 |---|---|
 | Identity | User, Session, PasswordReset, ServiceAccount, APIToken, and ViewerRegistryToken. Secrets are shown only when created and stored as hashes. |
-| Projects | Project, Membership, ProjectSlug, ProjectRole, and AccessDecision. The immutable slug is the OCI authorization boundary. |
+| Projects | Project, Membership, ProjectSlug, ProjectRole, and AccessDecision. The immutable slug is the OCI authorization boundary; a project is standard or a read-only pull-through mirror of Docker Hub or GHCR. |
 | Registry | Repository, Policy, ManifestInventory, ArtifactDeletion, LifecyclePreview, LifecycleRun, and logical-usage snapshots. A repository belongs to one project. |
 | Audit | AuditEvent, AuditAction, and AuditResource. Events never contain secrets. |
 
@@ -86,9 +86,20 @@ observation. Digest-addressed PUT requests do not mutate tags, so they do not
 pass through tag-mutation rules.
 
 A Writer or Admin can create a missing logical repository idempotently on the
-first push when the project already exists. Pulls, Readers, and nonexistent
-projects never create projects or repositories. External clients never receive
-the OCI delete action.
+first push in a standard project. Ordinary pulls, Readers, and nonexistent
+projects never create projects or repositories through the token flow. External
+clients never receive the OCI delete action.
+
+In a pull-through project, an authorized manifest GET or HEAD resolves the local
+reference first. A missing manifest, or a tag whose upstream digest changed, is
+copied synchronously from the configured Docker Hub or GHCR upstream into private
+Distribution storage before the client request continues. Docker Hub's unqualified
+image names map to the `library` namespace. Concurrent imports of one reference
+are serialized, while pulls by digest remain immutable. If an upstream refresh
+fails and the tag already exists locally, Grom serves the local copy. Imported
+content and its logical repository persist without pull-through TTL or automatic
+expiry; existing backup and recovery include both. Optional upstream credentials
+are deployment environment variables only and are never persisted or exposed.
 
 ## Repositories, inventory, and safe operations
 
@@ -240,7 +251,7 @@ complete recovery flow and the distinction between accounted and physical usage.
 ## Current boundaries
 
 Grom does not provide high availability, multiple active instances, S3,
-replication, pull-through cache, organizations or teams, OIDC/SAML/LDAP,
+replication, arbitrary upstream registries, organizations or teams, OIDC/SAML/LDAP,
 scanning or admission policies, subject/referrer cascade deletion, automated
 retention purging, scheduled or remote backups, audit browsing, billing, quotas,
 or a Kubernetes operator.

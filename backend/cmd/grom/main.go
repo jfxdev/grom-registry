@@ -32,6 +32,7 @@ import (
 	"github.com/jfxdev/grom/backend/internal/registry/infrastructure/distribution"
 	registrystore "github.com/jfxdev/grom/backend/internal/registry/infrastructure/persistence/bun"
 	"github.com/jfxdev/grom/backend/internal/registry/infrastructure/signing"
+	"github.com/jfxdev/grom/backend/internal/registry/infrastructure/upstream"
 )
 
 var version = "dev"
@@ -188,6 +189,18 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	upstreamCredentials := make(map[string]upstream.Credential, len(cfg.PullThroughCredentials))
+	for name, credential := range cfg.PullThroughCredentials {
+		upstreamCredentials[name] = upstream.Credential{Username: credential.Username, Password: credential.Password}
+	}
+	upstreamCopier, err := upstream.NewCopier(cfg.RegistryURL, upstreamCredentials)
+	if err != nil {
+		return err
+	}
+	pullThroughService := registryapp.NewPullThroughService(
+		projectService, repositoryService, registryTokens, distributionClient, upstreamCopier,
+		inventoryService.ObservePush, logger,
+	)
 	var registryMaintenanceClient *registrymaintenance.Client
 	if cfg.RegistryMaintenanceSocket != "" {
 		registryMaintenanceClient = registrymaintenance.NewClient(cfg.RegistryMaintenanceSocket)
@@ -207,7 +220,7 @@ func run(logger *slog.Logger) error {
 		identityService, auditService, projectService, repositoryService, inventoryService,
 		artifactDeletionService, lifecycleService,
 		registryTokens, distributionClient,
-		distribution.NewGateway(registryURL, registryTokens, distributionClient, inventoryService.ObservePush, logger),
+		distribution.NewGateway(registryURL, registryTokens, distributionClient, pullThroughService, inventoryService.ObservePush, logger),
 		logger, cfg.PublicURL, cfg.SecureCookies, cfg.EnableAPIDocs,
 		string(cfg.DeploymentProfile), cfg.InsecureHTTP,
 		httpapi.SecurityOptions{

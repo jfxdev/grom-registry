@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useSessionStore } from '@/modules/auth/store/session'
 import { APIError } from '@/shared/api/client'
-import type { AccountedStorageUsage } from '@/shared/api/models'
+import type { AccountedStorageUsage, Project } from '@/shared/api/models'
 import { ActionButton, Button, CancelButton } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { PaginationControls } from '@/shared/components/ui/pagination'
@@ -18,6 +18,8 @@ const modalOpen = ref(false)
 const name = ref('')
 const slug = ref('')
 const slugEdited = ref(false)
+const mode = ref<Project['mode']>('standard')
+const upstream = ref<NonNullable<Project['upstream']>>('dockerhub')
 const error = ref('')
 const searchQuery = ref('')
 const pagination = useCursorPagination()
@@ -42,6 +44,8 @@ const create = useMutation({
     name.value = ''
     slug.value = ''
     slugEdited.value = false
+    mode.value = 'standard'
+    upstream.value = 'dockerhub'
     error.value = ''
   },
   onError: (caught) => {
@@ -71,12 +75,19 @@ function openCreateModal() {
   name.value = ''
   slug.value = ''
   slugEdited.value = false
+  mode.value = 'standard'
+  upstream.value = 'dockerhub'
   modalOpen.value = true
 }
 
 function submitCreate() {
   error.value = ''
-  create.mutate({ name: name.value, slug: slug.value })
+  create.mutate({
+    name: name.value,
+    slug: slug.value,
+    mode: mode.value,
+    ...(mode.value === 'pull_through' ? { upstream: upstream.value } : {}),
+  })
 }
 
 function accountedUsageLabel(usage: AccountedStorageUsage | null | undefined) {
@@ -161,7 +172,7 @@ function formatBytes(bytes: number | null | undefined) {
           </div>
           <div class="project-meta">
             <span class="status-dot" />
-            Active
+            {{ project.mode === 'pull_through' ? `Pull-through · ${project.upstream}` : 'Active' }}
           </div>
           <p class="project-created">{{ accountedUsageLabel(project.accountedUsage) }} accounted</p>
           <p class="project-created">Created {{ new Date(project.createdAt).toLocaleDateString() }}</p>
@@ -191,6 +202,19 @@ function formatBytes(bytes: number | null | undefined) {
         </div>
         <label class="field-label">Name<Input v-model="name" required /></label>
         <label class="field-label">Slug<Input v-model="slug" required placeholder="payments" @input="onSlugInput" @blur="onSlugBlur" /></label>
+        <label class="field-label">Project type
+          <select v-model="mode" class="field-control text-sm" aria-label="Project type">
+            <option value="standard">Standard · push and pull</option>
+            <option value="pull_through">Pull-through · read-only mirror</option>
+          </select>
+        </label>
+        <label v-if="mode === 'pull_through'" class="field-label">Upstream registry
+          <select v-model="upstream" class="field-control text-sm" aria-label="Upstream registry">
+            <option value="dockerhub">Docker Hub</option>
+            <option value="ghcr">GitHub Container Registry</option>
+          </select>
+        </label>
+        <p v-if="mode === 'pull_through'" class="text-sm text-muted-foreground">Images are imported on the first authorized pull and retained locally without automatic expiry.</p>
         <p v-if="error" class="error-text">{{ error }}</p>
         <div class="flex justify-end gap-2">
           <CancelButton @click="modalOpen = false" />

@@ -1,4 +1,4 @@
-.PHONY: generate test test-postgres test-coverage test-registry-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-backup-restore-postgres-e2e test-production-image-smoke build image-publish-local generate-secrets dev dev-postgres compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
+.PHONY: generate test test-postgres test-coverage test-registry-e2e test-pull-through-e2e test-release-upgrade-e2e test-admin-e2e test-boot-acceptance test-backup-restore-e2e test-backup-restore-postgres-e2e test-production-image-smoke build image-publish-local generate-secrets dev dev-postgres compose-up compose-up-postgres compose-down reset-local backup backup-inspect restore
 
 DEV_ENV_FILE ?= .env
 
@@ -20,6 +20,9 @@ test-coverage:
 
 test-registry-e2e:
 	cd backend && GROM_RUN_REGISTRY_E2E=1 go test -count=1 -timeout=10m ./tests/registrye2e
+
+test-pull-through-e2e:
+	cd backend && GROM_RUN_PULL_THROUGH_E2E=1 go test -count=1 -run '^TestPullThroughJourney$$' -timeout=20m ./tests/registrye2e
 
 test-release-upgrade-e2e:
 	cd backend && GROM_RUN_RELEASE_UPGRADE_E2E=1 go test -count=1 -run TestTaggedReleaseUpgradePreservesRegistryState -timeout=20m ./tests/registrye2e

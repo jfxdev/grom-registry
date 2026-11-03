@@ -37,6 +37,11 @@ only one membership in a project; assigning it again replaces the current role.
 | Writer | Yes | Yes | Yes | No | No |
 | Admin | Yes | Yes | Yes | Yes | Yes |
 
+The push column applies to standard projects. Pull-through projects are
+read-only for every external principal: Reader, Writer, and Admin tokens receive
+only pull. An authorized pull may trigger Grom's internal upstream
+synchronization, but it never grants that principal write access.
+
 Administrators have project-Admin permissions for every project
 without membership. Changing or removing membership affects the next registry
 token exchange immediately; access-key rotation is unnecessary.
@@ -155,8 +160,11 @@ The JWT lasts five minutes by default and is configurable. Unsupported scopes
 are ignored, and mixed requests receive only the allowed subset. There is no
 global catalog permission or client-side registry deletion.
 
-A Writer or Admin push can create a missing logical repository when the project
-already exists. Pull and Reader requests cannot do that. An archived repository
+A Writer or Admin push can create a missing logical repository when a standard
+project already exists. Ordinary pull and Reader requests cannot do that through
+the token flow. In a pull-through project, an authorized manifest pull may create
+the logical repository and import OCI content through Grom's internal upstream
+service; the client still receives only pull permission. An archived repository
 blocks new push grants while preserving pull access. Project administrators can
 unarchive it to restore push grants.
 

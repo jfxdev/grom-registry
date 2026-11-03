@@ -30,6 +30,14 @@ storage, and selective recovery are not supported.
 
 The backup agent's runtime socket is not recovery data.
 
+Pull-through projects store imported manifests, tags, configurations, layers,
+and blobs in the same registry-data volume as pushed content. They have no TTL
+or automatic expiry and are included in every recovery point. Tag updates can
+leave older manifests untagged, but only explicit lifecycle deletion and garbage
+collection remove that content. Upstream credentials remain deployment
+configuration and are not stored in the application database or recovery
+bundles.
+
 ## Creating a recovery point
 
 Only an administrator can start the operation through the backup
