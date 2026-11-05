@@ -130,19 +130,26 @@ ruleset change makes them required.
 checkout, verifies the final image declares the non-root `grom` user, and
 checks health, readiness, API documentation, and the registry bearer challenge
 through an isolated public Compose stack.
-`.github/workflows/release.yml` runs only for an existing stable
-`vMAJOR.MINOR.PATCH` tag, publishes the application image and the dedicated
-`grom-registry-maintenance:vMAJOR.MINOR.PATCH` image to GHCR, and creates a
-GitHub Release with both digest references, SPDX SBOMs, Trivy reports, and
-checksums. It uses the repository `GITHUB_TOKEN`; do not replace it with a
-long-lived registry credential or make a mutable image tag the canonical
-deployment reference.
+`.github/workflows/release.yml` runs through manual dispatch for a manually
+created stable `vMAJOR.MINOR.PATCH` draft GitHub Release. It publishes the
+application image and the dedicated
+`grom-registry-maintenance:vMAJOR.MINOR.PATCH` image to GHCR, then uploads both
+digest references, SPDX SBOMs, Trivy reports, and checksums to that draft.
+Publication remains a separate manual action after the upload, so all assets
+are attached before an immutable release is published. The workflow never
+creates or publishes a GitHub Release. It uses the repository
+`GITHUB_TOKEN`; do not replace it with a long-lived registry credential or make
+a mutable image tag the canonical deployment reference. Install Trivy through
+the direct, retrying GitHub Releases download with its pinned SHA-256, keeping
+`skip-setup-trivy` enabled so scans do not use the failure-prone
+`get.trivy.dev` installer path.
 `OpenAPI Compatibility` uses a commit-pinned `oasdiff` action to compare a
 pull request or merge-queue revision with its `main` baseline and fails on
 potential or definite breaking changes. It does not upload the API contract.
 The release workflow repeats the check against the immediately preceding stable
 tag; `v1.0.0` deliberately establishes the first compatibility baseline, while
-all later stable releases must compare successfully before publication.
+all later stable releases must compare successfully before their assets are
+uploaded.
 The `Backend Tests` and `Frontend Tests` jobs upload separate `backend` and
 `frontend` coverage and JUnit test-result reports to Codecov. They require the
 repository Actions secret `CODECOV_TOKEN`; never commit or log its plaintext
