@@ -1,12 +1,10 @@
 name: Release
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag with a manually published release (for example, v0.1.0)
+        description: Existing tag with a manually created draft release (for example, v0.1.0)
         required: true
         type: string
 
@@ -15,7 +13,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: release-${{ inputs.tag || github.event.release.tag_name }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
 
 env:
@@ -33,7 +31,7 @@ jobs:
         id: release
         shell: bash
         env:
-          REQUESTED_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           tag="${REQUESTED_TAG}"
@@ -46,7 +44,7 @@ jobs:
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Resolve manually published release
+      - name: Resolve manually created draft release
         id: release-source
         shell: bash
         env:
@@ -56,13 +54,13 @@ jobs:
         run: |
           set -euo pipefail
           if ! release_state="$(gh release view "${TAG}" --json isDraft,isPrerelease 2>/dev/null)"; then
-            echo "release ${TAG} must be manually published before running this workflow" >&2
+            echo "release ${TAG} must be manually created as a draft before running this workflow" >&2
             exit 1
           fi
           is_draft="$(jq --raw-output .isDraft <<<"${release_state}")"
           is_prerelease="$(jq --raw-output .isPrerelease <<<"${release_state}")"
-          if [[ "${is_draft}" != "false" || "${is_prerelease}" != "false" ]]; then
-            echo "release ${TAG} must be a manually published stable release" >&2
+          if [[ "${is_draft}" != "true" || "${is_prerelease}" != "false" ]]; then
+            echo "release ${TAG} must be a manually created stable draft release" >&2
             exit 1
           fi
 
@@ -251,7 +249,7 @@ jobs:
               "grom-registry-maintenance-${VERSION}.trivy.txt" > checksums.sha256
           )
 
-      - name: Upload release assets
+      - name: Upload release assets to draft
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -262,8 +260,8 @@ jobs:
           release_state="$(gh release view "${TAG}" --json isDraft,isPrerelease)"
           is_draft="$(jq --raw-output .isDraft <<<"${release_state}")"
           is_prerelease="$(jq --raw-output .isPrerelease <<<"${release_state}")"
-          if [[ "${is_draft}" != "false" || "${is_prerelease}" != "false" ]]; then
-            echo "release ${TAG} is no longer a published stable release" >&2
+          if [[ "${is_draft}" != "true" || "${is_prerelease}" != "false" ]]; then
+            echo "release ${TAG} is no longer a stable draft release" >&2
             exit 1
           fi
 

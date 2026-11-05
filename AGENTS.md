@@ -130,12 +130,14 @@ ruleset change makes them required.
 checkout, verifies the final image declares the non-root `grom` user, and
 checks health, readiness, API documentation, and the registry bearer challenge
 through an isolated public Compose stack.
-`.github/workflows/release.yml` runs when a stable `vMAJOR.MINOR.PATCH` GitHub
-Release is manually published, or through manual dispatch for an existing
-published release. It publishes the application image and the dedicated
+`.github/workflows/release.yml` runs through manual dispatch for a manually
+created stable `vMAJOR.MINOR.PATCH` draft GitHub Release. It publishes the
+application image and the dedicated
 `grom-registry-maintenance:vMAJOR.MINOR.PATCH` image to GHCR, then uploads both
-digest references, SPDX SBOMs, Trivy reports, and checksums to that release. It
-never creates or publishes a GitHub Release. It uses the repository
+digest references, SPDX SBOMs, Trivy reports, and checksums to that draft.
+Publication remains a separate manual action after the upload, so all assets
+are attached before an immutable release is published. The workflow never
+creates or publishes a GitHub Release. It uses the repository
 `GITHUB_TOKEN`; do not replace it with a long-lived registry credential or make
 a mutable image tag the canonical deployment reference. Install Trivy through
 the direct, retrying GitHub Releases download with its pinned SHA-256, keeping
