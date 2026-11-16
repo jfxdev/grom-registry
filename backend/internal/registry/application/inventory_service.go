@@ -429,3 +429,19 @@ func (s *InventoryService) ListPage(ctx context.Context, projectID foundation.ID
 	}
 	return s.store.ListManifestInventoryPage(ctx, target.ID, query, request)
 }
+
+func (s *InventoryService) Find(ctx context.Context, projectID foundation.ID, repository, digest string) (*registrydomain.ManifestInventory, error) {
+	target, err := s.store.FindRepository(ctx, projectID, repository)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.FindManifestInventory(ctx, target.ID, digest)
+}
+
+func (s *InventoryService) ListReferrersPage(ctx context.Context, projectID foundation.ID, repository, subjectDigest string, request foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
+	target, err := s.store.FindRepository(ctx, projectID, repository)
+	if err != nil {
+		return foundation.PageResult[registrydomain.ManifestInventory]{}, err
+	}
+	return s.store.ListManifestReferrersPage(ctx, target.ID, subjectDigest, request)
+}

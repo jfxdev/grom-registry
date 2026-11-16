@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -94,5 +95,53 @@ func TestListPagePropagatesUnknownRepositoryError(t *testing.T) {
 
 	if _, err := service.ListPage(context.Background(), foundation.NewID(), "missing", "", foundation.PageRequest{Limit: 10}); err == nil {
 		t.Fatal("expected an error for an unknown repository")
+	}
+}
+
+func (s *deletionTestStore) FindManifestInventory(_ context.Context, repositoryID foundation.ID, digest string) (*registrydomain.ManifestInventory, error) {
+	for i := range s.inventory {
+		if s.inventory[i].RepositoryID == repositoryID && s.inventory[i].Digest == digest {
+			return &s.inventory[i], nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
+func (s *deletionTestStore) ListManifestReferrersPage(_ context.Context, repositoryID foundation.ID, subjectDigest string, _ foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
+	result := foundation.PageResult[registrydomain.ManifestInventory]{Items: []registrydomain.ManifestInventory{}}
+	for _, item := range s.inventory {
+		if item.RepositoryID == repositoryID && item.SubjectDigest == subjectDigest {
+			result.Items = append(result.Items, item)
+		}
+	}
+	return result, nil
+}
+
+func TestFindAndListReferrersResolveTheProjectRepository(t *testing.T) {
+	projectID := foundation.NewID()
+	repository := &registrydomain.Repository{ID: foundation.NewID(), ProjectID: projectID, Name: "api"}
+	store := &deletionTestStore{
+		repository: repository,
+		inventory: []registrydomain.ManifestInventory{
+			{RepositoryID: repository.ID, Digest: "sha256:subject"},
+			{RepositoryID: repository.ID, Digest: "sha256:sbom", SubjectDigest: "sha256:subject"},
+		},
+	}
+	service := NewInventoryService(store)
+	ctx := context.Background()
+
+	found, err := service.Find(ctx, projectID, "api", "sha256:subject")
+	if err != nil || found.Digest != "sha256:subject" {
+		t.Fatalf("find = %#v, err = %v", found, err)
+	}
+	referrers, err := service.ListReferrersPage(ctx, projectID, "api", "sha256:subject", foundation.PageRequest{Limit: 10})
+	if err != nil || len(referrers.Items) != 1 || referrers.Items[0].Digest != "sha256:sbom" {
+		t.Fatalf("referrers = %#v, err = %v", referrers, err)
+	}
+	if _, err := service.Find(ctx, foundation.NewID(), "api", "sha256:subject"); err == nil {
+		t.Fatal("expected a repository from another project to be rejected")
+	}
+	if _, err := service.ListReferrersPage(ctx, projectID, "missing", "sha256:subject", foundation.PageRequest{Limit: 10}); err == nil {
+		t.Fatal("expected an unknown repository to be rejected")
 	}
 }

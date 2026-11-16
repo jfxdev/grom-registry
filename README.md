@@ -5,7 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/jfxdev/grom-registry?display_name=tag)](https://github.com/jfxdev/grom-registry/releases)
 [![License](https://img.shields.io/github/license/jfxdev/grom-registry)](LICENSE)
 [![GHCR](https://img.shields.io/badge/GHCR-ghcr.io%2Fjfxdev%2Fgrom--registry-2496ed?logo=github)](https://github.com/jfxdev/grom-registry/pkgs/container/grom-registry)
-[![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26.11-00ADD8?logo=go)](https://go.dev/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs)](https://vuejs.org/)
 [![shadcn-vue](https://img.shields.io/badge/shadcn--vue-UI-000000?logo=shadcnui&logoColor=white)](https://www.shadcn-vue.com/)
 [![OCI](https://img.shields.io/badge/OCI-registry-262261?logo=docker)](https://opencontainers.org/)
@@ -35,6 +35,7 @@ web interface for access, images, and recovery.
   - [Push an image](#push-an-image)
   - [Push an OpenTofu module or other OCI artifact](#push-an-opentofu-module-or-other-oci-artifact)
   - [Pull through Docker Hub or GHCR](#pull-through-docker-hub-or-ghcr)
+  - [Read registry metadata from an agent (MCP)](#read-registry-metadata-from-an-agent-mcp)
   - [Deployment profiles](#deployment-profiles)
   - [Bind-mounted volumes](#bind-mounted-volumes)
 - [Operations](#operations)
@@ -57,6 +58,8 @@ web interface for access, images, and recovery.
 - Persistent, read-only pull-through projects for Docker Hub and GHCR.
 - Reader, Writer, and Admin roles.
 - Service accounts with reveal-once, revocable access keys.
+- Read-only MCP endpoint that lets AI agents browse registry metadata with an
+  existing access key.
 - Web management for users, projects, repositories, and policies.
 - Live-versus-historical repository inventory, safe image-index deletion
   previews, and manual retention runs.
@@ -161,6 +164,32 @@ Keep credentials out of the API, project settings, logs, and backup metadata.
 copies run at once; further imports wait for a free slot within the 15-minute
 import timeout. A project cannot be deleted while one of its imports is running.
 
+### Read registry metadata from an agent (MCP)
+
+Grom serves a read-only [Model Context Protocol](https://modelcontextprotocol.io)
+endpoint at `/mcp`. It authenticates with the same access key as the registry,
+sent as a bearer token: a service-account key or a Viewer's profile token. The
+agent sees only projects where that credential has an explicit membership.
+
+```bash
+claude mcp add --transport http grom https://grom.example.com/mcp \
+  --header "Authorization: Bearer grm_<public-id>_<secret>"
+```
+
+| Tool | Returns |
+|---|---|
+| `list_projects`, `get_project` | Member projects and accounted storage usage |
+| `list_repositories`, `get_repository` | Repositories, status, and inferred artifact profile |
+| `list_tags` | Live tag names, filtered and sorted |
+| `list_artifacts`, `get_artifact` | Inventoried manifests by digest or tag, with platforms |
+| `list_referrers` | SBOMs, signatures, and other OCI referrers of a digest |
+| `list_policy_presets` | Built-in repository policy recommendations |
+| `list_lifecycle_runs`, `get_lifecycle_run`, `list_artifact_deletions` | Retention and deletion history (project Admin only) |
+
+No tool changes anything, and there are no user, service-account, membership,
+policy, backup, audit, or settings tools. The endpoint is stateless, so it works
+behind the same reverse proxy as the rest of Grom.
+
 ### Deployment profiles
 
 | Profile | Use |
@@ -259,6 +288,13 @@ compatibility and successor-versioning mechanism as `/api/v1`; an incompatible
 change must move to a new documented versioned auth endpoint alongside the new
 API version, never silently alter `/auth/token`.
 
+From the release that introduces it, the read-only `/mcp` tool set is a public
+contract under the same rules. Tool names, input arguments, and structured
+output fields are covered; tool descriptions and server instructions may be
+refined in any release. Adding a tool or an optional output field is
+compatible; removing or renaming a tool, argument, or field, or requiring a new
+argument, is not.
+
 - Patch releases contain fixes and documentation changes only; they do not make
   incompatible contract changes.
 - Minor releases may add opt-in capabilities, endpoints, and optional fields.
@@ -277,8 +313,8 @@ A `v1.0.0` release establishes the initial OpenAPI contract baseline and does
 not require a comparison. Each later stable release requires CI to compare its
 OpenAPI contract with the previous stable contract. An incompatible change
 requires an approved exception, a documented migration path, and release
-notes. This policy covers the published management API and token endpoint;
-Docker and ORAS-based OCI clients are the supported registry-client
+notes. This policy covers the published management API, token endpoint, and
+MCP tools; Docker and ORAS-based OCI clients are the supported registry-client
 compatibility surface. It does not claim S3 or multi-instance support.
 
 ## Development

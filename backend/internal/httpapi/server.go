@@ -67,6 +67,7 @@ type Server struct {
 	registryMaintenance *registrymaintenance.Client
 	diagnostics         *platformdiagnostics.Service
 	passwordResetMailer identityapp.PasswordResetMailer
+	mcpHandler          http.Handler
 }
 
 type currentUserKey struct{}
@@ -78,6 +79,8 @@ type OperationalOptions struct {
 	RegistryMaintenance *registrymaintenance.Client
 	Diagnostics         *platformdiagnostics.Service
 	PasswordResetMailer identityapp.PasswordResetMailer
+	// Version is reported to MCP clients as the server implementation version.
+	Version string
 }
 
 func New(
@@ -132,6 +135,7 @@ func New(
 	if server.maintenance == nil {
 		server.maintenance = maintenance.New()
 	}
+	server.mcpHandler = server.newMCPHandler(operationalOptions.Version)
 	server.router = server.routes()
 	return server, nil
 }
@@ -157,6 +161,7 @@ func (s *Server) routes() chi.Router {
 	})
 	router.Get("/api/v1/deployment", s.getDeployment)
 	router.Get("/auth/token", s.exchangeRegistryToken)
+	router.With(s.requireAPITokenBearer).Handle(constants.MCPPath, s.mcpHandler)
 	router.Handle("/v2/", s.gateway)
 	router.Handle("/v2/*", s.gateway)
 
@@ -2103,7 +2108,7 @@ func requiresQuiescenceTracking(r *http.Request) bool {
 			return false
 		}
 	}
-	if normalizedPath == "/auth/token" || normalizedPath == "/v2" ||
+	if normalizedPath == "/auth/token" || normalizedPath == constants.MCPPath || normalizedPath == "/v2" ||
 		strings.HasPrefix(normalizedPath, "/v2/") {
 		return true
 	}
@@ -2208,7 +2213,10 @@ func (s *Server) apiDocs(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) spa(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/v2/") {
+	// MCP clients probe /.well-known/ for OAuth metadata; they must receive a
+	// JSON 404 rather than the SPA's HTML.
+	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/v2/") ||
+		strings.HasPrefix(r.URL.Path, constants.MCPPath+"/") || strings.HasPrefix(r.URL.Path, "/.well-known/") {
 		writeError(w, r, http.StatusNotFound, "not_found", "Endpoint not found")
 		return
 	}

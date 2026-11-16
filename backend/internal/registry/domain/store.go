@@ -29,6 +29,8 @@ type Store interface {
 	CompleteInventoryReconciliation(ctx context.Context, repositoryID foundation.ID, seenTags, seenDigests []string, observedAt time.Time) error
 	ListManifestInventory(ctx context.Context, repositoryID foundation.ID) ([]ManifestInventory, error)
 	ListManifestInventoryPage(ctx context.Context, repositoryID foundation.ID, query string, request foundation.PageRequest) (foundation.PageResult[ManifestInventory], error)
+	ListManifestReferrersPage(ctx context.Context, repositoryID foundation.ID, subjectDigest string, request foundation.PageRequest) (foundation.PageResult[ManifestInventory], error)
+	FindManifestInventory(ctx context.Context, repositoryID foundation.ID, digest string) (*ManifestInventory, error)
 	MarkManifestDeleted(ctx context.Context, repositoryID foundation.ID, digest string, deletedAt time.Time) error
 	CreateArtifactDeletion(ctx context.Context, deletion *ArtifactDeletion) error
 	CompleteArtifactDeletion(ctx context.Context, deletionID foundation.ID, status, message string, completedAt time.Time) error
