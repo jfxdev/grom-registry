@@ -27,7 +27,7 @@ flowchart LR
 
 | Component | Responsibility |
 |---|---|
-| Grom | Serves the embedded Vue interface, management API, sessions, /auth/token, the streaming /v2/* gateway, live administrator installation diagnostics, and optional password-reset SMTP delivery. |
+| Grom | Serves the embedded Vue interface, management API, sessions, /auth/token, the streaming /v2/* gateway, the read-only /mcp metadata endpoint, live administrator installation diagnostics, and optional password-reset SMTP delivery. |
 | CNCF Distribution | Implements the OCI distribution protocol, including the OCI 1.1 referrers API, and persists OCI content. |
 | SQLite or PostgreSQL | Stores control-plane data and audit history; migrations run before readiness. |
 | Backup agent | Creates and provides recovery points with no network, public ports, or Docker socket. |
@@ -114,6 +114,27 @@ content and its logical repository persist without pull-through TTL or automatic
 expiry; existing backup and recovery include both. Optional upstream credentials
 are deployment environment variables only and are never persisted or exposed.
 
+## MCP metadata endpoint
+
+`/mcp` is a stateless Model Context Protocol endpoint (Streamable HTTP with JSON
+responses, built on the official Go SDK) for agents that need registry
+metadata without a browser. Every JSON-RPC POST carries an existing access key
+as `Authorization: Bearer grm_…`: a service-account key or a Viewer's profile
+registry token. The HTTP layer authenticates it through Identity, shares the
+`/auth/token` failure limiter, and attaches the principal; it never reads the
+web session cookie. GET and DELETE return 405 because no session or stream is
+kept.
+
+The transport adapter in `backend/internal/mcp` registers only read-only
+tools: projects, repositories, tags, inventoried artifacts, a digest lookup,
+OCI referrers of a digest, built-in policy presets, lifecycle runs, and manual
+artifact deletions. It reads application services through narrow interfaces
+with no mutating method, repeats the HTTP layer's project authorization, and
+returns its own transfer types, so repository policies are never exposed.
+Repository listings read Grom's logical repositories without reconciling the
+Distribution catalog. There are no admin, user, service-account, membership,
+backup, audit, or settings tools.
+
 ## Repositories, inventory, and safe operations
 
 A logical repository has an immutable relative path, optional description,
@@ -187,7 +208,8 @@ backend/api/openapi.yaml is the source of truth for /api/v1/*, health,
 readiness, and /auth/token. Change the contract before implementation, run make
 generate, and never edit backend/internal/generated/openapi/ or
 frontend/src/shared/api/generated/. The /v2/* gateway follows OCI/Distribution
-rather than duplicating every protocol operation in OpenAPI. Lists use stable,
+and /mcp follows the Model Context Protocol rather than duplicating every
+protocol operation in OpenAPI. Lists use stable,
 opaque cursors rather than totals or numbered pages.
 
 The frontend uses Vue 3, TypeScript, Vite, Vue Router, shadcn-vue, and TanStack
@@ -223,7 +245,9 @@ Forwarded addresses are trusted only when the immediate peer is in
 GROM_TRUSTED_PROXIES. Passwords, access keys, sessions, and reset tokens use
 Argon2id. Request bodies are limited to 1 MiB and closed schemas reject unknown
 properties. Cookie-authenticated mutations require an allowed Origin, and
-login/token failures are rate-limited by resolved client address.
+login/token failures are rate-limited by resolved client address. MCP requests
+are limited to 1 MiB, need a bearer access key, and pass the same Origin guard;
+unknown `/mcp/*` and `/.well-known/*` paths return JSON 404 rather than the SPA.
 
 SMTP delivery is optional deployment configuration, not persisted Identity
 state. It accepts only certificate-validated STARTTLS or implicit TLS, sends a
@@ -234,8 +258,8 @@ failed or disabled mailer returns the same reveal-once manual link instead.
 ## Backup and recovery
 
 Administrators create, inspect, download, and delete recovery
-points in the UI. Grom drains writes and blocks mutations, token exchange, and
-registry traffic while the isolated agent captures application data, the
+points in the UI. Grom drains writes and blocks mutations, token exchange, MCP
+requests, and registry traffic while the isolated agent captures application data, the
 database, signing material, OCI storage, and Distribution configuration. Local
 deletion requires confirmation and does not affect downloaded bundles. Bundles
 contain private data and must be retained off-host with authenticated encryption.
@@ -255,6 +279,7 @@ complete recovery flow and the distinction between accounted and physical usage.
 | backend/cmd/grom-backup/ | Backup agent, recovery, and compatibility tools. |
 | backend/internal/{identity,projects,registry,audit}/ | Domain, application, and infrastructure contexts. |
 | backend/internal/httpapi/ | Central HTTP routing and adaptation. |
+| backend/internal/mcp/ | Read-only MCP tools over registry metadata, mounted by httpapi at /mcp. |
 | backend/internal/platform/ | Configuration, database, diagnostics, lifecycle, backup, maintenance, and Distribution supervision. |
 | frontend/src/modules/ | Auth, users, service accounts, projects, registry, backups, and settings. |
 | frontend/src/shared/ | API client, generated types, reusable UI, constants, and utilities. |

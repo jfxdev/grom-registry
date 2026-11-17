@@ -39,9 +39,12 @@ Keep this file aligned with the code that actually exists.
 - Frontend only: `cd frontend && npm run dev`
 
 Keep the exact Go patch version in `backend/go.mod` and the Dockerfile builder
-image aligned. Go 1.26.5 is the current minimum because earlier 1.26 patch
-releases are affected by reachable standard-library vulnerability
-`GO-2026-5856`.
+image aligned. Go 1.26.11 is the current minimum because earlier 1.26 patch
+releases are affected by reachable standard-library vulnerabilities in
+`net/http`, `net/url`, `net/textproto`, `crypto/tls`, `crypto/x509`,
+`encoding/asn1`, and `html/template` fixed between 1.26.6 and 1.26.11. Keep
+`github.com/klauspost/compress` at v1.20.2 or later because earlier releases are
+affected by `GO-2026-6865`.
 The runtime `grom` account is fixed at UID 100 and GID 101. Keep the Dockerfile,
 restored-volume ownership, and backup-agent socket group aligned; changing these
 IDs requires an explicit volume-ownership migration.
@@ -128,8 +131,9 @@ build from `backend`; its two matrix jobs are advisory until an explicit branch
 ruleset change makes them required.
 `Production Image Smoke (Docker)` builds the root Dockerfile from a clean
 checkout, verifies the final image declares the non-root `grom` user, and
-checks health, readiness, API documentation, and the registry bearer challenge
-through an isolated public Compose stack.
+checks health, readiness, API documentation, the registry bearer challenge, and
+that `/mcp` rejects an unauthenticated request with a bearer challenge, through an
+isolated public Compose stack.
 `.github/workflows/release.yml` runs through manual dispatch for a manually
 created stable `vMAJOR.MINOR.PATCH` draft GitHub Release. It publishes the
 application image and the dedicated
@@ -220,6 +224,8 @@ or total capacity belongs to host/provider monitoring.
 - Domain entities must not be generated from or coupled to OpenAPI transport schemas.
 - CI must validate the contract, generated-code freshness, implementation compatibility, and frontend types.
 - OpenAPI 3.0.x is intentional while `oapi-codegen` stable generation targets that version.
+- `/mcp` follows the Model Context Protocol, not OpenAPI, like `/v2/*`; the
+  route-contract test exempts it explicitly.
 - Authentication failure limiting is bounded and in-process; do not add Redis
   for this single-instance MVP.
 - Never restore unconditional real-IP middleware. Forwarded client addresses
@@ -302,6 +308,35 @@ or total capacity belongs to host/provider monitoring.
   dropping the space-delimited form silently strips `push` and loses every scope
   after the first.
 - Registry clients use API tokens, never web passwords.
+- `/mcp` is a read-only metadata endpoint for agents. It authenticates only an
+  existing access key (service-account key or Viewer profile token) as
+  `Authorization: Bearer`, never a web session, shares the `/auth/token`
+  failure limiter, audits failures as `identity.registry_auth_failed` with
+  `channel: mcp`, and is drained by backup quiescence because authentication
+  records last use. Never register a mutating tool, and never add admin, user,
+  service-account, membership, policy, backup, audit, or settings tools.
+  Visibility is explicit membership only (`systemAdmin=false`); lifecycle and
+  deletion history require project Admin, matching the web API. Tools in
+  `backend/internal/mcp` read application services through its narrow
+  interfaces, never `httpapi` handlers (the web repository listing reconciles
+  Distribution and writes), and return their own transfer types rather than
+  domain structs so repository policies cannot leak. Hidden and missing
+  projects must produce identical errors, and service error text is logged,
+  never returned. Inside that package the SDK is imported as `mcpsdk`. Keep
+  the SDK version pinned and keep `Stateless`, `JSONResponse`, the 1 MiB body
+  limit, and `DisableLocalhostProtection` (its loopback Host check breaks a
+  same-host reverse proxy; the bearer key and Origin guard cover rebinding).
+  Unknown `/mcp/*` and `/.well-known/*` paths return JSON 404, not the SPA,
+  because MCP clients probe for OAuth metadata there.
+  Tool names, arguments, and structured output fields are a public contract per
+  the README compatibility policy; `TestToolsAreExactlyTheReadOnlyMetadataSet`
+  pins the tool list.
+- Access-key Argon2id verification is cached in process for 60 seconds and at
+  most 1,024 keys, bound to the stored hash and keyed by token ID, holding only
+  a SHA-256 digest of the secret. The token row and owner must still be read on
+  every request so revocation, expiry, and disabled owners apply immediately;
+  never cache the authentication result itself, and never extend the cache to
+  web sessions or passwords.
 - Bootstrap creates the only initially defined administrator. Every
   later user is created as a regular user with a reveal-once registration link
   to choose an initial password and remains disabled until the link is consumed;

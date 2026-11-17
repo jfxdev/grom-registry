@@ -20,11 +20,12 @@ short-lived registry JWT.
 |---|---|---|
 | Regular user | Human access to the UI and actions granted through project membership. | Email and web password. |
 | Administrator | Global administration and access to every project. | Email and web password. |
-| Viewer | Installation-level read-only user who can see only explicitly assigned projects. | Email and web password; an optional profile token for pulls. |
-| Service account | CI/CD and other registry automation. | Registry username and access key. |
+| Viewer | Installation-level read-only user who can see only explicitly assigned projects. | Email and web password; an optional profile token for pulls and MCP metadata reads. |
+| Service account | CI/CD, agents, and other registry automation. | Registry username and access key; the key alone as an MCP bearer credential. |
 
-A web password never works at the registry-token endpoint. A service-account
-access key is never a web-login credential.
+A web password never works at the registry-token or MCP endpoint. A
+service-account access key is never a web-login credential, and a web session
+never authenticates the MCP endpoint.
 
 ## Project roles
 
@@ -127,7 +128,12 @@ Every access key belongs to one service account. Its secret uses the form
 grm_<public-id>_<secret>, is shown once, and cannot be retrieved later. An
 account can have no more than three active keys; expired or revoked keys no
 longer count toward that limit. Revocation and expiry are checked at the next
-token exchange, and successful authentication updates last use. The server
+token exchange or MCP request, and successful authentication updates last use.
+To keep stateless MCP clients cheap, Grom remembers a successful Argon2id key
+verification in process memory for up to 60 seconds (at most 1,024 keys). The
+entry holds only a SHA-256 digest of the secret bound to the stored hash; the
+token row and its owner are still read on every request, so revocation, expiry,
+and disabled owners apply immediately. A restart clears the cache. The server
 counts active keys across the complete history, not only the current page.
 
 ## Viewer profile token
@@ -170,6 +176,33 @@ project administrators can unarchive it to restore push grants. Pull-through
 repositories never receive push: archiving one keeps serving cached content but
 stops imports from the upstream, and unarchiving only resumes those imports.
 
+## MCP read access
+
+`/mcp` exposes registry metadata to agents through read-only Model Context
+Protocol tools. It accepts only an access key sent as
+`Authorization: Bearer grm_<public-id>_<secret>`: a service-account key or a
+Viewer profile token. Each request re-validates the key, its expiry and
+revocation, and its owner, so a revoked key or disabled account fails on the
+next call. The key owner must still be an existing service account or an
+installation Viewer.
+
+- Visibility comes only from explicit project membership. An access-key
+  principal is never treated as an installation administrator, and a hidden
+  project or repository returns the same not-found result as a missing one.
+- Any membership role (Reader, Writer, or Admin) can read projects,
+  repositories, tags, inventoried artifacts, referrers, and accounted storage
+  usage. Lifecycle runs and manual artifact deletions require project Admin,
+  exactly as in the web API.
+- Repository policies, memberships, users, service accounts, keys, backups,
+  audit events, settings, and diagnostics are not exposed. Built-in policy
+  presets are static recommendations and visible to any authenticated key.
+- No tool mutates state. MCP access never grants a registry action; a Viewer
+  token remains pull-only at `/auth/token`.
+
+Missing or invalid MCP credentials are audited as `identity.registry_auth_failed`
+with `channel: mcp`, never including the presented key. MCP and `/auth/token`
+share one failure limiter per resolved client address.
+
 ## Protections for sensitive operations
 
 Administrative operations use the current role, never a client-side copy of
@@ -196,6 +229,7 @@ errors are never returned.
 | Roles, memberships, and access decisions | backend/internal/projects/ |
 | JWT grants and registry gateway | backend/internal/registry/application/token_service.go and backend/internal/registry/infrastructure/distribution/ |
 | HTTP routes and application layer | backend/internal/httpapi/ |
+| MCP bearer authentication and read-only tools | backend/internal/httpapi/mcp.go and backend/internal/mcp/ |
 | Public contract | backend/api/openapi.yaml |
 | Generated frontend types | frontend/src/shared/api/generated/ |
 

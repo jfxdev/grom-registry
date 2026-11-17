@@ -286,6 +286,44 @@ func (s *Store) ListManifestInventory(ctx context.Context, repositoryID foundati
 }
 
 func (s *Store) ListManifestInventoryPage(ctx context.Context, repositoryID foundation.ID, search string, request foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
+	return s.manifestInventoryPage(ctx, repositoryID, request, func(query *bun.SelectQuery) *bun.SelectQuery {
+		if value := strings.ToLower(strings.TrimSpace(search)); value != "" {
+			like := likeContains(value)
+			query = query.Where(
+				"(LOWER(rm.digest) LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM registry_tags WHERE registry_tags.manifest_id = rm.id AND registry_tags.detached_at IS NULL AND LOWER(registry_tags.name) LIKE ? ESCAPE '\\'))",
+				like, like,
+			)
+		}
+		return query
+	})
+}
+
+// ListManifestReferrersPage lists the inventoried manifests whose OCI subject
+// is subjectDigest within one repository, in the same keyset order as the
+// repository inventory.
+func (s *Store) ListManifestReferrersPage(ctx context.Context, repositoryID foundation.ID, subjectDigest string, request foundation.PageRequest) (foundation.PageResult[registrydomain.ManifestInventory], error) {
+	return s.manifestInventoryPage(ctx, repositoryID, request, func(query *bun.SelectQuery) *bun.SelectQuery {
+		return query.Where("subject_digest = ?", subjectDigest)
+	})
+}
+
+func (s *Store) FindManifestInventory(ctx context.Context, repositoryID foundation.ID, digest string) (*registrydomain.ManifestInventory, error) {
+	var model manifestModel
+	if err := s.db.NewSelect().Model(&model).
+		Where("repository_id = ?", repositoryID.String()).
+		Where("digest = ?", digest).
+		Limit(1).
+		Scan(ctx); err != nil {
+		return nil, err
+	}
+	items, err := s.manifestInventoryFromModels(ctx, repositoryID, []manifestModel{model})
+	if err != nil {
+		return nil, err
+	}
+	return &items[0], nil
+}
+
+func (s *Store) manifestInventoryPage(ctx context.Context, repositoryID foundation.ID, request foundation.PageRequest, filter func(*bun.SelectQuery) *bun.SelectQuery) (foundation.PageResult[registrydomain.ManifestInventory], error) {
 	boundary, err := keysetBoundary(request)
 	if err != nil {
 		return foundation.PageResult[registrydomain.ManifestInventory]{}, err
@@ -295,13 +333,7 @@ func (s *Store) ListManifestInventoryPage(ctx context.Context, repositoryID foun
 	if boundary != nil {
 		query = query.Where("(first_seen_at < ? OR (first_seen_at = ? AND id < ?))", boundary.at, boundary.at, boundary.id)
 	}
-	if value := strings.ToLower(strings.TrimSpace(search)); value != "" {
-		like := likeContains(value)
-		query = query.Where(
-			"(LOWER(rm.digest) LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM registry_tags WHERE registry_tags.manifest_id = rm.id AND registry_tags.detached_at IS NULL AND LOWER(registry_tags.name) LIKE ? ESCAPE '\\'))",
-			like, like,
-		)
-	}
+	query = filter(query)
 	if err := query.OrderExpr("first_seen_at DESC, id DESC").Limit(request.Limit + 1).Scan(ctx); err != nil {
 		return foundation.PageResult[registrydomain.ManifestInventory]{}, err
 	}

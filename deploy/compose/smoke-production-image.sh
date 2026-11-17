@@ -57,3 +57,14 @@ if ! grep --quiet --extended-regexp '^HTTP/[0-9.]+ 401([[:space:]]|$)' <<<"${reg
   echo "registry endpoint did not return a bearer challenge" >&2
   exit 1
 fi
+
+mcp_headers="$(curl --silent --show-error --dump-header - --output /dev/null \
+  --request POST --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}' \
+  "http://${endpoint}/mcp")"
+if ! grep --quiet --extended-regexp '^HTTP/[0-9.]+ 401([[:space:]]|$)' <<<"${mcp_headers}" || \
+  ! grep --ignore-case --quiet '^www-authenticate: Bearer ' <<<"${mcp_headers}"; then
+  echo "MCP endpoint did not require a bearer access key" >&2
+  exit 1
+fi

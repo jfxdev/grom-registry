@@ -6,7 +6,7 @@ COPY frontend/ ./
 COPY backend/api/openapi.yaml /src/backend/api/openapi.yaml
 RUN npm run build
 
-FROM golang:1.26.5-alpine AS backend
+FROM golang:1.26.11-alpine AS backend
 ARG GROM_VERSION=dev
 WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./

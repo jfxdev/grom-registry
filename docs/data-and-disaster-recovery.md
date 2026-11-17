@@ -64,7 +64,8 @@ sequenceDiagram
 ~~~
 
 During maintenance, Grom drains writes and blocks management mutations, token
-exchange, and registry traffic that could change durable state. The SQLite
+exchange, MCP requests, and registry traffic that could change durable state.
+MCP requests are included because access-key authentication records last use. The SQLite
 checkpoint is non-blocking, so WAL frames retained by an already-running read
 are included with the database in Grom data. The recovery point therefore
 remains consistent without interrupting a read-only request. PostgreSQL uses

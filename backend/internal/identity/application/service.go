@@ -26,8 +26,10 @@ var (
 const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 type Service struct {
-	repository identity.Repository
-	sessionTTL time.Duration
+	repository   identity.Repository
+	sessionTTL   time.Duration
+	apiKeyCache  *apiKeyVerificationCache
+	verifySecret func(hash, secret string) bool
 }
 
 type CreatedToken struct {
@@ -46,7 +48,11 @@ type CreatedUser struct {
 }
 
 func New(repository identity.Repository, sessionTTL time.Duration) *Service {
-	return &Service{repository: repository, sessionTTL: sessionTTL}
+	return &Service{
+		repository: repository, sessionTTL: sessionTTL,
+		apiKeyCache:  newAPIKeyVerificationCache(constants.APIKeyVerificationCacheTTL, constants.APIKeyVerificationCacheEntries),
+		verifySecret: password.Verify,
+	}
 }
 
 func (s *Service) BootstrapAdmin(ctx context.Context, email, username, plaintext string) error {
@@ -491,34 +497,61 @@ func (s *Service) RevokeServiceAccountAPIToken(ctx context.Context, serviceAccou
 }
 
 func (s *Service) AuthenticateRegistry(ctx context.Context, username, rawToken string) (foundation.PrincipalRef, error) {
+	owner, err := s.verifyAPIToken(ctx, rawToken)
+	if err != nil || owner.username != username {
+		return foundation.PrincipalRef{}, ErrUnauthenticated
+	}
+	_ = s.repository.TouchAPIToken(ctx, owner.tokenID)
+	return owner.principal, nil
+}
+
+// AuthenticateAPIToken authenticates an access key presented without a
+// registry username, as the MCP endpoint's bearer credential does. The token
+// still resolves only to an existing service account or installation viewer.
+func (s *Service) AuthenticateAPIToken(ctx context.Context, rawToken string) (foundation.PrincipalRef, error) {
+	owner, err := s.verifyAPIToken(ctx, rawToken)
+	if err != nil {
+		return foundation.PrincipalRef{}, ErrUnauthenticated
+	}
+	_ = s.repository.TouchAPIToken(ctx, owner.tokenID)
+	return owner.principal, nil
+}
+
+type apiTokenOwner struct {
+	tokenID   foundation.ID
+	principal foundation.PrincipalRef
+	username  string
+}
+
+func (s *Service) verifyAPIToken(ctx context.Context, rawToken string) (apiTokenOwner, error) {
 	publicID, secret, ok := parseCredential(rawToken, "grm")
 	if !ok {
-		return foundation.PrincipalRef{}, ErrUnauthenticated
+		return apiTokenOwner{}, ErrUnauthenticated
 	}
 	token, err := s.repository.FindAPITokenByPublicID(ctx, publicID)
 	if err != nil || token.RevokedAt != nil || (token.ExpiresAt != nil && time.Now().UTC().After(*token.ExpiresAt)) {
-		return foundation.PrincipalRef{}, ErrUnauthenticated
+		return apiTokenOwner{}, ErrUnauthenticated
 	}
-	if !password.Verify(token.SecretHash, secret) {
-		return foundation.PrincipalRef{}, ErrUnauthenticated
+	if !s.apiKeyCache.verify(token.ID.String(), token.SecretHash, secret, s.verifySecret) {
+		return apiTokenOwner{}, ErrUnauthenticated
 	}
 	principal := token.Principal
 	switch principal.Kind {
 	case constants.PrincipalServiceAccount:
 		account, err := s.repository.FindServiceAccountByID(ctx, principal.ID)
-		if err != nil || account.Username != username {
-			return foundation.PrincipalRef{}, ErrUnauthenticated
+		if err != nil {
+			return apiTokenOwner{}, ErrUnauthenticated
 		}
+		return apiTokenOwner{tokenID: token.ID, principal: principal, username: account.Username}, nil
 	case constants.PrincipalUser:
 		user, err := s.repository.FindUserByID(ctx, principal.ID)
-		if err != nil || !user.SystemViewer || user.Username != username {
-			return foundation.PrincipalRef{}, ErrUnauthenticated
+		if err != nil || !user.SystemViewer {
+			return apiTokenOwner{}, ErrUnauthenticated
 		}
+		return apiTokenOwner{tokenID: token.ID, principal: principal, username: user.Username}, nil
 	default:
-		return foundation.PrincipalRef{}, ErrUnauthenticated
+		return apiTokenOwner{}, ErrUnauthenticated
 	}
-	_ = s.repository.TouchAPIToken(ctx, token.ID)
-	return principal, nil
 }
 
 func randomString(bytes int) (string, error) {

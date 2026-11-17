@@ -10,6 +10,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 	"github.com/jfxdev/grom/backend/api"
+	"github.com/jfxdev/grom/backend/internal/constants"
 )
 
 func TestOpenAPIContractIsValid(t *testing.T) {
@@ -85,7 +86,9 @@ func routeOperations(t *testing.T, router chi.Router) map[string]bool {
 	t.Helper()
 	operations := make(map[string]bool)
 	if err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		if route == "/v2/" || strings.HasPrefix(route, "/v2/") ||
+		// /v2 follows the OCI distribution specification and /mcp the Model
+		// Context Protocol; neither is described by the OpenAPI contract.
+		if route == "/v2/" || strings.HasPrefix(route, "/v2/") || route == constants.MCPPath ||
 			route == "/api/docs" || route == "/api/openapi.yaml" {
 			return nil
 		}

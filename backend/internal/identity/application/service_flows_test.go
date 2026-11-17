@@ -3,9 +3,11 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jfxdev/grom/backend/internal/constants"
 	"github.com/jfxdev/grom/backend/internal/foundation"
 	identity "github.com/jfxdev/grom/backend/internal/identity/domain"
 )
@@ -390,5 +392,100 @@ func TestAuthenticateRegistryServiceAccountAndUnknownPrincipal(t *testing.T) {
 	}
 	if _, err := service.AuthenticateRegistry(ctx, account.Username, "not-a-valid-token"); !errors.Is(err, ErrUnauthenticated) {
 		t.Fatalf("expected a malformed token to fail, got %v", err)
+	}
+}
+
+func TestAuthenticateAPITokenAcceptsServiceAccountAndViewerKeys(t *testing.T) {
+	repository := newFakeRepository()
+	service := New(repository, time.Hour)
+	ctx := context.Background()
+	account, err := service.CreateServiceAccount(ctx, "Agent", "agent", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accountKey, err := service.CreateServiceAccountAPIToken(ctx, account.ID, "mcp", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewer := &identity.User{ID: foundation.NewID(), Username: "viewer", SystemViewer: true}
+	repository.users[viewer.ID] = viewer
+	viewerKey, err := service.CreateViewerRegistryToken(ctx, viewer.ID, "mcp", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	principal, err := service.AuthenticateAPIToken(ctx, accountKey.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if principal != (foundation.PrincipalRef{Kind: constants.PrincipalServiceAccount, ID: account.ID}) {
+		t.Fatalf("unexpected service account principal: %#v", principal)
+	}
+	if repository.saTokens[accountKey.Token.ID].LastUsedAt == nil {
+		t.Fatal("expected service account key last use to be recorded")
+	}
+	principal, err = service.AuthenticateAPIToken(ctx, viewerKey.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if principal != (foundation.PrincipalRef{Kind: constants.PrincipalUser, ID: viewer.ID}) {
+		t.Fatalf("unexpected viewer principal: %#v", principal)
+	}
+	if repository.viewerTokens[viewerKey.Token.ID].LastUsedAt == nil {
+		t.Fatal("expected viewer key last use to be recorded")
+	}
+}
+
+func TestAuthenticateAPITokenRejectsUnusableKeys(t *testing.T) {
+	repository := newFakeRepository()
+	service := New(repository, time.Hour)
+	ctx := context.Background()
+	newAccountKey := func(username string) (*identity.ServiceAccount, *CreatedToken) {
+		t.Helper()
+		account, err := service.CreateServiceAccount(ctx, username, username, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		key, err := service.CreateServiceAccountAPIToken(ctx, account.ID, "mcp", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return account, key
+	}
+
+	revokedAccount, revoked := newAccountKey("revoked")
+	if err := service.RevokeServiceAccountAPIToken(ctx, revokedAccount.ID, revoked.Token.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, expired := newAccountKey("expired")
+	past := time.Now().UTC().Add(-time.Minute)
+	repository.saTokens[expired.Token.ID].ExpiresAt = &past
+	removedAccount, removed := newAccountKey("removed")
+	delete(repository.serviceAccounts, removedAccount.ID)
+	viewer := &identity.User{ID: foundation.NewID(), Username: "promoted", SystemViewer: true}
+	repository.users[viewer.ID] = viewer
+	promoted, err := service.CreateViewerRegistryToken(ctx, viewer.ID, "mcp", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewer.SystemViewer = false
+	viewer.SystemAdmin = true
+	_, valid := newAccountKey("valid")
+	publicID := strings.SplitN(valid.Secret, "_", 3)[1]
+
+	for name, raw := range map[string]string{
+		"revoked":       revoked.Secret,
+		"expired":       expired.Secret,
+		"removed owner": removed.Secret,
+		"former viewer": promoted.Secret,
+		"wrong secret":  "grm_" + publicID + "_wrong",
+		"unknown key":   "grm_unknown_secret",
+		"malformed":     "not-a-valid-token",
+		"session value": "grms_" + publicID + "_secret",
+		"empty":         "",
+	} {
+		if _, err := service.AuthenticateAPIToken(ctx, raw); !errors.Is(err, ErrUnauthenticated) {
+			t.Errorf("%s: expected ErrUnauthenticated, got %v", name, err)
+		}
 	}
 }

@@ -228,7 +228,7 @@ func run(logger *slog.Logger) error {
 			TrustedProxies: cfg.TrustedProxies, AuthFailureLimit: cfg.AuthFailureLimit,
 			AuthFailureWindow: cfg.AuthFailureWindow, AuthBlockDuration: cfg.AuthBlockDuration,
 		},
-		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController, Database: string(databaseKind), RegistryMaintenance: registryMaintenanceClient, Diagnostics: diagnosticsService, PasswordResetMailer: passwordResetMailer},
+		httpapi.OperationalOptions{Backups: backupManager, Maintenance: maintenanceController, Database: string(databaseKind), RegistryMaintenance: registryMaintenanceClient, Diagnostics: diagnosticsService, PasswordResetMailer: passwordResetMailer, Version: version},
 	)
 	if err != nil {
 		return err
