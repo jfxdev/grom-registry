@@ -44,7 +44,16 @@ releases are affected by reachable standard-library vulnerabilities in
 `net/http`, `net/url`, `net/textproto`, `crypto/tls`, `crypto/x509`,
 `encoding/asn1`, and `html/template` fixed between 1.26.6 and 1.26.11. Keep
 `github.com/klauspost/compress` at v1.20.2 or later because earlier releases are
-affected by `GO-2026-6865`.
+affected by `GO-2026-6865`. Keep `github.com/getkin/kin-openapi` at v0.149.0 or
+later (spec-loader and `openapi3filter` panics), `github.com/go-chi/chi/v5` at
+v5.4.0 or later, and `go.opentelemetry.io/otel` at v1.47.0 or later; otel is
+pulled in only by `bun/driver/pgdriver`, which still requires an older release,
+so it must stay an explicit requirement in `backend/go.mod`.
+`frontend/package.json` `overrides` pin patched transitive versions of
+`brace-expansion`, `glob`, `js-yaml`, `minimatch`, `postcss-selector-parser`,
+and `source-map-js`. `minimatch` is forced to the 11.x line because no patched
+10.x release exists; remove an override only after every consumer resolves a
+patched version on its own.
 The runtime `grom` account is fixed at UID 100 and GID 101. Keep the Dockerfile,
 restored-volume ownership, and backup-agent socket group aligned; changing these
 IDs requires an explicit volume-ownership migration.
