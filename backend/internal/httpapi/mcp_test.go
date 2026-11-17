@@ -41,6 +41,10 @@ type mcpTestStack struct {
 	readerKey   string
 	accountID   foundation.ID
 	keyID       foundation.ID
+	adminRef    foundation.PrincipalRef
+	projects    *projectapp.Service
+	registry    *registryapp.RepositoryService
+	store       *registrystore.Store
 }
 
 func newMCPTestStack(t *testing.T, failureLimit int) *mcpTestStack {
@@ -116,7 +120,11 @@ func newMCPTestStack(t *testing.T, failureLimit int) *mcpTestStack {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &mcpTestStack{server: server, audit: auditStore, maintenance: controller, identity: identity, readerKey: key.Secret, accountID: account.ID, keyID: key.Token.ID}
+	return &mcpTestStack{
+		server: server, audit: auditStore, maintenance: controller, identity: identity,
+		readerKey: key.Secret, accountID: account.ID, keyID: key.Token.ID,
+		adminRef: adminRef, projects: projects, registry: repositories, store: store,
+	}
 }
 
 func mcpRequest(body string, headers map[string]string) *http.Request {
@@ -257,8 +265,8 @@ func (b bearerTransport) RoundTrip(request *http.Request) (*http.Response, error
 	return http.DefaultTransport.RoundTrip(request)
 }
 
-func TestMCPEndToEndWithAServiceAccountKey(t *testing.T) {
-	stack := newMCPTestStack(t, 10)
+func connectMCP(t *testing.T, stack *mcpTestStack) *mcpsdk.ClientSession {
+	t.Helper()
 	httpServer := httptest.NewServer(stack.server.Handler())
 	t.Cleanup(httpServer.Close)
 	client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "grom-test", Version: "test"}, nil)
@@ -271,6 +279,12 @@ func TestMCPEndToEndWithAServiceAccountKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = session.Close() })
+	return session
+}
+
+func TestMCPEndToEndWithAServiceAccountKey(t *testing.T) {
+	stack := newMCPTestStack(t, 10)
+	session := connectMCP(t, stack)
 	if info := session.InitializeResult().ServerInfo; info.Name != "grom" || info.Version != "test" {
 		t.Fatalf("server info = %#v", info)
 	}
@@ -316,5 +330,59 @@ func TestMCPEndToEndWithAServiceAccountKey(t *testing.T) {
 	}
 	if _, err := session.CallTool(context.Background(), &mcpsdk.CallToolParams{Name: "list_projects"}); err == nil {
 		t.Fatal("expected a revoked key to be rejected on the next request")
+	}
+}
+
+func TestMCPContinuationCursorsFitForLongestAcceptedArguments(t *testing.T) {
+	stack := newMCPTestStack(t, 10)
+	ctx := context.Background()
+	slug := strings.Repeat("p", 40)
+	project, err := stack.projects.Create(ctx, stack.adminRef, true, "Long", slug, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accountRef := foundation.PrincipalRef{Kind: constants.PrincipalServiceAccount, ID: stack.accountID}
+	if err := stack.projects.SetMembership(ctx, stack.adminRef, true, slug, accountRef, constants.RoleReader); err != nil {
+		t.Fatal(err)
+	}
+	name := strings.Repeat("r", 200)
+	repository, err := stack.registry.Create(ctx, project.ID, name, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// OCI tag names are at most 128 characters, so the longest query that two
+	// distinct tags share is 127 characters.
+	query := strings.Repeat("t", 127)
+	now := time.Now().UTC()
+	for i, digest := range []string{"sha256:" + strings.Repeat("c", 64), "sha256:" + strings.Repeat("d", 64)} {
+		observation := registrydomain.ManifestObservation{Digest: digest, ManifestSize: 10, Tag: query + string(rune('a'+i))}
+		if err := stack.store.UpsertManifestObservation(ctx, repository.ID, observation, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	session := connectMCP(t, stack)
+	seen := map[string]bool{}
+	arguments := map[string]any{"project": slug, "repository": name, "q": query, "limit": 1}
+	for page := 0; page < 2; page++ {
+		result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{Name: "list_artifacts", Arguments: arguments})
+		if err != nil || result.IsError {
+			t.Fatalf("page %d: err=%v result=%#v", page, err, result)
+		}
+		raw, _ := json.Marshal(result.StructuredContent)
+		var artifacts mcp.ListResult[mcp.Artifact]
+		if err := json.Unmarshal(raw, &artifacts); err != nil {
+			t.Fatal(err)
+		}
+		if len(artifacts.Items) != 1 || seen[artifacts.Items[0].Digest] {
+			t.Fatalf("page %d = %#v", page, artifacts)
+		}
+		seen[artifacts.Items[0].Digest] = true
+		if page == 0 {
+			if artifacts.NextCursor == "" || len(artifacts.NextCursor) > constants.MCPMaxCursorLength {
+				t.Fatalf("first page cursor has length %d", len(artifacts.NextCursor))
+			}
+			arguments["cursor"] = artifacts.NextCursor
+		}
 	}
 }

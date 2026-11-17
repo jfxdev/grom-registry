@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"regexp"
 	"strings"
@@ -72,7 +74,9 @@ func normalizedQuery(q string) (string, error) {
 }
 
 // Page is the shared pagination input. Cursors are opaque and bound to the
-// tool and arguments that produced them.
+// tool and arguments that produced them. The binding is a fixed-length digest
+// of those arguments, so a cursor produced for the longest accepted arguments
+// still fits the cursor length limit.
 type Page struct {
 	Cursor string `json:"cursor,omitempty" jsonschema:"opaque nextCursor returned by the previous call with the same arguments"`
 	Limit  int    `json:"limit,omitempty" jsonschema:"maximum items to return, 1-100, default 25"`
@@ -86,7 +90,8 @@ func (p Page) request(scope string) (foundation.PageRequest, error) {
 	if limit < 1 || limit > constants.MCPMaxPageLimit || len(p.Cursor) > constants.MCPMaxCursorLength {
 		return foundation.PageRequest{}, errInvalidPageRequest
 	}
-	scope = "mcp:" + scope
+	digest := sha256.Sum256([]byte(scope))
+	scope = "mcp:" + hex.EncodeToString(digest[:])
 	if p.Cursor != "" {
 		if _, err := foundation.DecodePageCursor(p.Cursor, scope); err != nil {
 			return foundation.PageRequest{}, errInvalidPageRequest

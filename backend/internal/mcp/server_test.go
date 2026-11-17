@@ -120,9 +120,18 @@ func (f *fakeRepositories) SearchTagNames(_ context.Context, _ foundation.ID, qu
 	if sort == registrydomain.TagSortNameDesc {
 		slices.Reverse(result.Items)
 	}
+	offset := 0
+	if request.Cursor != "" {
+		cursor, err := foundation.DecodePageCursor(request.Cursor, request.Scope)
+		if err != nil {
+			return foundation.PageResult[string]{}, err
+		}
+		offset = cursor.Offset
+	}
+	result.Items = result.Items[min(offset, len(result.Items)):]
 	if len(result.Items) > request.Limit {
 		result.Items = result.Items[:request.Limit]
-		result.NextCursor, _ = foundation.EncodePageCursor(foundation.PageCursor{Scope: request.Scope, Offset: request.Limit})
+		result.NextCursor, _ = foundation.EncodePageCursor(foundation.PageCursor{Scope: request.Scope, Offset: offset + request.Limit})
 	}
 	return result, nil
 }
@@ -399,7 +408,11 @@ func TestRepositoryAndArtifactMetadata(t *testing.T) {
 	if !slices.Equal(tags.Items, []string{"v3", "v2"}) || tags.NextCursor == "" {
 		t.Fatalf("tags = %#v", tags)
 	}
-	call(t, session, "list_tags", map[string]any{"project": "alpha", "repository": "api", "sort": "name-desc", "limit": 2, "cursor": tags.NextCursor}, &tags)
+	var lastTags ListResult[string]
+	call(t, session, "list_tags", map[string]any{"project": "alpha", "repository": "api", "sort": "name-desc", "limit": 2, "cursor": tags.NextCursor}, &lastTags)
+	if !slices.Equal(lastTags.Items, []string{"v1"}) || lastTags.NextCursor != "" {
+		t.Fatalf("continuation page = %#v", lastTags)
+	}
 	if text := callError(t, session, "list_tags", map[string]any{"project": "alpha", "repository": "api", "sort": "oldest", "cursor": tags.NextCursor}); !strings.Contains(text, errInvalidPageRequest.Error()) {
 		t.Fatalf("cursor from other arguments accepted: %q", text)
 	}
